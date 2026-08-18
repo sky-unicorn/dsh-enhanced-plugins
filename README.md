@@ -21,23 +21,62 @@ Official DSH packages remain peer dependencies and are supplied by the Harness d
 
 ## Install
 
-Remove separately installed copies first so their old bundle layers do not leave duplicate Client anchors:
+### One-step migration on Windows 10/11
 
-~~~sh
-dsh plugin --profile web remove dsh-mcp-server-manager dsh-plugin-market dsh-referenced-file dsh-sub-agent-toggle
-dsh plugin --profile web add /path/to/dsh-enhanced-plugins
-dsh --profile web --dump-config
-dsh web
+[`scripts/migrate-to-enhanced-plugin.ps1`](scripts/migrate-to-enhanced-plugin.ps1) supports the inbox Windows PowerShell 5.1 and does not require `pwsh` or PowerShell 7. It performs these steps in order:
+
+1. Verify that the installation source manifest belongs to `dsh-enhanced-plugins`.
+2. Resolve the target DSH runner and inspect the profile's direct dependencies.
+3. Remove only legacy plugins that are still direct dependencies, safely skipping missing ones.
+4. Install `dsh-enhanced-plugins` from the current checkout; its `prepare` lifecycle builds every runtime entry automatically.
+5. Verify that the merged plugin is a direct dependency and no legacy dependency remains.
+
+Preview the migration without changing the profile:
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -WhatIf
 ~~~
 
-From a DSH source checkout, prefix the commands with pnpm. Directory and Git installs run the package's prepare script to build every runtime entry. A packed tarball already contains lib:
+Then migrate the default `web` profile:
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
+~~~
+
+Specify another profile and DSH checkout:
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\migrate-to-enhanced-plugin.ps1 `
+  -Profile custom `
+  -DshCheckout "E:\projects\deepseek-harness"
+~~~
+
+Script parameters:
+
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| `-Profile` | `web` | DSH profile to migrate |
+| `-DshCommand` | `dsh` | DSH executable name on PATH or an absolute executable path |
+| `-DshCheckout` | automatic | Explicit DSH source checkout; runs its `pnpm dsh` command when set |
+| `-PluginPath` | repository above this script | `dsh-enhanced-plugins` checkout to install |
+| `-WhatIf` | off | Show the planned migration without removing or installing anything |
+| `-Confirm` | off | Ask for interactive PowerShell confirmation before migration |
+
+Without `-DshCheckout`, the script first uses `dsh` on PATH and then falls back to a `deepseek-harness` checkout beside this repository. `-ExecutionPolicy Bypass` applies only to this `powershell.exe` process and does not change the system policy. The `dsh-sub-agent` source repository is installed under its real package name, `dsh-sub-agent-toggle`, which the script uses.
+
+Migration is complete only after the script prints `Migrated profile '<name>' to dsh-enhanced-plugins.` No manual `npm install`, `npm run build`, or `pnpm run build` is required afterward. Restart DSH once if it was already running.
+
+### Manual install and packaging
+
+Without the migration script, you can pack and install manually. Directory and Git installs run `prepare` to build every runtime entry; a tarball already contains `lib`:
 
 ~~~sh
 npm pack
 dsh plugin --profile web add ./dsh-enhanced-plugins-0.1.0.tgz
 ~~~
 
-If pnpm asks for build authorization during a Git install, allow exactly dsh-enhanced-plugins in that profile's pnpm-workspace.yaml and retry.
+When running manual DSH commands from a DSH source checkout, prefix them with `pnpm`. If pnpm asks for build authorization during a Git install, allow exactly `dsh-enhanced-plugins` in that profile's `pnpm-workspace.yaml` and retry.
 
 ## Bundle entries
 

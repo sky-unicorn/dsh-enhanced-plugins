@@ -21,23 +21,62 @@
 
 ## 安装
 
-若 profile 已安装四个原插件，先移除，避免旧 bundle 层残留重复 Client 锚点：
+### Windows 10/11 一键迁移
 
-~~~sh
-dsh plugin --profile web remove dsh-mcp-server-manager dsh-plugin-market dsh-referenced-file dsh-sub-agent-toggle
-dsh plugin --profile web add D:\work\workspace\github\dsh-enhanced-plugins
-dsh --profile web --dump-config
-dsh web
+[`scripts/migrate-to-enhanced-plugin.ps1`](scripts/migrate-to-enhanced-plugin.ps1) 兼容 Windows PowerShell 5.1，不依赖 `pwsh` 或 PowerShell 7。它按顺序完成以下操作：
+
+1. 验证安装来源的 `package.json` 确实属于 `dsh-enhanced-plugins`。
+2. 查找目标 DSH runner 并读取 profile 的直接依赖。
+3. 只卸载仍实际存在的四个旧插件；已经不存在时安全跳过。
+4. 从当前 checkout 安装 `dsh-enhanced-plugins`，由 `prepare` 自动构建运行时入口。
+5. 确认新插件已成为直接依赖，且旧插件均已离开依赖清单。
+
+先预览将执行的迁移，不修改 profile：
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -WhatIf
 ~~~
 
-从 DSH 源码 checkout 运行时，在命令前加 pnpm。目录或 Git 安装会执行 prepare，构建全部运行时入口；tarball 已包含 lib：
+确认后执行默认 `web` profile 迁移：
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
+~~~
+
+指定其他 profile 和 DSH checkout：
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\migrate-to-enhanced-plugin.ps1 `
+  -Profile custom `
+  -DshCheckout "E:\projects\deepseek-harness"
+~~~
+
+脚本参数：
+
+| 参数 | 默认值 | 作用 |
+| --- | --- | --- |
+| `-Profile` | `web` | 要迁移的 DSH profile 名称 |
+| `-DshCommand` | `dsh` | PATH 中的 DSH 可执行命令名或绝对路径 |
+| `-DshCheckout` | 自动 | 显式指定 DSH 源码 checkout；指定后通过其中的 `pnpm dsh` 运行 |
+| `-PluginPath` | 当前脚本的上级仓库 | 指定要安装的 `dsh-enhanced-plugins` checkout |
+| `-WhatIf` | 关闭 | 只显示将执行的迁移，不卸载或安装 |
+| `-Confirm` | 关闭 | 执行前要求 PowerShell 交互确认 |
+
+未指定 `-DshCheckout` 时，脚本先使用 PATH 中的 `dsh`；找不到时再查找与本仓库同级的 `deepseek-harness`。`-ExecutionPolicy Bypass` 只作用于本次 `powershell.exe` 进程，不修改系统执行策略。源码仓库名 `dsh-sub-agent` 的实际安装包名是 `dsh-sub-agent-toggle`，脚本已经使用正确名称。
+
+脚本最终输出 `Migrated profile '<名称>' to dsh-enhanced-plugins.` 才表示迁移完成。成功后无需手动执行 `npm install`、`npm run build` 或 `pnpm run build`；如果 DSH 已在运行，重启一次后即可正常使用。
+
+### 手动安装与打包
+
+不使用迁移脚本时，可以手动打包后安装。目录或 Git 安装会执行 `prepare`，构建全部运行时入口；tarball 已包含 `lib`：
 
 ~~~sh
 npm pack
 dsh plugin --profile web add ./dsh-enhanced-plugins-0.1.0.tgz
 ~~~
 
-若 pnpm 在 Git 安装时要求构建授权，只在目标 profile 的 pnpm-workspace.yaml 中允许准确包名 dsh-enhanced-plugins，然后重试。
+从 DSH 源码 checkout 执行手动 DSH 命令时，在命令前加 `pnpm`。若 pnpm 在 Git 安装时要求构建授权，只在目标 profile 的 `pnpm-workspace.yaml` 中允许准确包名 `dsh-enhanced-plugins`，然后重试。
 
 ## Bundle 条目
 

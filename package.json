@@ -37,6 +37,7 @@
   "files": [
     "lib/",
     "assets/plugins-cache.json",
+    "scripts/migrate-to-enhanced-plugin.ps1",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
