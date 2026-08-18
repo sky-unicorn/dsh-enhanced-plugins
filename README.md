@@ -2,14 +2,15 @@
 
 English | [中文](README.zh.md)
 
-One installable DeepSeek Harness bundle containing four enhanced capabilities:
+One installable DeepSeek Harness bundle containing five enhanced capabilities:
 
 - **MCP server manager** — a Settings → Plugins card for stdio and Streamable HTTP servers, revision-fenced edits, secret-masked reads, and one-click Claude Code/Codex import.
+- **pi-ai model request types** — a Settings → Plugins card that declares configured models as provider-default, text-only, or text-and-image without patching the built-in Models page.
 - **Plugin market** — a local-snapshot-backed DSH plugin catalog with verified GitHub/npm install sources, installation records, background channel sync, and credential-backed GitHub Token management.
 - **Referenced files** — type # in the composer to search the current workspace and inject a bounded UTF-8 file snapshot into the next model request.
 - **Product subagent toggles** — persistent Web switches for the official Claude Code and Codex subagent providers, with live tool registration.
 
-The four features keep independent Host, Client, Remote, Settings, and Consumer lifecycles. They share only one package manifest, one bundle patch, and one lazy-CJS browser bundle.
+Each feature keeps its own applicable Host, Client, Remote, Settings, and Consumer lifecycle. They share only one package manifest, one bundle patch, and one lazy-CJS browser bundle.
 
 ## Requirements
 
@@ -93,7 +94,7 @@ The package contributes stable Loader ids:
 | subagent-product-toggle-tools | dsh-enhanced-plugins/sub-agent/preset | Live controlled tool Consumers |
 | ui-enhanced-plugins | dsh-enhanced-plugins | Single Client-module discovery anchor |
 
-The root entry is deliberately a no-op Host plugin. Browser code mounts each feature as its own child fiber, so missing optional surfaces do not merge their lifecycle or state.
+The root entry is deliberately a no-op Host plugin. Browser code mounts all five features as independent child fibers, so missing optional surfaces do not merge their lifecycle or state. The pi-ai request-type feature needs no additional Loader row: the existing Client discovery anchor owns its browser child, while the official adapter remains the sole owner of `llm-pi-ai`.
 
 ## Configuration
 
@@ -113,6 +114,20 @@ The built-in assets/plugins-cache.json is read-only. A verified synchronized cac
 ### MCP servers
 
 The mcp-manager registers the mcp namespace. Its Web card supports add/remove, import, format auditing, and masked env/header values. The Host owns validation and reconciles each configured server as an independent child fiber. Existing secret-bearing definitions are never rebuilt from a redacted browser snapshot.
+
+### pi-ai model request types
+
+The `pi-ai model request types` card appears only while the official `llm-pi-ai` settings namespace is served. It lists model overrides already configured under `providers.<route>.models` and maps its choices as follows:
+
+| Choice | Stored model field |
+| --- | --- |
+| Provider default | `input` is unset, preserving the installed catalog entry and then the route default |
+| Text only | `input: [text]` |
+| Text and images | `input: [text, image]` |
+
+Each change uses the public `settings.mutate` API with the descriptor revision and writes only the selected route's complete `models` array, which is the adapter's array-replace field. Every unedited model object and its fields are retained. A conflict or failed write is followed by a fresh describe before another edit is allowed.
+
+The card deliberately lives under Settings → Plugins because the shipped Models editor exposes no public child slot and Client bundle purity forbids importing its private React form. Add or remove model overrides on the Models page (or in `settings.yaml`), then set their request type in this card. Capability declarations are not endpoint probes: claiming image support allows durable image admission and `read_image`, but an endpoint that does not actually accept images can still reject the later provider request.
 
 ### Referenced files
 

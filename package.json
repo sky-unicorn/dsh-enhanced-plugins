@@ -1,7 +1,7 @@
 {
   "name": "dsh-enhanced-plugins",
   "version": "0.1.0",
-  "description": "Enhanced DeepSeek Harness bundle: MCP management, plugin market, workspace file references, and product subagent toggles",
+  "description": "Enhanced DeepSeek Harness bundle: MCP management, pi-ai request types, plugin market, workspace file references, and product subagent toggles",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -47,10 +47,11 @@
     "build": "node build.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit && tsc --project tsconfig.client.json --noEmit",
     "test:mcp": "vitest run --config vitest.mcp.config.ts",
+    "test:model-input-types": "vitest run --config vitest.model-input-types.config.ts",
     "test:market": "vitest run --config vitest.market.config.ts",
     "test:referenced-file": "vitest run --config vitest.referenced-file.config.ts",
     "test:sub-agent": "vitest run --config vitest.sub-agent.config.ts",
-    "test": "npm run test:mcp && npm run test:market && npm run test:referenced-file && npm run test:sub-agent",
+    "test": "npm run test:mcp && npm run test:model-input-types && npm run test:market && npm run test:referenced-file && npm run test:sub-agent",
     "check": "npm run typecheck && npm test && npm run build",
     "prepare": "npm run build"
   },
@@ -102,6 +103,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^22.20.1",
     "@types/react": "~18.3.1",

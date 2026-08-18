@@ -2,14 +2,15 @@
 
 [English](README.md) | 中文
 
-一个可安装的 DeepSeek Harness bundle，合并四项增强能力：
+一个可安装的 DeepSeek Harness bundle，合并五项增强能力：
 
 - **MCP 服务器管理**：在“设置 → 插件”中管理 stdio / Streamable HTTP 服务器；支持修订号栅栏、机密脱敏读取，以及 Claude Code/Codex 一键导入。
+- **pi-ai 模型请求类型**：在“设置 → 插件”中把已配置模型声明为“提供方默认”“仅文本”或“文本与图片”，无需修改内置“模型”页面。
 - **插件社区**：基于本地快照浏览 DSH 插件，验证 GitHub/npm 安装源，记录市场安装项，在 Host 后台同步渠道，并通过 credentials 服务管理 GitHub Token。
 - **文件引用**：在输入框键入 # 搜索当前工作区文件，把有界的 UTF-8 文本快照注入下一次模型请求。
 - **产品子智能体开关**：持久控制官方 Claude Code 与 Codex 子智能体 provider，并实时增删相应工具。
 
-四项能力仍各自拥有独立的 Host、Client、Remote、Settings 与 Consumer 生命周期；只共用一个 package manifest、一个 bundle patch 和一个 lazy-CJS 浏览器 bundle。
+各项能力仍分别拥有自身适用的 Host、Client、Remote、Settings 与 Consumer 生命周期；只共用一个 package manifest、一个 bundle patch 和一个 lazy-CJS 浏览器 bundle。
 
 ## 运行要求
 
@@ -93,7 +94,7 @@ dsh plugin --profile web add ./dsh-enhanced-plugins-0.1.0.tgz
 | subagent-product-toggle-tools | dsh-enhanced-plugins/sub-agent/preset | 实时受控的工具 Consumer |
 | ui-enhanced-plugins | dsh-enhanced-plugins | 唯一 Client 模块发现锚点 |
 
-根入口有意保持为无行为 Host 插件。浏览器代码把四项能力分别挂成 child fiber，因而不会把可选界面、状态或卸载过程揉成同一个生命周期。
+根入口有意保持为无行为 Host 插件。浏览器代码把五项能力分别挂成独立 child fiber，因而不会把可选界面、状态或卸载过程揉成同一个生命周期。pi-ai 请求类型功能不需要新增 Loader 行：现有 Client 发现锚点负责挂载它的浏览器 child，官方适配器仍是 `llm-pi-ai` 的唯一所有者。
 
 ## 配置
 
@@ -113,6 +114,20 @@ assets/plugins-cache.json 是只读内置渠道。同步后的已验证缓存和
 ### MCP 服务器
 
 mcp-manager 注册 mcp namespace。Web 卡片支持新增、删除、导入、格式审计，以及 env/header 机密脱敏。Host 负责最终校验，并把每台服务器作为独立 child fiber 对账。浏览器绝不会从脱敏快照重建已有机密定义。
+
+### pi-ai 模型请求类型
+
+只有官方 `llm-pi-ai` settings namespace 正在提供服务时，才会显示“pi-ai 模型请求类型”卡片。它列出 `providers.<route>.models` 下已经配置的模型覆盖，并按下表映射选择：
+
+| 选择 | 存储的模型字段 |
+| --- | --- |
+| 提供方默认 | unset `input`，继续继承已安装 catalog 条目，再回退到路由默认值 |
+| 仅文本 | `input: [text]` |
+| 文本与图片 | `input: [text, image]` |
+
+每次变更都通过公开 `settings.mutate` API 携带 descriptor revision，只写入所选路由的完整 `models` 数组；该数组本来就是适配器的整体替换字段。所有未编辑的模型对象及字段都会原样保留。冲突或写入失败后，卡片会重新 describe 最新状态，之后才允许再次编辑。
+
+卡片刻意放在“设置 → 插件”下，因为现有“模型”编辑器没有公开 child slot，Client bundle 纯净度也禁止导入其私有 React 表单。请先在“模型”页面（或 `settings.yaml`）中增删模型覆盖，再在此设置请求类型。能力声明不是端点探测：声明图片能力会允许持久图片准入和 `read_image`，但实际不支持图片的端点仍可能在后续提供方请求阶段拒绝。
 
 ### 文件引用
 
