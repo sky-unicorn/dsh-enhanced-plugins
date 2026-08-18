@@ -1,0 +1,115 @@
+{
+  "name": "dsh-enhanced-plugins",
+  "version": "0.1.0",
+  "description": "Enhanced DeepSeek Harness bundle: MCP management, plugin market, workspace file references, and product subagent toggles",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./mcp-server-manager": "./lib/mcp-server-manager/host/index.js",
+    "./plugin-market": "./lib/plugin-market/index.js",
+    "./referenced-file": "./lib/referenced-file/host/index.js",
+    "./sub-agent/host": "./lib/sub-agent/host.js",
+    "./sub-agent/preset": "./lib/sub-agent/preset.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-plugins",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "files": [
+    "lib/",
+    "assets/plugins-cache.json",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --project tsconfig.json --noEmit && tsc --project tsconfig.client.json --noEmit",
+    "test:mcp": "vitest run --config vitest.mcp.config.ts",
+    "test:market": "vitest run --config vitest.market.config.ts",
+    "test:referenced-file": "vitest run --config vitest.referenced-file.config.ts",
+    "test:sub-agent": "vitest run --config vitest.sub-agent.config.ts",
+    "test": "npm run test:mcp && npm run test:market && npm run test:referenced-file && npm run test:sub-agent",
+    "check": "npm run typecheck && npm test && npm run build",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "mcp",
+    "subagent"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "smol-toml": "^1.7.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-agent": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-api-remotes": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-connection": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-runtime": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-credentials": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-fs": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-llm": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-mcp-client": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-session": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-settings": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-subagent": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-subagent-claude-code": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-subagent-codex": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-tool-subagent": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/schemastery": ">=3.18.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.20.1",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.1",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

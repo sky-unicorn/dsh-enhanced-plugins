@@ -1,0 +1,37 @@
+# One installable layer containing all enhanced DSH capabilities. Each Host
+# or Consumer keeps its own Loader row and lifecycle; only Client discovery is
+# shared through the package-root anchor at the end.
+- insert:
+    - id: plugin-market
+      name: 'dsh-enhanced-plugins/plugin-market'
+      config:
+        profile: web
+        topic: dsh-plugin
+        pageSize: 12
+        operationTimeoutMs: 120000
+        githubTokenEnv: GITHUB_TOKEN
+        cliPath: ''
+
+    - id: mcp-manager
+      name: 'dsh-enhanced-plugins/mcp-server-manager'
+
+    - id: referenced-file
+      name: 'dsh-enhanced-plugins/referenced-file'
+
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+
+    - id: subagent-claude-code
+      name: '@deepseek-ai/dsh-subagent-claude-code'
+
+    - id: subagent-product-toggles
+      name: 'dsh-enhanced-plugins/sub-agent/host'
+      config:
+        claudeCode: false
+        codex: false
+
+    - id: subagent-product-toggle-tools
+      name: 'dsh-enhanced-plugins/sub-agent/preset'
+
+    - id: ui-enhanced-plugins
+      name: 'dsh-enhanced-plugins'

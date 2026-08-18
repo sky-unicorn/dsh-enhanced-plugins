@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/cordis": ["../deepseek-harness/vendor/cordis/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-api-remotes/client": ["../deepseek-harness/packages/api/remotes/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-connection/client": ["../deepseek-harness/packages/client/connection/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-locale/client": ["../deepseek-harness/packages/client/locale/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-runtime/client": ["../deepseek-harness/packages/client/runtime/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-conversation/client": ["../deepseek-harness/packages/client/ui-conversation/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-primitives": ["../deepseek-harness/packages/client/ui-primitives/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-settings/client": ["../deepseek-harness/packages/client/ui-settings/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-settings-plugins/client": ["../deepseek-harness/packages/client/ui-settings-plugins/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-slots": ["../deepseek-harness/packages/client/ui-slots/lib/types/index.d.ts"]
+    }
+  },
+  "include": [
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "src/mcp-server-manager/client/**/*.ts",
+    "src/mcp-server-manager/client/**/*.tsx",
+    "src/plugin-market/client/**/*.ts",
+    "src/plugin-market/client/**/*.tsx",
+    "src/referenced-file/client/**/*.ts",
+    "src/referenced-file/client/**/*.tsx",
+    "src/sub-agent/client/**/*.ts",
+    "src/sub-agent/client/**/*.tsx",
+    "src/sub-agent/shared.ts"
+  ],
+  "exclude": ["node_modules", "tests", "lib"]
+}

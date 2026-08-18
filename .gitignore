@@ -1,0 +1,6 @@
+lib/
+node_modules/
+*.tgz
+coverage/
+test.log
+.verify-dsh-home/

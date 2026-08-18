@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
+    "rootDir": "src",
+    "outDir": "lib",
+    "declaration": true,
+    "sourceMap": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/cordis": ["../deepseek-harness/vendor/cordis/lib/types/index.d.ts"],
+      "@deepseek-ai/schemastery": ["../deepseek-harness/vendor/schemastery/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-agent": ["../deepseek-harness/packages/core/agent/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-credentials": ["../deepseek-harness/packages/credentials/credentials/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-fs": ["../deepseek-harness/packages/fs/fs/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-host-webserver": ["../deepseek-harness/packages/host/webserver/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-llm": ["../deepseek-harness/packages/llm/llm/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-mcp-client": ["../deepseek-harness/packages/mcp/mcp-client/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-session": ["../deepseek-harness/packages/core/session/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-settings": ["../deepseek-harness/packages/settings/settings/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-tool-subagent": ["../deepseek-harness/packages/subagent/tool-subagent/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-typert-protocol": ["../deepseek-harness/packages/typert/protocol/lib/types/index.d.ts"]
+    }
+  },
+  "include": [
+    "src/index.ts",
+    "src/mcp-server-manager/host/**/*.ts",
+    "src/plugin-market/*.ts",
+    "src/referenced-file/host/**/*.ts",
+    "src/sub-agent/host.ts",
+    "src/sub-agent/preset.ts",
+    "src/sub-agent/settings.ts",
+    "src/sub-agent/shared.ts"
+  ],
+  "exclude": ["node_modules", "tests", "lib", "src/**/client/**"]
+}

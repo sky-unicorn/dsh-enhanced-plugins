@@ -1,0 +1,17 @@
+import { resolve } from 'node:path'
+import { defineConfig } from 'vitest/config'
+
+const dsh = resolve(import.meta.dirname, '../deepseek-harness')
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@deepseek-ai/dsh-credentials': resolve(dsh, 'packages/credentials/credentials/lib/index.js'),
+      '@deepseek-ai/dsh-client-ui-primitives': resolve(dsh, 'packages/client/ui-primitives/lib/index.js'),
+    },
+  },
+  test: {
+    environment: 'node',
+    include: ['tests/plugin-market/**/*.spec.ts', 'tests/plugin-market/**/*.spec.tsx'],
+  },
+})
