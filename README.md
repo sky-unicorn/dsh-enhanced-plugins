@@ -2,190 +2,197 @@
 
 English | [中文](README.zh.md)
 
-## Overview
+`dsh-enhanced-plugins` is an all-in-one enhancement bundle for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. One installation adds a plugin community, MCP server management, model request-type declarations, workspace file references, last-message editing, and Claude Code / Codex subagent switches.
 
-`dsh-enhanced-plugins` is an installable enhancement bundle for DeepSeek Harness (DSH). It combines several useful but independently managed extensions in one package, giving users a single installation for last-message editing, MCP server configuration, model input capability declarations, plugin discovery and installation, workspace file references, and product subagent toggles.
+The package uses only public DSH plugin extension points and does not modify DSH core. Each of the six features owns its applicable Host, Client, Settings, and runtime lifecycle, so an unavailable optional dependency does not prevent unrelated features from loading.
 
-The project uses DSH's public plugin extension points and does not modify or replace DSH core. Its Host side owns configuration, validation, persistence, and runtime lifecycles, while the Web Client provides interfaces consistent with DSH's native Settings experience. Each capability is mounted and disposed independently, so an unavailable optional feature does not prevent the others from running.
+## Features at a glance
 
-It is intended for users and developers who want a centralized set of common DSH enhancements, lower installation and migration overhead, and continued compatibility with the official plugin architecture and upgrade path.
-
-## Core capabilities
-
-The bundle contains six enhanced capabilities:
-
-- **Edit last message** — after a session finishes or is manually stopped, edit its latest durable text-only user message directly inside the transcript bubble, truncate the active context before that turn, and resend the replacement.
-- **MCP server manager** — a Settings → Plugins card for stdio and Streamable HTTP servers, revision-fenced edits, secret-masked reads, and one-click Claude Code/Codex import.
-- **pi-ai model request types** — a Settings → Plugins card that declares configured models as provider-default, text-only, or text-and-image without patching the built-in Models page.
-- **Plugin market** — a local-snapshot-backed DSH plugin catalog with verified GitHub/npm install sources, installation records, background channel sync, and credential-backed GitHub Token management.
-- **Referenced files** — type # in the composer to search the current workspace and inject a bounded UTF-8 file snapshot into the next model request.
-- **Product subagent toggles** — persistent Web switches for the official Claude Code and Codex subagent providers, with live tool registration.
-
-Each feature keeps its own applicable Host, Client, Remote, Settings, and Consumer lifecycle. They share only one package manifest, one bundle patch, and one lazy-CJS browser bundle.
+| Feature | Location | Purpose |
+| --- | --- | --- |
+| [Plugin Community](#plugin-community) | Settings → Plugin Community | Find, install, and remove community DSH plugins |
+| [MCP server manager](#mcp-server-manager) | Settings → Plugins → Plugin configuration → MCP servers | Manage stdio and Streamable HTTP MCP servers |
+| [pi-ai model request types](#pi-ai-model-request-types) | Settings → Plugins → Plugin configuration → pi-ai model request types | Declare whether models accept text or image requests |
+| [Workspace file references](#workspace-file-references) | Type `#` in the session composer | Search files and add a text snapshot to the next request |
+| [Edit last message](#edit-last-message) | Latest user-message bubble | Revise a turn and regenerate in the current session |
+| [Product subagents](#product-subagents) | Settings → Subagents | Enable or disable Claude Code / Codex tools live |
 
 ## Requirements
 
-- DeepSeek Harness compatible with the local target checkout at commit 47f943859bef60e4160492346772ded9b24f765a (0.1.0-rc.5 public ABI).
 - Node.js 22.19 or newer.
-- A Web profile for browser surfaces. Host features that do not require Web continue to follow their own injected-service availability.
+- A DSH Web profile. This repository is currently verified against the DSH `0.1.0-rc.5` public ABI, using local baseline commit `47f943859bef60e4160492346772ded9b24f765a`.
+- Official DSH packages are supplied by Harness; this plugin neither copies nor patches DSH core.
 
-Official DSH packages remain peer dependencies and are supplied by the Harness deployment. The package does not copy or patch DSH core.
+DSH is still a developer preview. After upgrading DSH, check this project's supported ABI before upgrading the plugin if compatibility errors appear.
 
-## Install
+## Installation
 
-### One-step migration on Windows 10/11
+The installer handles dependency installation, package build, `web` profile installation, and load verification. Run the following commands from the `dsh-enhanced-plugins` repository root.
 
-[`scripts/migrate-to-enhanced-plugin.ps1`](scripts/migrate-to-enhanced-plugin.ps1) supports the inbox Windows PowerShell 5.1 and does not require `pwsh` or PowerShell 7. It performs these steps in order:
+### Plugin and DSH source under the same parent directory
 
-1. Verify that the installation source manifest belongs to `dsh-enhanced-plugins`.
-2. Run `npm install` in the plugin checkout to trigger `prepare`, fall back to `npm run build` when needed, and verify every public `lib` entry.
-3. Resolve the target DSH runner; for a source checkout, enter it inside the script so Corepack selects DSH's pinned pnpm version before inspecting direct dependencies.
-4. Remove only legacy plugins that are still direct dependencies, safely skipping missing ones.
-5. Install `dsh-enhanced-plugins` from the current checkout.
-6. Verify that the merged plugin is a direct dependency, no legacy dependency remains, and the Host entries load through `--dump-config`.
+Use this directory layout:
 
-Preview the migration without changing the profile:
+```text
+<workspace>/
+├── deepseek-harness/
+└── dsh-enhanced-plugins/
+```
 
-~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -WhatIf
-~~~
+The installer discovers the sibling `deepseek-harness` checkout automatically:
 
-Then migrate the default `web` profile:
-
-~~~powershell
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
-~~~
+```
 
-Specify another profile and DSH checkout:
+### Plugin and DSH source in different directories
 
-~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\scripts\migrate-to-enhanced-plugin.ps1 `
-  -Profile custom `
-  -DshCheckout "E:\projects\deepseek-harness"
-~~~
+Pass the DSH source checkout explicitly with `-DshCheckout`:
 
-Script parameters:
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -DshCheckout "E:\projects\deepseek-harness"
+```
 
-| Parameter | Default | Purpose |
-| --- | --- | --- |
-| `-Profile` | `web` | DSH profile to migrate |
-| `-DshCommand` | `dsh` | DSH executable name on PATH or an absolute executable path |
-| `-DshCheckout` | automatic | Explicit DSH source checkout; runs its `pnpm dsh` command when set |
-| `-PluginPath` | repository above this script | `dsh-enhanced-plugins` checkout to install |
-| `-WhatIf` | off | Show the planned migration without removing or installing anything |
-| `-Confirm` | off | Ask for interactive PowerShell confirmation before migration |
+Restart DSH once after installation if it is already running.
 
-Without `-DshCheckout`, the script first uses `dsh` on PATH and then falls back to a `deepseek-harness` checkout beside this repository. For a checkout, it automatically enters that directory to run `pnpm dsh` and restores the original directory on success or failure, so users can always launch it from the plugin repository without a manual `Set-Location`. `-ExecutionPolicy Bypass` applies only to this `powershell.exe` process and does not change the system policy. The `dsh-sub-agent` source repository is installed under its real package name, `dsh-sub-agent-toggle`, which the script uses.
+## Usage
 
-Migration is complete only after the script prints `Migrated profile '<name>' to dsh-enhanced-plugins.` No manual `npm install`, `npm run build`, or `pnpm run build` is required afterward. If an earlier attempt registered the plugin but DSH could not start because `lib` was missing, rerun the updated script to repair it automatically. Restart DSH once if it was already running.
+The screenshots below use the Simplified Chinese locale; DSH translates labels according to the selected application language.
 
-### Manual install and packaging
+### Plugin Community
 
-Without the migration script, you can pack and install manually. Directory and Git installs run `prepare` to build every runtime entry; a tarball already contains `lib`:
+Location: **Settings → Plugin Community**.
 
-~~~sh
-npm pack
-dsh plugin --profile web add ./dsh-enhanced-plugins-0.1.0.tgz
-~~~
+1. The first visit reads the bundled catalog snapshot. Select **Sync channel** when you want fresh community data.
+2. Search by repository, package name, description, or topic.
+3. Open the GitHub repository and verify its source before selecting **Install**.
+4. Use the **Installed** tab to inspect or remove plugins installed through this page.
+5. Restart the current Web profile after an install or removal, as prompted by the page.
 
-When running manual DSH commands from a DSH source checkout, prefix them with `pnpm`. If pnpm asks for build authorization during a Git install, allow exactly `dsh-enhanced-plugins` in that profile's `pnpm-workspace.yaml` and retry.
+The bundled snapshot works without a GitHub token. If synchronization hits GitHub API limits, open **Configure** and store a read-only, short-lived fine-grained token. It is sent only to the local DSH Host and kept by the credentials service.
 
-## Bundle entries
+![Plugin Community page](assets/readme/plugin-community.png)
 
-The package contributes stable Loader ids:
+### MCP server manager
 
-| Id | Package entry | Responsibility |
-| --- | --- | --- |
-| plugin-market | dsh-enhanced-plugins/plugin-market | Marketplace Host routes, catalog, credentials, install/sync |
-| mcp-manager | dsh-enhanced-plugins/mcp-server-manager | mcp Settings owner, reconciliation, and Remote |
-| referenced-file | dsh-enhanced-plugins/referenced-file | Workspace search and model-context injection |
-| subagent-codex | official DSH provider | Codex subagent transport |
-| subagent-claude-code | official DSH provider | Claude Code subagent transport |
-| subagent-product-toggles | dsh-enhanced-plugins/sub-agent/host | subagent-products Settings owner and Remote |
-| subagent-product-toggle-tools | dsh-enhanced-plugins/sub-agent/preset | Live controlled tool Consumers |
-| ui-enhanced-plugins | dsh-enhanced-plugins | Single Client-module discovery anchor |
+Location: **Settings → Plugins → Plugin configuration → MCP servers**.
 
-The root entry is deliberately a no-op Host plugin. Browser code mounts all six features as independent child fibers, so missing optional surfaces do not merge their lifecycle or state. The pi-ai request-type feature needs no additional Loader row: the existing Client discovery anchor owns its browser child, while the official adapter remains the sole owner of `llm-pi-ai`.
+1. Select **Add server**, enter a unique name, and choose a transport.
+2. For `stdio`, provide the command, arguments, working directory, and environment variables. For Streamable HTTP, provide an HTTP(S) URL and request headers.
+3. Alternatively, select **Import Claude Code and Codex**. The Host reads supported local configuration, skips duplicate names or definitions, and explains entries that cannot be converted safely.
+4. Review the format audit at the top of the card, then select **Save**. The Host starts, updates, or disposes each server connection independently after a successful commit.
 
-## Configuration
+When the browser reads an existing server, environment-variable and header values are masked. Unchanged secrets are not reconstructed or overwritten from the redacted view.
 
-### Plugin market
-
-The plugin-market row in cordis.patch.yml defines:
-
-- profile: target profile for install/remove, default web.
-- topic: GitHub discovery topic, default dsh-plugin.
-- pageSize: catalog page size, default 12.
-- operationTimeoutMs: install/remove timeout, default 120000.
-- githubTokenEnv: credential reference, default GITHUB_TOKEN.
-- cliPath: optional absolute dsh executable; empty reuses the current Node launcher.
-
-The built-in assets/plugins-cache.json is read-only. A verified synchronized cache and install records live below the DSH home plugin-market data directory. Token values are handled only through ctx.credentials and are never returned to the browser.
-
-### MCP servers
-
-The mcp-manager registers the mcp namespace. Its Web card supports add/remove, import, format auditing, and masked env/header values. The Host owns validation and reconciles each configured server as an independent child fiber. Existing secret-bearing definitions are never rebuilt from a redacted browser snapshot.
+![MCP server manager](assets/readme/mcp-server-manager.png)
 
 ### pi-ai model request types
 
-The `pi-ai model request types` card appears only while the official `llm-pi-ai` settings namespace is served. It lists model overrides already configured under `providers.<route>.models` and maps its choices as follows:
+Location: **Settings → Plugins → Plugin configuration → pi-ai model request types**.
 
-| Choice | Stored model field |
-| --- | --- |
-| Provider default | `input` is unset, preserving the installed catalog entry and then the route default |
-| Text only | `input: [text]` |
-| Text and images | `input: [text, image]` |
+1. Add pi-ai model overrides on DSH's Models page or in `settings.yaml` first.
+2. Expand the **pi-ai model request types** card.
+3. For each model, select **Provider default**, **Text only**, or **Text and images**. The choice is saved immediately.
 
-Each change uses the public `settings.mutate` API with the descriptor revision and writes only the selected route's complete `models` array, which is the adapter's array-replace field. Every unedited model object and its fields are retained. A conflict or failed write is followed by a fresh describe before another edit is allowed.
+The card appears only while the official `llm-pi-ai` settings namespace is available. These are capability declarations, not endpoint probes. Confirm that the provider really accepts image requests before declaring **Text and images**.
 
-The card deliberately lives under Settings → Plugins because the shipped Models editor exposes no public child slot and Client bundle purity forbids importing its private React form. Add or remove model overrides on the Models page (or in `settings.yaml`), then set their request type in this card. Capability declarations are not endpoint probes: claiming image support allows durable image admission and `read_image`, but an endpoint that does not actually accept images can still reject the later provider request.
+![pi-ai model request types](assets/readme/model-input-types.png)
+
+### Workspace file references
+
+Location: **the session composer after selecting a workspace**.
+
+1. Type `#`, then continue with part of a file name or path to narrow the results.
+2. Use `↑` / `↓` and `Enter`, or click a result, to insert the reference.
+3. Finish the prompt and send it. At submission, the Host resolves the path again, checks workspace containment, and adds a UTF-8 text snapshot to that model request.
+
+Defaults allow up to 8 files, 128 KiB per file, and 512 KiB total. Binary, invalid UTF-8, oversized, non-regular, and outside-workspace files are rejected.
+
+![Referencing workspace files from the composer](assets/readme/referenced-files.png)
 
 ### Edit last message
 
-When the current session is not running, an Edit action appears beside Copy on its latest durable text-only user bubble. Clicking it replaces the bubble body with an inline editor; Cancel keeps the current session unchanged, while Save and resend submits the edited text. The Edit action is not rendered while the session is running, and becomes available after either normal completion or a manual stop.
+Location: **beside Copy on the latest editable user-message bubble**.
 
-Saving stays in the current session; it does not create a child or a new session. The plugin replaces the current model surface from the edited user message onward, then regenerates through the same AgentLoop. The original user message and its later assistant, reasoning, and tool process are absent from this and subsequent model contexts, while the transcript shows only the revised bubble and newly generated result. DSH Sessions are append-only, so the old events remain in the raw log as audit history rather than being physically deleted; external side effects of tools that already ran are not rolled back. Messages containing images or other non-text blocks do not expose Edit, so resending cannot silently discard them.
+1. Wait for the current session to finish, or stop it manually.
+2. Select **Edit last message** and revise the text inline.
+3. Select **Resend** or press `Ctrl/⌘ + Enter`. Press `Esc` or select **Cancel** to leave edit mode.
 
-### Referenced files
+Resending stays in the current session. The plugin replaces the active model context from the edited user message onward and regenerates through the same AgentLoop. The underlying DSH Session log remains append-only audit history, and external side effects from tools that already ran are not rolled back. Messages containing images or other non-text blocks do not expose Edit, preventing silent content loss.
 
-The referenced-file Host schema defaults are:
-
-| Field | Default |
-| --- | ---: |
-| maxCandidates | 20 |
-| maxScannedEntries | 5000 |
-| maxDepth | 12 |
-| maxReferences | 8 |
-| maxFileBytes | 131072 |
-| maxTotalBytes | 524288 |
-| indexTtlMs | 30000 |
-| maxCachedWorkspaces | 8 |
-
-Candidate traversal excludes common generated directories. Every selected path is resolved and containment-checked again at submission. Binary, invalid UTF-8, oversized, non-regular, and outside-workspace files are rejected.
+![Editing and resending the last message](assets/readme/edit-last-message.png)
 
 ### Product subagents
 
-Both claudeCode and codex default to false in the subagent-products namespace. Toggling a product path-writes only that boolean under revision fencing. The Consumer then mounts or disposes the corresponding official dsh-tool-subagent plugin without restarting the profile.
+Location: **Settings → Subagents**.
 
-To scope these tools to selected Agent presets, disable/remove the root subagent-product-toggle-tools row and mount dsh-enhanced-plugins/sub-agent/preset only in those preset compositions. Do not mount both layouts in the same scope.
+1. Turn on Claude Code or Codex.
+2. The change applies immediately to Agent presets that load this controller, including running sessions; the profile does not need a restart.
+3. Turning a product off removes its tool live. The corresponding local product and official DSH provider must still be available.
 
-## Development
+Both switches default to off. Each update writes only its Boolean path under settings revision fencing, avoiding accidental overwrite of newer edits from another page or external writer.
 
-The fixed sibling checkout required by this repository's rules is:
+![Claude Code and Codex subagent switches](assets/readme/subagent-toggles.png)
 
-~~~text
+## Advanced configuration
+
+The default composition is in [`cordis.patch.yml`](cordis.patch.yml). A later profile patch replaces an entire Loader row's `config`; when overriding one, repeat every field that must be preserved.
+
+<details>
+<summary>Plugin Community Host configuration</summary>
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `profile` | `web` | Target profile for installs and removals |
+| `topic` | `dsh-plugin` | GitHub discovery topic |
+| `pageSize` | `12` | Plugins per catalog page |
+| `operationTimeoutMs` | `120000` | Install and removal timeout |
+| `githubTokenEnv` | `GITHUB_TOKEN` | Credentials reference name |
+| `cliPath` | empty | Optional absolute DSH executable path |
+
+The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is read-only. Synchronized cache data and marketplace install records are stored below the DSH home marketplace data directory.
+
+</details>
+
+<details>
+<summary>Default workspace-reference limits</summary>
+
+| Field | Default |
+| --- | ---: |
+| `maxCandidates` | 20 |
+| `maxScannedEntries` | 5000 |
+| `maxDepth` | 12 |
+| `maxReferences` | 8 |
+| `maxFileBytes` | 131072 |
+| `maxTotalBytes` | 524288 |
+| `indexTtlMs` | 30000 |
+| `maxCachedWorkspaces` | 8 |
+
+</details>
+
+To expose product-subagent tools only to selected Agent presets, disable or remove the root `subagent-product-toggle-tools` row and mount `dsh-enhanced-plugins/sub-agent/preset` only inside those preset compositions. Do not mount both layouts in the same scope.
+
+## Development and verification
+
+Repository rules use this read-only sibling checkout as the DSH API, type, and real Web assembly baseline:
+
+```text
 D:\work\workspace\github\deepseek-harness
-~~~
+```
 
-Type checking reads its current public declarations; runtime builds import only public package names and remain self-contained:
+Run the standard checks with the package manager selected by the repository lockfile:
 
-~~~sh
+```powershell
 npm install
 npm run typecheck
 npm test
 npm run build
 npm pack --dry-run
-~~~
+git diff --check
+```
 
-The browser bundle uses CSS Modules and only DSH semantic --dsw-alias-* theme tokens. It therefore follows light, dark, and system appearance without feature-owned theme branches.
+The browser bundle uses CSS Modules and only DSH `--dsw-alias-*` semantic theme tokens, so it follows light, dark, and system appearance automatically.
+
+## License
+
+[MIT](LICENSE)

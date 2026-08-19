@@ -2,190 +2,195 @@
 
 [English](README.md) | 中文
 
-## 项目简介
+`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的一体化增强插件包。安装一次即可获得插件社区、MCP 服务器管理、模型请求类型、工作区文件引用、上一条消息重发，以及 Claude Code / Codex 子智能体开关。
 
-`dsh-enhanced-plugins` 是一个面向 DeepSeek Harness（DSH）的可安装增强插件合集。它将常用但彼此独立的扩展能力整合到同一个 bundle 中，让用户只需安装和维护一个包，就能完成最后消息重新编辑、MCP 服务配置、模型输入能力声明、插件发现与安装、工作区文件引用，以及产品子智能体开关等操作。
+本项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。六项功能分别维护自己的 Host、Client、Settings 和运行时生命周期，因此某个可选依赖不可用时不会阻止其他功能加载。
 
-本项目通过 DSH 的公开插件扩展点工作，不修改或替换 DSH 核心。Host 端负责配置、校验、持久化和运行时生命周期，Web Client 提供与 DSH 原生设置界面一致的交互入口；各项能力保持独立装载和卸载，某个可选功能不可用时不会影响其余功能。
+## 功能一览
 
-它适合希望集中管理常用 DSH 增强能力、减少多个插件分别安装和迁移成本，并保留官方插件架构与升级路径的个人用户和开发者。
-
-## 核心能力
-
-本 bundle 合并六项增强能力：
-
-- **编辑上一条消息**：会话正常结束或被手动停止后，可直接在最后一条已持久化的纯文本用户消息气泡内编辑，从该轮之前截断活动上下文并重新发送。
-- **MCP 服务器管理**：在“设置 → 插件”中管理 stdio / Streamable HTTP 服务器；支持修订号栅栏、机密脱敏读取，以及 Claude Code/Codex 一键导入。
-- **pi-ai 模型请求类型**：在“设置 → 插件”中把已配置模型声明为“提供方默认”“仅文本”或“文本与图片”，无需修改内置“模型”页面。
-- **插件社区**：基于本地快照浏览 DSH 插件，验证 GitHub/npm 安装源，记录市场安装项，在 Host 后台同步渠道，并通过 credentials 服务管理 GitHub Token。
-- **文件引用**：在输入框键入 # 搜索当前工作区文件，把有界的 UTF-8 文本快照注入下一次模型请求。
-- **产品子智能体开关**：持久控制官方 Claude Code 与 Codex 子智能体 provider，并实时增删相应工具。
-
-各项能力仍分别拥有自身适用的 Host、Client、Remote、Settings 与 Consumer 生命周期；只共用一个 package manifest、一个 bundle patch 和一个 lazy-CJS 浏览器 bundle。
+| 功能 | 使用位置 | 用途 |
+| --- | --- | --- |
+| [插件社区](#插件社区) | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
+| [MCP 服务器管理](#mcp-服务器管理) | 设置 → 插件 → 插件配置 → MCP 服务器 | 管理 stdio / Streamable HTTP MCP 服务器 |
+| [pi-ai 模型请求类型](#pi-ai-模型请求类型) | 设置 → 插件 → 插件配置 → pi-ai 模型请求类型 | 声明模型接受纯文本还是图片请求 |
+| [工作区文件引用](#工作区文件引用) | 会话输入框中输入 `#` | 搜索文件并把文本快照加入下一次请求 |
+| [编辑上一条消息](#编辑上一条消息) | 最后一条用户消息气泡 | 修改该轮内容并在当前会话重新生成 |
+| [产品子智能体](#产品子智能体) | 设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
 
 ## 运行要求
 
-- DeepSeek Harness 的公开 ABI 与本地目标 checkout commit 47f943859bef60e4160492346772ded9b24f765a（0.1.0-rc.5）兼容。
 - Node.js 22.19 或更高版本。
-- 浏览器界面需要 Web profile；不依赖 Web 的 Host 行为仍按各自注入服务是否可用来加载。
+- DSH Web profile；本仓库当前针对 DSH `0.1.0-rc.5` 的公开 ABI 验证，本地基准 commit 为 `47f943859bef60e4160492346772ded9b24f765a`。
+- DSH 官方包由 Harness 提供，本插件不会复制或 patch DSH 核心。
 
-官方 DSH 包保持 peer dependency，由 Harness 部署提供。本包不复制或修改 DSH 核心。
+DSH 仍处于开发者预览阶段。升级 DSH 后若出现接口不兼容，请先核对本项目支持的 ABI 再升级插件。
 
 ## 安装
 
-### Windows 10/11 一键迁移
+安装脚本会自动完成依赖安装、插件构建、`web` profile 安装和加载验证。以下命令都需要在 `dsh-enhanced-plugins` 仓库根目录执行。
 
-[`scripts/migrate-to-enhanced-plugin.ps1`](scripts/migrate-to-enhanced-plugin.ps1) 兼容 Windows PowerShell 5.1，不依赖 `pwsh` 或 PowerShell 7。它按顺序完成以下操作：
+### 插件与 DSH 源码位于同一父目录
 
-1. 验证安装来源的 `package.json` 确实属于 `dsh-enhanced-plugins`。
-2. 在插件目录自动执行 `npm install` 并触发 `prepare`；必要时自动补跑 `npm run build`，然后检查全部公开 `lib` 入口。
-3. 查找目标 DSH runner；使用源码 checkout 时先在脚本进程内切换工作目录，让 Corepack 选择 DSH 固定的 pnpm 版本，再读取 profile 的直接依赖。
-4. 只卸载仍实际存在的四个旧插件；已经不存在时安全跳过。
-5. 从当前 checkout 安装 `dsh-enhanced-plugins`。
-6. 确认新插件已成为直接依赖、旧插件均已离开依赖清单，并通过 `--dump-config` 真实加载 Host 入口。
+目录结构如下：
 
-先预览将执行的迁移，不修改 profile：
+```text
+<工作目录>/
+├── deepseek-harness/
+└── dsh-enhanced-plugins/
+```
 
-~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -WhatIf
-~~~
+脚本会自动找到同级的 `deepseek-harness`：
 
-确认后执行默认 `web` profile 迁移：
-
-~~~powershell
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
-~~~
+```
 
-指定其他 profile 和 DSH checkout：
+### 插件与 DSH 源码位于不同目录
 
-~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\scripts\migrate-to-enhanced-plugin.ps1 `
-  -Profile custom `
-  -DshCheckout "E:\projects\deepseek-harness"
-~~~
+通过 `-DshCheckout` 指定 DSH 源码目录：
 
-脚本参数：
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -DshCheckout "E:\projects\deepseek-harness"
+```
 
-| 参数 | 默认值 | 作用 |
-| --- | --- | --- |
-| `-Profile` | `web` | 要迁移的 DSH profile 名称 |
-| `-DshCommand` | `dsh` | PATH 中的 DSH 可执行命令名或绝对路径 |
-| `-DshCheckout` | 自动 | 显式指定 DSH 源码 checkout；指定后通过其中的 `pnpm dsh` 运行 |
-| `-PluginPath` | 当前脚本的上级仓库 | 指定要安装的 `dsh-enhanced-plugins` checkout |
-| `-WhatIf` | 关闭 | 只显示将执行的迁移，不卸载或安装 |
-| `-Confirm` | 关闭 | 执行前要求 PowerShell 交互确认 |
+脚本执行成功后，如果 DSH 已在运行，重启一次即可使用。
 
-未指定 `-DshCheckout` 时，脚本先使用 PATH 中的 `dsh`；找不到时再查找与本仓库同级的 `deepseek-harness`。使用 checkout 时，脚本会自动进入该目录执行 `pnpm dsh`，并在成功或失败后恢复原目录，因此用户始终可以从插件仓库运行，无需手动 `Set-Location`。`-ExecutionPolicy Bypass` 只作用于本次 `powershell.exe` 进程，不修改系统执行策略。源码仓库名 `dsh-sub-agent` 的实际安装包名是 `dsh-sub-agent-toggle`，脚本已经使用正确名称。
-
-脚本最终输出 `Migrated profile '<名称>' to dsh-enhanced-plugins.` 才表示迁移完成。成功后无需手动执行 `npm install`、`npm run build` 或 `pnpm run build`；如果之前的失败已经把插件加入 profile、但因缺少 `lib` 无法启动，更新后直接重跑本脚本即可自动修复。如果 DSH 已在运行，重启一次后即可正常使用。
-
-### 手动安装与打包
-
-不使用迁移脚本时，可以手动打包后安装。目录或 Git 安装会执行 `prepare`，构建全部运行时入口；tarball 已包含 `lib`：
-
-~~~sh
-npm pack
-dsh plugin --profile web add ./dsh-enhanced-plugins-0.1.0.tgz
-~~~
-
-从 DSH 源码 checkout 执行手动 DSH 命令时，在命令前加 `pnpm`。若 pnpm 在 Git 安装时要求构建授权，只在目标 profile 的 `pnpm-workspace.yaml` 中允许准确包名 `dsh-enhanced-plugins`，然后重试。
-
-## Bundle 条目
-
-本包贡献以下稳定 Loader id：
-
-| Id | 包入口 | 职责 |
-| --- | --- | --- |
-| plugin-market | dsh-enhanced-plugins/plugin-market | 市场 Host 路由、目录、凭据、安装与同步 |
-| mcp-manager | dsh-enhanced-plugins/mcp-server-manager | mcp Settings owner、连接对账与 Remote |
-| referenced-file | dsh-enhanced-plugins/referenced-file | 工作区搜索与模型上下文注入 |
-| subagent-codex | DSH 官方 provider | Codex 子智能体传输 |
-| subagent-claude-code | DSH 官方 provider | Claude Code 子智能体传输 |
-| subagent-product-toggles | dsh-enhanced-plugins/sub-agent/host | subagent-products Settings owner 与 Remote |
-| subagent-product-toggle-tools | dsh-enhanced-plugins/sub-agent/preset | 实时受控的工具 Consumer |
-| ui-enhanced-plugins | dsh-enhanced-plugins | 唯一 Client 模块发现锚点 |
-
-根入口有意保持为无行为 Host 插件。浏览器代码把六项能力分别挂成独立 child fiber，因而不会把可选界面、状态或卸载过程揉成同一个生命周期。pi-ai 请求类型功能不需要新增 Loader 行：现有 Client 发现锚点负责挂载它的浏览器 child，官方适配器仍是 `llm-pi-ai` 的唯一所有者。
-
-## 配置
+## 使用说明
 
 ### 插件社区
 
-cordis.patch.yml 中 plugin-market 行包含：
+位置：**设置 → 插件社区**。
 
-- profile：安装/卸载的目标 profile，默认 web。
-- topic：GitHub 发现 topic，默认 dsh-plugin。
-- pageSize：目录分页大小，默认 12。
-- operationTimeoutMs：安装/卸载超时，默认 120000。
-- githubTokenEnv：凭据引用，默认 GITHUB_TOKEN。
-- cliPath：可选 dsh 可执行文件绝对路径；空值复用当前 Node 启动器。
+1. 首次打开会读取内置插件快照；需要刷新社区数据时点击“同步渠道”。
+2. 在搜索框按仓库名、包名、描述或 topic 查找插件。
+3. 安装前打开 GitHub 仓库核对来源；点击“安装”后等待操作完成。
+4. 在“已安装”标签页查看或卸载由插件社区安装的项目。
+5. 安装或卸载完成后，按页面提示重启当前 Web profile。
 
-assets/plugins-cache.json 是只读内置渠道。同步后的已验证缓存和市场安装记录保存在 DSH home 的插件市场数据目录下。Token 只经 ctx.credentials 处理，永远不会返回浏览器。
+未配置 GitHub Token 也能使用内置快照。若同步触发 GitHub API 限流，可点击“配置”，保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并保存在 credentials 服务中。
 
-### MCP 服务器
+![插件社区页面](assets/readme/plugin-community.png)
 
-mcp-manager 注册 mcp namespace。Web 卡片支持新增、删除、导入、格式审计，以及 env/header 机密脱敏。Host 负责最终校验，并把每台服务器作为独立 child fiber 对账。浏览器绝不会从脱敏快照重建已有机密定义。
+### MCP 服务器管理
+
+位置：**设置 → 插件 → 插件配置 → MCP 服务器**。
+
+1. 点击“添加服务器”，填写唯一名称并选择传输类型。
+2. `stdio` 服务器填写命令、参数、工作目录和环境变量；Streamable HTTP 服务器填写 HTTP(S) URL 与请求头。
+3. 也可以点击“一键导入 Claude Code 与 Codex”，由 Host 读取本机已有配置。名称或内容重复的项目会跳过，无法安全转换的项目会给出原因。
+4. 检查卡片顶部的格式审计结果，然后点击“保存”。保存成功后 Host 会按服务器分别启动、更新或卸载连接。
+
+浏览器重新读取已有服务器时，环境变量和请求头的值会被掩码；未修改的机密不会从脱敏快照重建或覆盖。
+
+![MCP 服务器管理](assets/readme/mcp-server-manager.png)
 
 ### pi-ai 模型请求类型
 
-只有官方 `llm-pi-ai` settings namespace 正在提供服务时，才会显示“pi-ai 模型请求类型”卡片。它列出 `providers.<route>.models` 下已经配置的模型覆盖，并按下表映射选择：
+位置：**设置 → 插件 → 插件配置 → pi-ai 模型请求类型**。
 
-| 选择 | 存储的模型字段 |
-| --- | --- |
-| 提供方默认 | unset `input`，继续继承已安装 catalog 条目，再回退到路由默认值 |
-| 仅文本 | `input: [text]` |
-| 文本与图片 | `input: [text, image]` |
+1. 先在 DSH 的“模型”页面或 `settings.yaml` 中添加 pi-ai 模型覆盖。
+2. 展开“pi-ai 模型请求类型”卡片。
+3. 为每个模型选择“提供方默认”“仅文本”或“文本与图片”；选择会立即保存。
 
-每次变更都通过公开 `settings.mutate` API 携带 descriptor revision，只写入所选路由的完整 `models` 数组；该数组本来就是适配器的整体替换字段。所有未编辑的模型对象及字段都会原样保留。冲突或写入失败后，卡片会重新 describe 最新状态，之后才允许再次编辑。
+只有官方 `llm-pi-ai` settings namespace 可用时才显示此卡片。这里保存的是能力声明，不会探测实际端点；把模型声明为“文本与图片”之前，请确认提供方确实接受图片请求。
 
-卡片刻意放在“设置 → 插件”下，因为现有“模型”编辑器没有公开 child slot，Client bundle 纯净度也禁止导入其私有 React 表单。请先在“模型”页面（或 `settings.yaml`）中增删模型覆盖，再在此设置请求类型。能力声明不是端点探测：声明图片能力会允许持久图片准入和 `read_image`，但实际不支持图片的端点仍可能在后续提供方请求阶段拒绝。
+![pi-ai 模型请求类型](assets/readme/model-input-types.png)
+
+### 工作区文件引用
+
+位置：**任意已选择工作区的会话输入框**。
+
+1. 输入 `#`，并继续输入文件名或路径片段缩小候选范围。
+2. 使用 `↑` / `↓` 选择文件，按 `Enter` 插入引用；也可以直接点击候选。
+3. 继续编写问题并发送。Host 会在提交时重新解析路径、检查工作区边界，并把文件的 UTF-8 文本快照加入本次模型请求。
+
+默认最多引用 8 个文件，单文件 128 KiB、总计 512 KiB。二进制文件、非法 UTF-8、超限文件、非常规文件和工作区外路径会被拒绝。
+
+![在输入框中引用工作区文件](assets/readme/referenced-files.png)
 
 ### 编辑上一条消息
 
-当前会话不在运行时，最后一条已持久化的纯文本用户消息气泡会在“复制”旁显示“编辑”。点击后，气泡正文原地切换为编辑框；“取消”保持当前会话不变，“保存并重新发送”则提交修改后的文本。会话运行期间完全不渲染编辑按钮，正常结束或手动停止后才会出现。
+位置：**当前会话最后一条可编辑的用户消息气泡，位于“复制”旁边**。
 
-保存后仍留在当前会话，不创建子会话或新会话。插件把当前模型 surface 从被编辑的用户消息起替换为修改后的内容，再通过同一个 AgentLoop 重新生成；原用户消息及其后的回答、推理和工具过程不会进入这次及后续模型上下文，界面也只显示修改后的气泡与新生成结果。DSH 的底层 Session 日志是追加式的，所以旧事件仍作为审计记录留在原始日志中，而不是物理删除；已执行工具产生的外部副作用也不会被回滚。最后一条用户消息包含图片或其他非文本块时不显示“编辑”，避免重新发送时静默丢失内容。
+1. 等待当前会话结束，或先手动停止正在运行的会话。
+2. 点击“编辑上一条消息”，在气泡内修改文本。
+3. 点击“重新发送”，或按 `Ctrl/⌘ + Enter`；按 `Esc` 或“取消”可退出编辑。
 
-### 文件引用
+重新发送仍在当前会话内完成。插件会从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH 的原始 Session 日志保持追加式审计记录；已经执行的工具产生的外部副作用不会回滚。为避免静默丢失内容，包含图片或其他非文本块的消息不提供编辑入口。
 
-referenced-file Host schema 默认值：
-
-| 字段 | 默认值 |
-| --- | ---: |
-| maxCandidates | 20 |
-| maxScannedEntries | 5000 |
-| maxDepth | 12 |
-| maxReferences | 8 |
-| maxFileBytes | 131072 |
-| maxTotalBytes | 524288 |
-| indexTtlMs | 30000 |
-| maxCachedWorkspaces | 8 |
-
-候选遍历会排除常见生成目录；提交时重新解析文件并检查工作区包含关系。二进制、非法 UTF-8、超限、非常规文件或工作区外路径都会被拒绝。
+![编辑上一条消息并重新发送](assets/readme/edit-last-message.png)
 
 ### 产品子智能体
 
-subagent-products namespace 中 claudeCode 与 codex 默认均为 false。每次切换只在修订号栅栏下按路径写入对应布尔值；Consumer 随即挂载或释放相应的官方 dsh-tool-subagent，无需重启 profile。
+位置：**设置 → 子智能体**。
 
-若只想让指定 Agent preset 获得这些工具，应禁用或删除根层的 subagent-product-toggle-tools 行，再只在目标 preset 中挂载 dsh-enhanced-plugins/sub-agent/preset。同一 scope 不要同时采用两种布局。
+1. 打开 Claude Code 或 Codex 开关。
+2. 变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话，无需重启 profile。
+3. 关闭开关会实时移除对应工具；本机对应产品及其官方 DSH provider 仍需可用。
 
-## 开发
+两个开关默认均为关闭。开关只按路径写入对应布尔值，并使用设置修订号防止覆盖其他页面或外部编辑产生的新值。
 
-仓库规则要求的固定 sibling checkout：
+![Claude Code 与 Codex 子智能体开关](assets/readme/subagent-toggles.png)
 
-~~~text
+## 高级配置
+
+插件的默认组合位于 [`cordis.patch.yml`](cordis.patch.yml)。后应用的 profile patch 会整体替换目标 Loader 行的 `config`，覆盖时请重述该行需要保留的全部字段。
+
+<details>
+<summary>插件社区 Host 配置</summary>
+
+| 字段 | 默认值 | 作用 |
+| --- | --- | --- |
+| `profile` | `web` | 安装和卸载的目标 profile |
+| `topic` | `dsh-plugin` | GitHub 发现 topic |
+| `pageSize` | `12` | 每页插件数 |
+| `operationTimeoutMs` | `120000` | 安装和卸载超时 |
+| `githubTokenEnv` | `GITHUB_TOKEN` | credentials 引用名 |
+| `cliPath` | 空 | 可选 DSH 可执行文件绝对路径 |
+
+内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读快照；同步缓存和安装记录保存在 DSH home 的插件市场数据目录。
+
+</details>
+
+<details>
+<summary>工作区文件引用默认限制</summary>
+
+| 字段 | 默认值 |
+| --- | ---: |
+| `maxCandidates` | 20 |
+| `maxScannedEntries` | 5000 |
+| `maxDepth` | 12 |
+| `maxReferences` | 8 |
+| `maxFileBytes` | 131072 |
+| `maxTotalBytes` | 524288 |
+| `indexTtlMs` | 30000 |
+| `maxCachedWorkspaces` | 8 |
+
+</details>
+
+若只想让部分 Agent preset 获得产品子智能体工具，请禁用或移除根层的 `subagent-product-toggle-tools` 行，并只在目标 preset 中挂载 `dsh-enhanced-plugins/sub-agent/preset`。同一 scope 不要同时挂载两种布局。
+
+## 开发与验证
+
+仓库规则使用以下只读 sibling checkout 作为 DSH API、类型和真实 Web 组装基准：
+
+```text
 D:\work\workspace\github\deepseek-harness
-~~~
+```
 
-类型检查读取其中的当前公开声明；运行时构建仍只导入公开包名，安装期构建不依赖 sibling checkout：
+常规验证命令：
 
-~~~sh
+```powershell
 npm install
 npm run typecheck
 npm test
 npm run build
 npm pack --dry-run
-~~~
+git diff --check
+```
 
-浏览器 bundle 使用 CSS Modules，且只消费 DSH 的 --dsw-alias-* 语义主题 token，因此会自动跟随浅色、深色和系统外观，不包含功能自有的主题分支。
+浏览器 bundle 使用 CSS Modules，并且只消费 DSH 的 `--dsw-alias-*` 语义主题 token，因此自动跟随浅色、深色和系统外观。
+
+## License
+
+[MIT](LICENSE)
