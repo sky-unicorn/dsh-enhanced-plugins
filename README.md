@@ -2,7 +2,17 @@
 
 English | [中文](README.zh.md)
 
-One installable DeepSeek Harness bundle containing five enhanced capabilities:
+## Overview
+
+`dsh-enhanced-plugins` is an installable enhancement bundle for DeepSeek Harness (DSH). It combines several useful but independently managed extensions in one package, giving users a single installation for MCP server configuration, model input capability declarations, plugin discovery and installation, workspace file references, and product subagent toggles.
+
+The project uses DSH's public plugin extension points and does not modify or replace DSH core. Its Host side owns configuration, validation, persistence, and runtime lifecycles, while the Web Client provides interfaces consistent with DSH's native Settings experience. Each capability is mounted and disposed independently, so an unavailable optional feature does not prevent the others from running.
+
+It is intended for users and developers who want a centralized set of common DSH enhancements, lower installation and migration overhead, and continued compatibility with the official plugin architecture and upgrade path.
+
+## Core capabilities
+
+The bundle contains five enhanced capabilities:
 
 - **MCP server manager** — a Settings → Plugins card for stdio and Streamable HTTP servers, revision-fenced edits, secret-masked reads, and one-click Claude Code/Codex import.
 - **pi-ai model request types** — a Settings → Plugins card that declares configured models as provider-default, text-only, or text-and-image without patching the built-in Models page.
