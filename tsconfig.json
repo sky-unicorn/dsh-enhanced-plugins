@@ -30,6 +30,7 @@
       "@deepseek-ai/dsh-mcp-client": ["../deepseek-harness/packages/mcp/mcp-client/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-session": ["../deepseek-harness/packages/core/session/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-settings": ["../deepseek-harness/packages/settings/settings/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-subprocess": ["../deepseek-harness/packages/subprocess/subprocess/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-tool-subagent": ["../deepseek-harness/packages/subagent/tool-subagent/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-typert-protocol": ["../deepseek-harness/packages/typert/protocol/lib/types/index.d.ts"]
     }
@@ -39,6 +40,8 @@
     "src/edit-last-message/shared.ts",
     "src/edit-last-message/host/**/*.ts",
     "src/mcp-server-manager/host/**/*.ts",
+    "src/notification/shared.ts",
+    "src/notification/host/**/*.ts",
     "src/plugin-market/*.ts",
     "src/referenced-file/host/**/*.ts",
     "src/sub-agent/host.ts",

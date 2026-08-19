@@ -2,14 +2,15 @@
 
 English | [中文](README.zh.md)
 
-`dsh-enhanced-plugins` is an all-in-one enhancement bundle for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. One installation adds a plugin community, MCP server management, model request-type declarations, workspace file references, last-message editing, and Claude Code / Codex subagent switches.
+`dsh-enhanced-plugins` is an all-in-one enhancement bundle for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. One installation adds native desktop alerts and a DeepSeek pet, a plugin community, MCP server management, model request-type declarations, workspace file references, last-message editing, and Claude Code / Codex subagent switches.
 
-The package uses only public DSH plugin extension points and does not modify DSH core. Each of the six features owns its applicable Host, Client, Settings, and runtime lifecycle, so an unavailable optional dependency does not prevent unrelated features from loading.
+The package uses only public DSH plugin extension points and does not modify DSH core. Each of the seven features owns its applicable Host, Client, Settings, and runtime lifecycle, so an unavailable optional dependency does not prevent unrelated features from loading.
 
 ## Features at a glance
 
 | Feature | Location | Purpose |
 | --- | --- | --- |
+| [Desktop alerts & pet](#desktop-alerts--pet) | Settings → Desktop pet | Play default or custom task-state sounds and optionally show an animated native DeepSeek fish |
 | [Plugin Community](#plugin-community) | Settings → Plugin Community | Find, install, and remove community DSH plugins |
 | [MCP server manager](#mcp-server-manager) | Settings → Plugins → Plugin configuration → MCP servers | Manage stdio and Streamable HTTP MCP servers |
 | [pi-ai model request types](#pi-ai-model-request-types) | Settings → Plugins → Plugin configuration → pi-ai model request types | Declare whether models accept text or image requests |
@@ -21,6 +22,7 @@ The package uses only public DSH plugin extension points and does not modify DSH
 
 - Node.js 22.19 or newer.
 - A DSH Web profile. This repository is currently verified against the DSH `0.1.0-rc.5` public ABI, using local baseline commit `47f943859bef60e4160492346772ded9b24f765a`.
+- Windows 10 or newer with Windows PowerShell 5.1 for the native sound and desktop-pet feature. The other bundle features remain portable.
 - Official DSH packages are supplied by Harness; this plugin neither copies nor patches DSH core.
 
 DSH is still a developer preview. After upgrading DSH, check this project's supported ABI before upgrading the plugin if compatibility errors appear.
@@ -58,6 +60,18 @@ Restart DSH once after installation if it is already running.
 ## Usage
 
 The screenshots below use the Simplified Chinese locale; DSH translates labels according to the selected application language.
+
+### Desktop alerts & pet
+
+Location: **Settings → Desktop pet**. This is an independent entry in the left Settings navigation, not a card under Plugins.
+
+1. Choose **Off**, either built-in default sound, or **Custom WAV** independently for task-completion and confirmation sounds. Uploading a WAV selects it immediately; files are limited to 2 MiB and stored inside the current DSH profile.
+2. Turn on **Enable desktop pet** to show the DeepSeek fish in a native always-on-top window outside the browser.
+3. Choose its size and starting corner. You can drag the pet anywhere after it appears.
+
+The pet has three live states across all sessions: **Idle** gently floats and breathes, **Working** swims with bubbles and a rotating activity ring, and **Needs attention** hops, shakes, pulses, and displays an alert badge while an approval, plan review, or `ask_user_question` answer is pending. Needs-attention state has priority when other sessions are still running. Completion sounds fire only for top-level tasks, so completed subagents do not create duplicate chimes.
+
+Settings apply live. Pet motion uses native WPF animations so the window remains responsive; hovering keeps the arrow cursor and dragging temporarily uses the move cursor. Turning the pet off closes and joins its managed PowerShell/WPF process; with the pet disabled, sound notifications use a short-lived process and leave no resident helper. The child receives only a fixed script path plus JSON control messages over stdin, and DSH's subprocess service owns tree cleanup.
 
 ### Plugin Community
 
@@ -137,6 +151,21 @@ Both switches default to off. Each update writes only its Boolean path under set
 ## Advanced configuration
 
 The default composition is in [`cordis.patch.yml`](cordis.patch.yml). A later profile patch replaces an entire Loader row's `config`; when overriding one, repeat every field that must be preserved.
+
+<details>
+<summary>Desktop notification defaults</summary>
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `completionSound` | `subtle` | `off`, `subtle`, `prominent`, or uploaded `custom` task-completion sound |
+| `confirmationSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` attention sound |
+| `petEnabled` | `false` | Show the native global desktop pet |
+| `petSize` | `112` | Pet size: `80`, `112`, `144`, or `176` device-independent pixels |
+| `petPosition` | `bottom-right` | Starting corner: `top-left`, `top-right`, `bottom-left`, or `bottom-right` |
+
+The four `*CustomSoundFile` / `*CustomSoundName` settings fields are Host-owned upload metadata. Select custom sounds through the Settings page instead of editing those fields manually.
+
+</details>
 
 <details>
 <summary>Plugin Community Host configuration</summary>

@@ -1,7 +1,7 @@
 {
   "name": "dsh-enhanced-plugins",
   "version": "0.1.0",
-  "description": "Enhanced DeepSeek Harness bundle: last-message editing, MCP management, pi-ai request types, plugin market, workspace file references, and product subagent toggles",
+  "description": "Enhanced DeepSeek Harness bundle: desktop notifications, last-message editing, MCP management, pi-ai request types, plugin market, workspace file references, and product subagent toggles",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -9,6 +9,7 @@
     "./client": "./lib/client.js",
     "./edit-last-message/host": "./lib/edit-last-message/host/index.js",
     "./mcp-server-manager": "./lib/mcp-server-manager/host/index.js",
+    "./notification": "./lib/notification/host/index.js",
     "./plugin-market": "./lib/plugin-market/index.js",
     "./referenced-file": "./lib/referenced-file/host/index.js",
     "./sub-agent/host": "./lib/sub-agent/host.js",
@@ -39,6 +40,7 @@
   "files": [
     "lib/",
     "assets/plugins-cache.json",
+    "assets/notification/",
     "assets/readme/",
     "scripts/migrate-to-enhanced-plugin.ps1",
     "cordis.patch.yml",
@@ -52,10 +54,11 @@
     "test:edit-last-message": "vitest run --config vitest.edit-last-message.config.ts",
     "test:mcp": "vitest run --config vitest.mcp.config.ts",
     "test:model-input-types": "vitest run --config vitest.model-input-types.config.ts",
+    "test:notification": "vitest run --config vitest.notification.config.ts",
     "test:market": "vitest run --config vitest.market.config.ts",
     "test:referenced-file": "vitest run --config vitest.referenced-file.config.ts",
     "test:sub-agent": "vitest run --config vitest.sub-agent.config.ts",
-    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:model-input-types && npm run test:market && npm run test:referenced-file && npm run test:sub-agent",
+    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:model-input-types && npm run test:notification && npm run test:market && npm run test:referenced-file && npm run test:sub-agent",
     "check": "npm run typecheck && npm test && npm run build",
     "prepare": "npm run build"
   },
@@ -94,6 +97,7 @@
     "@deepseek-ai/dsh-mcp-client": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-session": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-settings": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-subprocess": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-subagent": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-subagent-claude-code": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-subagent-codex": ">=0.1.0-rc.5 <0.2.0",

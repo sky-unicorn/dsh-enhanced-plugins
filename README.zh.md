@@ -2,14 +2,15 @@
 
 [English](README.md) | 中文
 
-`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的一体化增强插件包。安装一次即可获得插件社区、MCP 服务器管理、模型请求类型、工作区文件引用、上一条消息重发，以及 Claude Code / Codex 子智能体开关。
+`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的一体化增强插件包。安装一次即可获得原生桌面提示与 DeepSeek 宠物、插件社区、MCP 服务器管理、模型请求类型、工作区文件引用、上一条消息重发，以及 Claude Code / Codex 子智能体开关。
 
-本项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。六项功能分别维护自己的 Host、Client、Settings 和运行时生命周期，因此某个可选依赖不可用时不会阻止其他功能加载。
+本项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。七项功能分别维护自己的 Host、Client、Settings 和运行时生命周期，因此某个可选依赖不可用时不会阻止其他功能加载。
 
 ## 功能一览
 
 | 功能 | 使用位置 | 用途 |
 | --- | --- | --- |
+| [桌面提示与宠物](#桌面提示与宠物) | 设置 → 桌面宠物 | 播放默认或自定义任务提示音，并可显示原生动态置顶 DeepSeek 鱼宠物 |
 | [插件社区](#插件社区) | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
 | [MCP 服务器管理](#mcp-服务器管理) | 设置 → 插件 → 插件配置 → MCP 服务器 | 管理 stdio / Streamable HTTP MCP 服务器 |
 | [pi-ai 模型请求类型](#pi-ai-模型请求类型) | 设置 → 插件 → 插件配置 → pi-ai 模型请求类型 | 声明模型接受纯文本还是图片请求 |
@@ -21,6 +22,7 @@
 
 - Node.js 22.19 或更高版本。
 - DSH Web profile；本仓库当前针对 DSH `0.1.0-rc.5` 的公开 ABI 验证，本地基准 commit 为 `47f943859bef60e4160492346772ded9b24f765a`。
+- 原生提示音与桌面宠物功能需要 Windows 10 或更高版本及 Windows PowerShell 5.1；包内其他功能仍可跨平台使用。
 - DSH 官方包由 Harness 提供，本插件不会复制或 patch DSH 核心。
 
 DSH 仍处于开发者预览阶段。升级 DSH 后若出现接口不兼容，请先核对本项目支持的 ABI 再升级插件。
@@ -56,6 +58,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 脚本执行成功后，如果 DSH 已在运行，重启一次即可使用。
 
 ## 使用说明
+
+### 桌面提示与宠物
+
+位置：**设置 → 桌面宠物**。它现在是设置左侧导航中的独立入口，不再放在“插件配置”卡片中。
+
+1. 为任务完成和需要确认两类事件分别选择**关闭**、两档内置默认音或**自定义 WAV**。上传 WAV 后会立即选中；文件不得超过 2 MiB，并保存在当前 DSH profile 中。
+2. 打开**启用桌面宠物**，即可在浏览器之外显示原生置顶的 DeepSeek 鱼图标。
+3. 选择宠物大小和启动位置；显示后可以在桌面上自由拖动。
+
+宠物会汇总所有会话并显示三种实时动态状态：**空闲**时缓慢漂浮和呼吸，**任务中**会游动、吐泡泡并旋转进度环，**需要确认**时会跳动、摇晃、脉冲并显示感叹号。仍有其他任务运行时，“需要确认”拥有更高优先级。完成提示音只对顶层任务播放，子智能体完成不会造成重复提示。
+
+设置实时生效。动画由 WPF 原生动画系统执行，窗口保持响应；鼠标悬浮时固定为箭头，拖动期间才显示移动光标。关闭宠物时，插件会协作式关闭并等待其 PowerShell/WPF 进程退出；宠物关闭但提示音开启时，仅为一次提示启动短生命周期进程，不留下常驻 helper。子进程只接收固定脚本路径与 stdin JSON 控制消息，并由 DSH subprocess service 负责进程树清理。
 
 ### 插件社区
 
@@ -135,6 +149,21 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 ## 高级配置
 
 插件的默认组合位于 [`cordis.patch.yml`](cordis.patch.yml)。后应用的 profile patch 会整体替换目标 Loader 行的 `config`，覆盖时请重述该行需要保留的全部字段。
+
+<details>
+<summary>桌面提示默认配置</summary>
+
+| 字段 | 默认值 | 用途 |
+| --- | --- | --- |
+| `completionSound` | `subtle` | 任务完成提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
+| `confirmationSound` | `prominent` | 需要关注提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
+| `petEnabled` | `false` | 是否显示原生全局桌面宠物 |
+| `petSize` | `112` | 宠物尺寸：`80`、`112`、`144` 或 `176` 设备无关像素 |
+| `petPosition` | `bottom-right` | 启动角落：`top-left`、`top-right`、`bottom-left` 或 `bottom-right` |
+
+四个 `*CustomSoundFile` / `*CustomSoundName` 字段由 Host 管理上传元数据，请通过设置页面选择自定义提示音，不要手工编辑这些字段。
+
+</details>
 
 <details>
 <summary>插件社区 Host 配置</summary>

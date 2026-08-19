@@ -18,6 +18,15 @@
     - id: referenced-file
       name: 'dsh-enhanced-plugins/referenced-file'
 
+    - id: desktop-notifications
+      name: 'dsh-enhanced-plugins/notification'
+      config:
+        completionSound: subtle
+        confirmationSound: prominent
+        petEnabled: false
+        petSize: 112
+        petPosition: bottom-right
+
     - id: edit-last-message-host
       name: 'dsh-enhanced-plugins/edit-last-message/host'
 
