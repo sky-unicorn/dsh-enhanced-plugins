@@ -37,10 +37,11 @@
 [`scripts/migrate-to-enhanced-plugin.ps1`](scripts/migrate-to-enhanced-plugin.ps1) 兼容 Windows PowerShell 5.1，不依赖 `pwsh` 或 PowerShell 7。它按顺序完成以下操作：
 
 1. 验证安装来源的 `package.json` 确实属于 `dsh-enhanced-plugins`。
-2. 查找目标 DSH runner 并读取 profile 的直接依赖。
-3. 只卸载仍实际存在的四个旧插件；已经不存在时安全跳过。
-4. 从当前 checkout 安装 `dsh-enhanced-plugins`，由 `prepare` 自动构建运行时入口。
-5. 确认新插件已成为直接依赖，且旧插件均已离开依赖清单。
+2. 在插件目录自动执行 `npm install` 并触发 `prepare`；必要时自动补跑 `npm run build`，然后检查全部公开 `lib` 入口。
+3. 查找目标 DSH runner；使用源码 checkout 时先在脚本进程内切换工作目录，让 Corepack 选择 DSH 固定的 pnpm 版本，再读取 profile 的直接依赖。
+4. 只卸载仍实际存在的四个旧插件；已经不存在时安全跳过。
+5. 从当前 checkout 安装 `dsh-enhanced-plugins`。
+6. 确认新插件已成为直接依赖、旧插件均已离开依赖清单，并通过 `--dump-config` 真实加载 Host 入口。
 
 先预览将执行的迁移，不修改 profile：
 
@@ -74,9 +75,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 | `-WhatIf` | 关闭 | 只显示将执行的迁移，不卸载或安装 |
 | `-Confirm` | 关闭 | 执行前要求 PowerShell 交互确认 |
 
-未指定 `-DshCheckout` 时，脚本先使用 PATH 中的 `dsh`；找不到时再查找与本仓库同级的 `deepseek-harness`。`-ExecutionPolicy Bypass` 只作用于本次 `powershell.exe` 进程，不修改系统执行策略。源码仓库名 `dsh-sub-agent` 的实际安装包名是 `dsh-sub-agent-toggle`，脚本已经使用正确名称。
+未指定 `-DshCheckout` 时，脚本先使用 PATH 中的 `dsh`；找不到时再查找与本仓库同级的 `deepseek-harness`。使用 checkout 时，脚本会自动进入该目录执行 `pnpm dsh`，并在成功或失败后恢复原目录，因此用户始终可以从插件仓库运行，无需手动 `Set-Location`。`-ExecutionPolicy Bypass` 只作用于本次 `powershell.exe` 进程，不修改系统执行策略。源码仓库名 `dsh-sub-agent` 的实际安装包名是 `dsh-sub-agent-toggle`，脚本已经使用正确名称。
 
-脚本最终输出 `Migrated profile '<名称>' to dsh-enhanced-plugins.` 才表示迁移完成。成功后无需手动执行 `npm install`、`npm run build` 或 `pnpm run build`；如果 DSH 已在运行，重启一次后即可正常使用。
+脚本最终输出 `Migrated profile '<名称>' to dsh-enhanced-plugins.` 才表示迁移完成。成功后无需手动执行 `npm install`、`npm run build` 或 `pnpm run build`；如果之前的失败已经把插件加入 profile、但因缺少 `lib` 无法启动，更新后直接重跑本脚本即可自动修复。如果 DSH 已在运行，重启一次后即可正常使用。
 
 ### 手动安装与打包
 

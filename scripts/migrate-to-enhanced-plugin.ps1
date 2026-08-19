@@ -61,6 +61,76 @@ function Get-ProfileDependencies {
   $dependenciesProperty.Value.PSObject.Properties | ForEach-Object { $_.Name }
 }
 
+function Get-MissingRuntimeEntries {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $PluginRoot,
+
+    [Parameter(Mandatory = $true)]
+    [object] $Manifest
+  )
+
+  $runtimeTargets = @($Manifest.main)
+  $runtimeTargets += @(
+    $Manifest.exports.PSObject.Properties |
+      ForEach-Object { $_.Value } |
+      Where-Object { $_ -is [string] -and $_.StartsWith('./lib/', [System.StringComparison]::Ordinal) }
+  )
+
+  foreach ($target in @($runtimeTargets | Sort-Object -Unique)) {
+    if ($target -isnot [string] -or -not $target.StartsWith('./lib/', [System.StringComparison]::Ordinal)) {
+      continue
+    }
+    $entryPath = Join-Path $PluginRoot $target.Substring(2)
+    if (-not (Test-Path -LiteralPath $entryPath -PathType Leaf)) {
+      $target
+    }
+  }
+}
+
+function Ensure-PluginBuild {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $PluginRoot,
+
+    [Parameter(Mandatory = $true)]
+    [object] $Manifest
+  )
+
+  $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop |
+    Select-Object -First 1
+  $originalDirectory = (Get-Location).Path
+  try {
+    Set-Location -LiteralPath $PluginRoot
+    Write-Host "Preparing dsh-enhanced-plugins and its runtime entries..."
+    & $npm.Source install --no-audit --no-fund --ignore-scripts=false
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm install failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
+    }
+  } finally {
+    Set-Location -LiteralPath $originalDirectory
+  }
+
+  $missingEntries = @(Get-MissingRuntimeEntries -PluginRoot $PluginRoot -Manifest $Manifest)
+  if ($missingEntries.Count -gt 0) {
+    try {
+      Set-Location -LiteralPath $PluginRoot
+      Write-Host "prepare left runtime entries missing; rebuilding explicitly..."
+      & $npm.Source run build
+      if ($LASTEXITCODE -ne 0) {
+        throw "npm run build failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
+      }
+    } finally {
+      Set-Location -LiteralPath $originalDirectory
+    }
+    $missingEntries = @(Get-MissingRuntimeEntries -PluginRoot $PluginRoot -Manifest $Manifest)
+  }
+
+  if ($missingEntries.Count -gt 0) {
+    throw "dsh-enhanced-plugins build completed without required runtime entries: $($missingEntries -join ', ')."
+  }
+}
+
 # The dsh-sub-agent source repository publishes this package name.
 $legacyPackages = @(
   'dsh-mcp-server-manager'
@@ -87,14 +157,19 @@ if ($pluginManifest.name -ne 'dsh-enhanced-plugins') {
 
 $packageList = $legacyPackages -join ', '
 $target = "DSH profile '$Profile'"
-$action = "remove legacy plugins ($packageList), then install dsh-enhanced-plugins from '$pluginRoot'"
+$action = "prepare dsh-enhanced-plugins, remove legacy plugins ($packageList), then install and validate it from '$pluginRoot'"
 
 if (-not $PSCmdlet.ShouldProcess($target, $action)) {
   return
 }
 
+# Build and validate before changing the profile so a missing local lib cannot
+# leave DSH pointing at a partially installed bundle.
+Ensure-PluginBuild -PluginRoot $pluginRoot -Manifest $pluginManifest
+
 [string] $executable = ''
 [string[]] $prefixArguments = @()
+[string] $runnerWorkingDirectory = ''
 
 $dsh = if ($DshCheckout -eq '') {
   Get-Command -Name $DshCommand -CommandType Application -ErrorAction SilentlyContinue |
@@ -117,8 +192,17 @@ if ($null -ne $dsh) {
   $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
     Select-Object -First 1
   $executable = $pnpm.Source
-  $prefixArguments = @('--dir', $checkout, 'dsh')
+  $prefixArguments = @('dsh')
+  $runnerWorkingDirectory = $checkout
 }
+
+$originalWorkingDirectory = (Get-Location).Path
+try {
+  if ($runnerWorkingDirectory -ne '') {
+    # Corepack selects pnpm before pnpm can process --dir. Enter the DSH
+    # checkout first so its packageManager pin controls the selected version.
+    Set-Location -LiteralPath $runnerWorkingDirectory
+  }
 
 $installedDependencies = @(
   Get-ProfileDependencies `
@@ -164,4 +248,15 @@ if ($remainingLegacyPackages.Count -gt 0) {
   throw "Migration finished with legacy dependencies still present in profile '$Profile': $($remainingLegacyPackages -join ', ')."
 }
 
+Write-Host "Validating the assembled DSH profile..."
+& $executable @prefixArguments --profile $Profile --dump-config | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "dsh-enhanced-plugins is installed, but DSH failed to load profile '$Profile' with exit code $LASTEXITCODE."
+}
+
 Write-Host "Migrated profile '$Profile' to dsh-enhanced-plugins."
+} finally {
+  if ($runnerWorkingDirectory -ne '') {
+    Set-Location -LiteralPath $originalWorkingDirectory
+  }
+}

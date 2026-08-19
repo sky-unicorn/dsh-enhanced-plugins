@@ -37,10 +37,11 @@ Official DSH packages remain peer dependencies and are supplied by the Harness d
 [`scripts/migrate-to-enhanced-plugin.ps1`](scripts/migrate-to-enhanced-plugin.ps1) supports the inbox Windows PowerShell 5.1 and does not require `pwsh` or PowerShell 7. It performs these steps in order:
 
 1. Verify that the installation source manifest belongs to `dsh-enhanced-plugins`.
-2. Resolve the target DSH runner and inspect the profile's direct dependencies.
-3. Remove only legacy plugins that are still direct dependencies, safely skipping missing ones.
-4. Install `dsh-enhanced-plugins` from the current checkout; its `prepare` lifecycle builds every runtime entry automatically.
-5. Verify that the merged plugin is a direct dependency and no legacy dependency remains.
+2. Run `npm install` in the plugin checkout to trigger `prepare`, fall back to `npm run build` when needed, and verify every public `lib` entry.
+3. Resolve the target DSH runner; for a source checkout, enter it inside the script so Corepack selects DSH's pinned pnpm version before inspecting direct dependencies.
+4. Remove only legacy plugins that are still direct dependencies, safely skipping missing ones.
+5. Install `dsh-enhanced-plugins` from the current checkout.
+6. Verify that the merged plugin is a direct dependency, no legacy dependency remains, and the Host entries load through `--dump-config`.
 
 Preview the migration without changing the profile:
 
@@ -74,9 +75,9 @@ Script parameters:
 | `-WhatIf` | off | Show the planned migration without removing or installing anything |
 | `-Confirm` | off | Ask for interactive PowerShell confirmation before migration |
 
-Without `-DshCheckout`, the script first uses `dsh` on PATH and then falls back to a `deepseek-harness` checkout beside this repository. `-ExecutionPolicy Bypass` applies only to this `powershell.exe` process and does not change the system policy. The `dsh-sub-agent` source repository is installed under its real package name, `dsh-sub-agent-toggle`, which the script uses.
+Without `-DshCheckout`, the script first uses `dsh` on PATH and then falls back to a `deepseek-harness` checkout beside this repository. For a checkout, it automatically enters that directory to run `pnpm dsh` and restores the original directory on success or failure, so users can always launch it from the plugin repository without a manual `Set-Location`. `-ExecutionPolicy Bypass` applies only to this `powershell.exe` process and does not change the system policy. The `dsh-sub-agent` source repository is installed under its real package name, `dsh-sub-agent-toggle`, which the script uses.
 
-Migration is complete only after the script prints `Migrated profile '<name>' to dsh-enhanced-plugins.` No manual `npm install`, `npm run build`, or `pnpm run build` is required afterward. Restart DSH once if it was already running.
+Migration is complete only after the script prints `Migrated profile '<name>' to dsh-enhanced-plugins.` No manual `npm install`, `npm run build`, or `pnpm run build` is required afterward. If an earlier attempt registered the plugin but DSH could not start because `lib` was missing, rerun the updated script to repair it automatically. Restart DSH once if it was already running.
 
 ### Manual install and packaging
 
