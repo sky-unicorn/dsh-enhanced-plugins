@@ -22,6 +22,7 @@
       "@deepseek-ai/dsh-client-connection/client": ["../deepseek-harness/packages/client/connection/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-locale/client": ["../deepseek-harness/packages/client/locale/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-runtime/client": ["../deepseek-harness/packages/client/runtime/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-attachment": ["../deepseek-harness/packages/client/ui-attachment/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-conversation/client": ["../deepseek-harness/packages/client/ui-conversation/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-primitives": ["../deepseek-harness/packages/client/ui-primitives/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-settings/client": ["../deepseek-harness/packages/client/ui-settings/lib/types/client/index.d.ts"],
@@ -32,6 +33,9 @@
   "include": [
     "src/client/**/*.ts",
     "src/client/**/*.tsx",
+    "src/edit-last-message/shared.ts",
+    "src/edit-last-message/client/**/*.ts",
+    "src/edit-last-message/client/**/*.tsx",
     "src/mcp-server-manager/client/**/*.ts",
     "src/mcp-server-manager/client/**/*.tsx",
     "src/plugin-market/client/**/*.ts",

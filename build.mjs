@@ -22,6 +22,10 @@ const CLIENT_EXTERNALS = [
 
 const HOST_ENTRIES = [
   'src/index.ts',
+  'src/edit-last-message/shared.ts',
+  'src/edit-last-message/host/index.ts',
+  'src/edit-last-message/host/remote.ts',
+  'src/edit-last-message/host/rewind.ts',
   'src/mcp-server-manager/host/importers.ts',
   'src/mcp-server-manager/host/index.ts',
   'src/mcp-server-manager/host/manager.ts',

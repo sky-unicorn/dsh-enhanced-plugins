@@ -18,6 +18,9 @@
     - id: referenced-file
       name: 'dsh-enhanced-plugins/referenced-file'
 
+    - id: edit-last-message-host
+      name: 'dsh-enhanced-plugins/edit-last-message/host'
+
     - id: subagent-codex
       name: '@deepseek-ai/dsh-subagent-codex'
 

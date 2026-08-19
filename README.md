@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 ## Overview
 
-`dsh-enhanced-plugins` is an installable enhancement bundle for DeepSeek Harness (DSH). It combines several useful but independently managed extensions in one package, giving users a single installation for MCP server configuration, model input capability declarations, plugin discovery and installation, workspace file references, and product subagent toggles.
+`dsh-enhanced-plugins` is an installable enhancement bundle for DeepSeek Harness (DSH). It combines several useful but independently managed extensions in one package, giving users a single installation for last-message editing, MCP server configuration, model input capability declarations, plugin discovery and installation, workspace file references, and product subagent toggles.
 
 The project uses DSH's public plugin extension points and does not modify or replace DSH core. Its Host side owns configuration, validation, persistence, and runtime lifecycles, while the Web Client provides interfaces consistent with DSH's native Settings experience. Each capability is mounted and disposed independently, so an unavailable optional feature does not prevent the others from running.
 
@@ -12,8 +12,9 @@ It is intended for users and developers who want a centralized set of common DSH
 
 ## Core capabilities
 
-The bundle contains five enhanced capabilities:
+The bundle contains six enhanced capabilities:
 
+- **Edit last message** — after a session finishes or is manually stopped, edit its latest durable text-only user message directly inside the transcript bubble, truncate the active context before that turn, and resend the replacement.
 - **MCP server manager** — a Settings → Plugins card for stdio and Streamable HTTP servers, revision-fenced edits, secret-masked reads, and one-click Claude Code/Codex import.
 - **pi-ai model request types** — a Settings → Plugins card that declares configured models as provider-default, text-only, or text-and-image without patching the built-in Models page.
 - **Plugin market** — a local-snapshot-backed DSH plugin catalog with verified GitHub/npm install sources, installation records, background channel sync, and credential-backed GitHub Token management.
@@ -105,7 +106,7 @@ The package contributes stable Loader ids:
 | subagent-product-toggle-tools | dsh-enhanced-plugins/sub-agent/preset | Live controlled tool Consumers |
 | ui-enhanced-plugins | dsh-enhanced-plugins | Single Client-module discovery anchor |
 
-The root entry is deliberately a no-op Host plugin. Browser code mounts all five features as independent child fibers, so missing optional surfaces do not merge their lifecycle or state. The pi-ai request-type feature needs no additional Loader row: the existing Client discovery anchor owns its browser child, while the official adapter remains the sole owner of `llm-pi-ai`.
+The root entry is deliberately a no-op Host plugin. Browser code mounts all six features as independent child fibers, so missing optional surfaces do not merge their lifecycle or state. The pi-ai request-type feature needs no additional Loader row: the existing Client discovery anchor owns its browser child, while the official adapter remains the sole owner of `llm-pi-ai`.
 
 ## Configuration
 
@@ -139,6 +140,12 @@ The `pi-ai model request types` card appears only while the official `llm-pi-ai`
 Each change uses the public `settings.mutate` API with the descriptor revision and writes only the selected route's complete `models` array, which is the adapter's array-replace field. Every unedited model object and its fields are retained. A conflict or failed write is followed by a fresh describe before another edit is allowed.
 
 The card deliberately lives under Settings → Plugins because the shipped Models editor exposes no public child slot and Client bundle purity forbids importing its private React form. Add or remove model overrides on the Models page (or in `settings.yaml`), then set their request type in this card. Capability declarations are not endpoint probes: claiming image support allows durable image admission and `read_image`, but an endpoint that does not actually accept images can still reject the later provider request.
+
+### Edit last message
+
+When the current session is not running, an Edit action appears beside Copy on its latest durable text-only user bubble. Clicking it replaces the bubble body with an inline editor; Cancel keeps the current session unchanged, while Save and resend submits the edited text. The Edit action is not rendered while the session is running, and becomes available after either normal completion or a manual stop.
+
+Saving stays in the current session; it does not create a child or a new session. The plugin replaces the current model surface from the edited user message onward, then regenerates through the same AgentLoop. The original user message and its later assistant, reasoning, and tool process are absent from this and subsequent model contexts, while the transcript shows only the revised bubble and newly generated result. DSH Sessions are append-only, so the old events remain in the raw log as audit history rather than being physically deleted; external side effects of tools that already ran are not rolled back. Messages containing images or other non-text blocks do not expose Edit, so resending cannot silently discard them.
 
 ### Referenced files
 

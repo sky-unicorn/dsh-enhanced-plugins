@@ -36,6 +36,8 @@
   },
   "include": [
     "src/index.ts",
+    "src/edit-last-message/shared.ts",
+    "src/edit-last-message/host/**/*.ts",
     "src/mcp-server-manager/host/**/*.ts",
     "src/plugin-market/*.ts",
     "src/referenced-file/host/**/*.ts",
