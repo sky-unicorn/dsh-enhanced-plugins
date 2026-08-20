@@ -40,6 +40,7 @@ const HOST_ENTRIES = [
   'src/notification/host/position-store.ts',
   'src/notification/host/remote.ts',
   'src/notification/host/sound-files.ts',
+  'src/notification/host/sound-library.ts',
   'src/notification/host/state.ts',
   'src/plugin-market/contracts.ts',
   'src/plugin-market/index.ts',

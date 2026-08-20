@@ -42,8 +42,7 @@
 .intro,
 .note,
 .notice,
-.hint,
-.fileName {
+.hint {
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
   line-height: 20px;
@@ -177,19 +176,93 @@
   cursor: pointer;
 }
 
+.preview { min-width: 76px; }
+
+.volumeControl {
+  display: flex;
+  width: min(100%, 320px);
+  align-items: center;
+  gap: 12px;
+}
+
+.volumeRange {
+  min-width: 0;
+  flex: 1;
+  accent-color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+}
+
+.volumeRange:disabled { cursor: default; }
+
+.volumeValue {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.volumeNumber {
+  width: 58px;
+  padding: 5px 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  font: inherit;
+  text-align: right;
+}
+
+.library {
+  margin: 0 16px;
+  padding: 13px 0;
+}
+
+.libraryHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.libraryEmpty {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.libraryList {
+  display: flex;
+  margin: 9px 0 0;
+  padding: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+}
+
+.libraryList li {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 3px 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fileInput {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
-}
-
-.fileName {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .toggle {
@@ -240,6 +313,7 @@
 @media (max-width: 620px) {
   .statePreview { grid-template-columns: 1fr; }
   .fieldFooter { flex-direction: column; }
+  .libraryHeading { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -35,9 +35,15 @@ export function apply(ctx: ClientContext): void {
   }), 'desktop notifications: connection invalidation')
   const face = (): NotificationSectionFace => ({
     hooks: { notificationSettings: settings },
+    soundLibrary: {
+      getSnapshot: () => settings.getSoundLibrarySnapshot(),
+      subscribe: listener => settings.subscribe(listener),
+    },
     set: (field, value) => { void settings.set(field, value) },
+    selectSound: (kind, sound) => settings.setSound(kind, sound),
     reset: (field) => { void settings.unset(field) },
-    upload: (kind, fileName, dataBase64) => settings.uploadSound(kind, fileName, dataBase64),
+    upload: (fileName, dataBase64) => settings.uploadSound(fileName, dataBase64),
+    preview: (kind) => settings.previewSound(kind),
   })
   const t = ctx.locale.bind('settings.desktopNotifications')
   ctx.slots.inject('settings.section', () => ctx.slots.register({

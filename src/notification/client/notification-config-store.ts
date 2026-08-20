@@ -4,8 +4,10 @@ import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/cli
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   NotificationConfigView,
+  NotificationCustomSound,
   NotificationMutateOutcome,
   NotificationSettings,
+  NotificationSoundChoice,
   NotificationSoundEvent,
 } from '../shared.ts'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '../shared.ts'
@@ -35,6 +37,10 @@ export function decodeNotificationSettings(value: unknown): NotificationSettings
     || typeof value['completionCustomSoundName'] !== 'string'
     || typeof value['confirmationCustomSoundFile'] !== 'string'
     || typeof value['confirmationCustomSoundName'] !== 'string'
+    || typeof value['soundGain'] !== 'number'
+    || !Number.isInteger(value['soundGain'])
+    || value['soundGain'] < 0
+    || value['soundGain'] > 100
     || typeof value['petEnabled'] !== 'boolean'
     || typeof value['petIdleTopmost'] !== 'boolean'
     || (value['petSize'] !== 80 && value['petSize'] !== 112
@@ -58,6 +64,7 @@ function decodeLayer(value: unknown): Partial<NotificationSettings> | undefined 
     if (single === undefined || !Object.hasOwn(single, field)) return undefined
     if (field === 'completionSound') decoded.completionSound = single.completionSound
     else if (field === 'confirmationSound') decoded.confirmationSound = single.confirmationSound
+    else if (field === 'soundGain') decoded.soundGain = single.soundGain
     else if (field === 'petEnabled') decoded.petEnabled = single.petEnabled
     else if (field === 'petIdleTopmost') decoded.petIdleTopmost = single.petIdleTopmost
     else if (field === 'petSize') decoded.petSize = single.petSize
@@ -77,7 +84,9 @@ function decodeView(value: unknown): NotificationConfigView | undefined {
   const settings = decodeNotificationSettings(value['value'])
   const base = decodeLayer(value['base'])
   const user = decodeLayer(value['user'])
+  const customSounds = decodeCustomSounds(value['customSounds'])
   if (settings === undefined
+    || customSounds === undefined
     || typeof value['writable'] !== 'boolean'
     || typeof value['revision'] !== 'number'
     || !Number.isInteger(value['revision'])
@@ -92,8 +101,32 @@ function decodeView(value: unknown): NotificationConfigView | undefined {
     value: settings,
     ...(base === undefined ? {} : { base }),
     ...(user === undefined ? {} : { user }),
+    customSounds,
     revision: value['revision'],
   }
+}
+
+const CUSTOM_SOUND_FILE = /^(?:sound|completion|confirmation)-[0-9a-f-]{36}\.wav$/
+
+function decodeCustomSounds(value: unknown): NotificationCustomSound[] | undefined {
+  if (!Array.isArray(value) || value.length > 64) return undefined
+  const seen = new Set<string>()
+  const sounds: NotificationCustomSound[] = []
+  for (const entry of value) {
+    if (!isPlainObject(entry)
+      || typeof entry['fileId'] !== 'string'
+      || !CUSTOM_SOUND_FILE.test(entry['fileId'])
+      || seen.has(entry['fileId'])
+      || typeof entry['name'] !== 'string'
+      || entry['name'].length === 0
+      || entry['name'].length > 120
+      || !entry['name'].toLowerCase().endsWith('.wav')) {
+      return undefined
+    }
+    seen.add(entry['fileId'])
+    sounds.push({ fileId: entry['fileId'], name: entry['name'] })
+  }
+  return sounds
 }
 
 function decodeOutcome(value: unknown): NotificationMutateOutcome | undefined {
@@ -105,6 +138,7 @@ function decodeOutcome(value: unknown): NotificationMutateOutcome | undefined {
 /** SettingsScope-compatible source with ordered writes and revision-conflict recovery. */
 export class NotificationConfigStore implements SettingsScope<NotificationSettings> {
   private snapshot = LOADING
+  private customSounds: NotificationCustomSound[] = []
   private readonly listeners = new Set<() => void>()
   private writeTail: Promise<void> = Promise.resolve()
 
@@ -117,6 +151,10 @@ export class NotificationConfigStore implements SettingsScope<NotificationSettin
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
+  }
+
+  getSoundLibrarySnapshot(): NotificationCustomSound[] {
+    return this.customSounds
   }
 
   /** Re-read after startup, reconnect, external edits, and every write settlement. */
@@ -140,21 +178,43 @@ export class NotificationConfigStore implements SettingsScope<NotificationSettin
     return this.enqueue({ op: 'set', path: [field], value })
   }
 
+  /** Commit a sound choice and report failure so automatic preview never plays a stale selection. */
+  setSound(kind: NotificationSoundEvent, choice: NotificationSoundChoice): Promise<void> {
+    const custom = choice.startsWith('custom:') ? choice.slice('custom:'.length) : undefined
+    const request = {
+      kind,
+      sound: custom === undefined ? choice : 'custom',
+      ...(custom === undefined ? {} : { customSoundFile: custom }),
+    }
+    return this.enqueueRemote('notificationConfig/selectSound', request, 'sound selection was rejected')
+  }
+
   unset(field: string): Promise<void> {
     return this.enqueue({ op: 'unset', path: [field] })
   }
 
-  /** Upload and select a browser-provided WAV through the Host owner. */
+  /** Ask the Host to play the currently committed sound selection. */
+  async previewSound(kind: NotificationSoundEvent): Promise<void> {
+    const result = await this.rpc.call('/api', 'notificationConfig/preview', {
+      args: { request: { kind } },
+    })
+    if (!result.ok) throw new Error('sound preview was rejected')
+  }
+
+  /** Upload a browser-provided WAV into the Host-owned shared library. */
   uploadSound(
-    kind: NotificationSoundEvent,
     fileName: string,
     dataBase64: string,
   ): Promise<void> {
+    return this.enqueueRemote('notificationConfig/upload', { fileName, dataBase64 }, 'custom sound upload was rejected')
+  }
+
+  private enqueueRemote(method: string, request: Record<string, unknown>, rejected: string): Promise<void> {
     const run = this.writeTail.then(async () => {
       const expectedRevision = this.snapshot.revision
       try {
-        const result = await this.rpc.call('/api', 'notificationConfig/upload', {
-          args: { request: { kind, fileName, dataBase64, expectedRevision } },
+        const result = await this.rpc.call('/api', method, {
+          args: { request: { ...request, expectedRevision } },
         })
         const outcome = result.ok ? decodeOutcome(result.value) : undefined
         if (outcome !== undefined) {
@@ -167,15 +227,19 @@ export class NotificationConfigStore implements SettingsScope<NotificationSettin
         throw error
       }
       await this.refresh()
-      throw new Error('custom sound upload was rejected')
+      throw new Error(rejected)
     })
     this.writeTail = run.catch(() => {})
     return run
   }
 
-  private enqueue(op: { op: 'set' | 'unset'; path: string[]; value?: unknown }): Promise<void> {
+  private enqueue(
+    op: { op: 'set' | 'unset'; path: string[]; value?: unknown },
+    reportFailure = false,
+  ): Promise<void> {
     const run = this.writeTail.then(async () => {
       const expectedRevision = this.snapshot.revision
+      let failure: unknown
       try {
         const result = await this.rpc.call('/api', 'notificationConfig/mutate', {
           args: { request: { op, expectedRevision } },
@@ -183,12 +247,19 @@ export class NotificationConfigStore implements SettingsScope<NotificationSettin
         const outcome = result.ok ? decodeOutcome(result.value) : undefined
         if (outcome !== undefined) {
           this.applyView(outcome.view)
+          if (outcome.kind === 'conflict' && reportFailure) {
+            throw new Error('notification settings changed; latest values were reloaded')
+          }
           return
         }
-      } catch {
+      } catch (error: unknown) {
+        failure = error
         // The authoritative read below reconciles transport failures as well.
       }
       await this.refresh()
+      if (reportFailure) {
+        throw failure instanceof Error ? failure : new Error('notification setting update was rejected')
+      }
     })
     this.writeTail = run.catch(() => {})
     return run
@@ -201,6 +272,7 @@ export class NotificationConfigStore implements SettingsScope<NotificationSettin
     }
     // A late read may not replace a newer write response or external refresh.
     if (this.snapshot.revision !== undefined && view.revision < this.snapshot.revision) return
+    this.customSounds = view.customSounds
     this.snapshot = {
       status: 'ready',
       value: view.value,
@@ -214,6 +286,7 @@ export class NotificationConfigStore implements SettingsScope<NotificationSettin
   }
 
   private unavailable(): void {
+    this.customSounds = []
     this.snapshot = {
       status: 'unavailable',
       value: undefined,

@@ -5,16 +5,19 @@ import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, resolve, sep } from 'node:path'
-import type { NotificationSoundEvent } from '../shared.js'
 
 export const MAX_CUSTOM_SOUND_BYTES = 2 * 1024 * 1024
-const FILE_ID = /^(?:completion|confirmation)-[0-9a-f-]{36}\.wav$/
+const FILE_ID = /^(?:sound|completion|confirmation)-[0-9a-f-]{36}\.wav$/
 
-function profileSoundRoot(ctx: Context): string | undefined {
+export function profileSoundRoot(ctx: Context): string | undefined {
   const documentPath = ctx.get('settings')?.documentPath
   return documentPath === undefined
     ? undefined
     : resolve(dirname(documentPath), 'desktop-notifications', 'sounds')
+}
+
+export function isCustomSoundFileId(value: string): boolean {
+  return FILE_ID.test(value)
 }
 
 /** Resolve one owner-generated id without allowing it to escape the profile sound directory. */
@@ -39,7 +42,7 @@ function decodeWav(dataBase64: string): Buffer {
   return data
 }
 
-function displayName(fileName: string): string {
+export function soundDisplayName(fileName: string): string {
   const name = basename(fileName).replace(/[\u0000-\u001f\u007f]/g, '').trim()
   if (name.length === 0 || name.length > 120 || !name.toLowerCase().endsWith('.wav')) {
     throw new TypeError('notificationConfig/upload: fileName must be a WAV name of at most 120 characters')
@@ -50,7 +53,6 @@ function displayName(fileName: string): string {
 /** Validate and persist one WAV under an opaque owner-generated id. */
 export async function saveCustomSound(
   ctx: Context,
-  kind: NotificationSoundEvent,
   fileName: string,
   dataBase64: string,
 ): Promise<{ fileId: string; name: string }> {
@@ -59,8 +61,8 @@ export async function saveCustomSound(
     throw new Error('notificationConfig/upload: the settings provider has no profile document path')
   }
   const data = decodeWav(dataBase64)
-  const name = displayName(fileName)
-  const fileId = `${kind}-${randomUUID()}.wav`
+  const name = soundDisplayName(fileName)
+  const fileId = `sound-${randomUUID()}.wav`
   const target = customSoundPath(ctx, fileId)
   if (target === undefined) throw new Error('notificationConfig/upload: failed to resolve the owner-generated file id')
   await mkdir(root, { recursive: true })

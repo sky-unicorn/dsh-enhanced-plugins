@@ -3,6 +3,8 @@
 export const NOTIFICATION_SETTINGS_NAMESPACE = 'desktop-notifications'
 
 export type NotificationSound = 'off' | 'subtle' | 'prominent' | 'custom'
+export type NotificationBuiltInSound = Exclude<NotificationSound, 'custom'>
+export type NotificationSoundChoice = NotificationBuiltInSound | `custom:${string}`
 export type NotificationSoundEvent = 'completion' | 'confirmation'
 export type PetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 export type PetSize = 80 | 112 | 144 | 176
@@ -15,13 +17,15 @@ export interface NotificationSettings {
   completionSound: NotificationSound
   /** Sound played when an approval or explicit user question starts waiting. */
   confirmationSound: NotificationSound
-  /** Host-owned file id for the uploaded completion WAV. */
+  /** Positive gain for built-in and custom notification sounds; 0 preserves the source level. */
+  soundGain: number
+  /** Host-owned file id selected from the shared custom sound library for completion. */
   completionCustomSoundFile: string
-  /** Safe display name of the uploaded completion WAV. */
+  /** Safe display name paired with the selected completion sound file. */
   completionCustomSoundName: string
-  /** Host-owned file id for the uploaded confirmation WAV. */
+  /** Host-owned file id selected from the shared custom sound library for confirmation. */
   confirmationCustomSoundFile: string
-  /** Safe display name of the uploaded confirmation WAV. */
+  /** Safe display name paired with the selected confirmation sound file. */
   confirmationCustomSoundName: string
   /** Show the native DeepSeek fish pet outside the browser. */
   petEnabled: boolean
@@ -33,6 +37,12 @@ export interface NotificationSettings {
   petPosition: PetPosition
 }
 
+/** Safe browser-visible metadata for one shared profile-local WAV. */
+export interface NotificationCustomSound {
+  fileId: string
+  name: string
+}
+
 /** Redacted, revision-fenced settings view served to this plugin's browser half. */
 export type NotificationConfigView =
   | { registered: false }
@@ -42,6 +52,7 @@ export type NotificationConfigView =
     value: NotificationSettings
     base?: Partial<NotificationSettings>
     user?: Partial<NotificationSettings>
+    customSounds: NotificationCustomSound[]
     revision: number
   }
 
@@ -57,10 +68,21 @@ export interface NotificationMutateRequest {
 
 /** One browser-selected WAV uploaded into the owning DSH profile. */
 export interface NotificationSoundUploadRequest {
-  kind: NotificationSoundEvent
   fileName: string
   dataBase64: string
+}
+
+/** Select a built-in sound or one entry from the shared custom library. */
+export interface NotificationSoundSelectionRequest {
+  kind: NotificationSoundEvent
+  sound: NotificationSound
+  customSoundFile?: string
   expectedRevision?: number
+}
+
+/** Read-only request to play the Host's currently selected sound. */
+export interface NotificationSoundPreviewRequest {
+  kind: NotificationSoundEvent
 }
 
 /** Committed view, or the authoritative view returned after a stale write. */
@@ -71,6 +93,7 @@ export type NotificationMutateOutcome =
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   completionSound: 'subtle',
   confirmationSound: 'prominent',
+  soundGain: 0,
   completionCustomSoundFile: '',
   completionCustomSoundName: '',
   confirmationCustomSoundFile: '',

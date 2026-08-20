@@ -216,6 +216,199 @@ public static class DeepSeekPetNativeCursor {
   }
 }
 
+public static class DeepSeekNotificationGain {
+  private const ushort PcmFormat = 1;
+  private const ushort FloatFormat = 3;
+  private const ushort ExtensibleFormat = 0xfffe;
+
+  private static bool Matches(byte[] bytes, int offset, string value) {
+    if (offset < 0 || offset + value.Length > bytes.Length) return false;
+    for (var index = 0; index < value.Length; index++) {
+      if (bytes[offset + index] != (byte)value[index]) return false;
+    }
+    return true;
+  }
+
+  private static ushort ReadUInt16(byte[] bytes, int offset) {
+    return (ushort)(bytes[offset] | (bytes[offset + 1] << 8));
+  }
+
+  private static uint ReadUInt32(byte[] bytes, int offset) {
+    return (uint)(bytes[offset]
+      | (bytes[offset + 1] << 8)
+      | (bytes[offset + 2] << 16)
+      | (bytes[offset + 3] << 24));
+  }
+
+  private static bool IsWaveSubFormat(byte[] bytes, int offset, ushort format) {
+    var tail = new byte[] { 0, 0, 0x10, 0, 0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71 };
+    if (offset < 0 || offset + 16 > bytes.Length) return false;
+    if (ReadUInt32(bytes, offset) != format) return false;
+    for (var index = 0; index < tail.Length; index++) {
+      if (bytes[offset + 4 + index] != tail[index]) return false;
+    }
+    return true;
+  }
+
+  private static double Limit(double sample, double multiplier) {
+    if (Double.IsNaN(sample) || Double.IsInfinity(sample)) return 0;
+    var amplified = sample * multiplier;
+    var magnitude = Math.Abs(amplified);
+    if (magnitude <= 0.9) return amplified;
+    var limited = 0.9 + (0.1 * Math.Tanh((magnitude - 0.9) / 0.1));
+    return Math.Max(-1, Math.Min(1, Math.Sign(amplified) * limited));
+  }
+
+  private static void WriteInt16(byte[] bytes, int offset, double sample) {
+    var scaled = (int)Math.Round(sample * 32768.0, MidpointRounding.AwayFromZero);
+    scaled = Math.Max(Int16.MinValue, Math.Min(Int16.MaxValue, scaled));
+    bytes[offset] = (byte)(scaled & 0xff);
+    bytes[offset + 1] = (byte)((scaled >> 8) & 0xff);
+  }
+
+  private static void WriteInt24(byte[] bytes, int offset, double sample) {
+    var scaled = (int)Math.Round(sample * 8388608.0, MidpointRounding.AwayFromZero);
+    scaled = Math.Max(-8388608, Math.Min(8388607, scaled));
+    bytes[offset] = (byte)(scaled & 0xff);
+    bytes[offset + 1] = (byte)((scaled >> 8) & 0xff);
+    bytes[offset + 2] = (byte)((scaled >> 16) & 0xff);
+  }
+
+  private static void WriteInt32(byte[] bytes, int offset, double sample) {
+    var scaled = (long)Math.Round(sample * 2147483648.0, MidpointRounding.AwayFromZero);
+    scaled = Math.Max(Int32.MinValue, Math.Min(Int32.MaxValue, scaled));
+    var value = (int)scaled;
+    bytes[offset] = (byte)(value & 0xff);
+    bytes[offset + 1] = (byte)((value >> 8) & 0xff);
+    bytes[offset + 2] = (byte)((value >> 16) & 0xff);
+    bytes[offset + 3] = (byte)((value >> 24) & 0xff);
+  }
+
+  private static bool AmplifyPcm(
+    byte[] bytes,
+    int dataOffset,
+    int dataSize,
+    ushort channels,
+    ushort blockAlign,
+    ushort bitsPerSample,
+    double multiplier
+  ) {
+    var bytesPerSample = bitsPerSample / 8;
+    if (channels == 0 || (bitsPerSample != 8 && bitsPerSample != 16
+      && bitsPerSample != 24 && bitsPerSample != 32)
+      || blockAlign < channels * bytesPerSample) return false;
+    for (var frame = 0; frame + blockAlign <= dataSize; frame += blockAlign) {
+      for (var channel = 0; channel < channels; channel++) {
+        var offset = dataOffset + frame + (channel * bytesPerSample);
+        if (bitsPerSample == 8) {
+          var sample = (bytes[offset] - 128) / 128.0;
+          var scaled = (int)Math.Round((Limit(sample, multiplier) * 128.0) + 128.0,
+            MidpointRounding.AwayFromZero);
+          bytes[offset] = (byte)Math.Max(0, Math.Min(255, scaled));
+        } else if (bitsPerSample == 16) {
+          var raw = (short)ReadUInt16(bytes, offset);
+          WriteInt16(bytes, offset, Limit(raw / 32768.0, multiplier));
+        } else if (bitsPerSample == 24) {
+          var raw = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+          if ((raw & 0x800000) != 0) raw |= unchecked((int)0xff000000);
+          WriteInt24(bytes, offset, Limit(raw / 8388608.0, multiplier));
+        } else {
+          var raw = BitConverter.ToInt32(bytes, offset);
+          WriteInt32(bytes, offset, Limit(raw / 2147483648.0, multiplier));
+        }
+      }
+    }
+    return true;
+  }
+
+  private static bool AmplifyFloat(
+    byte[] bytes,
+    int dataOffset,
+    int dataSize,
+    ushort channels,
+    ushort blockAlign,
+    ushort bitsPerSample,
+    double multiplier
+  ) {
+    var bytesPerSample = bitsPerSample / 8;
+    if (channels == 0 || (bitsPerSample != 32 && bitsPerSample != 64)
+      || blockAlign < channels * bytesPerSample) return false;
+    for (var frame = 0; frame + blockAlign <= dataSize; frame += blockAlign) {
+      for (var channel = 0; channel < channels; channel++) {
+        var offset = dataOffset + frame + (channel * bytesPerSample);
+        var sample = bitsPerSample == 32
+          ? (double)BitConverter.ToSingle(bytes, offset)
+          : BitConverter.ToDouble(bytes, offset);
+        var encoded = bitsPerSample == 32
+          ? BitConverter.GetBytes((float)Limit(sample, multiplier))
+          : BitConverter.GetBytes(Limit(sample, multiplier));
+        Buffer.BlockCopy(encoded, 0, bytes, offset, bytesPerSample);
+      }
+    }
+    return true;
+  }
+
+  public static string CreateAmplifiedCopy(string sourcePath, int gainPercent) {
+    if (String.IsNullOrEmpty(sourcePath) || gainPercent <= 0) return sourcePath;
+    gainPercent = Math.Max(0, Math.Min(100, gainPercent));
+    var bytes = File.ReadAllBytes(sourcePath);
+    if (bytes.Length < 12 || !Matches(bytes, 0, "RIFF") || !Matches(bytes, 8, "WAVE")) {
+      return sourcePath;
+    }
+
+    var formatOffset = -1;
+    var formatSize = 0;
+    var dataOffset = -1;
+    var dataSize = 0;
+    var chunkOffset = 12;
+    while (chunkOffset + 8 <= bytes.Length) {
+      var rawSize = ReadUInt32(bytes, chunkOffset + 4);
+      if (rawSize > Int32.MaxValue) return sourcePath;
+      var chunkSize = (int)rawSize;
+      var contentOffset = chunkOffset + 8;
+      var contentEnd = (long)contentOffset + chunkSize;
+      if (contentEnd > bytes.Length) return sourcePath;
+      if (formatOffset < 0 && Matches(bytes, chunkOffset, "fmt ")) {
+        formatOffset = contentOffset;
+        formatSize = chunkSize;
+      } else if (dataOffset < 0 && Matches(bytes, chunkOffset, "data")) {
+        dataOffset = contentOffset;
+        dataSize = chunkSize;
+      }
+      var paddedSize = (long)chunkSize + (chunkSize & 1);
+      var nextOffset = (long)contentOffset + paddedSize;
+      if (nextOffset > Int32.MaxValue || nextOffset <= chunkOffset) return sourcePath;
+      chunkOffset = (int)nextOffset;
+    }
+    if (formatOffset < 0 || formatSize < 16 || dataOffset < 0 || dataSize == 0) return sourcePath;
+
+    var format = ReadUInt16(bytes, formatOffset);
+    var channels = ReadUInt16(bytes, formatOffset + 2);
+    var blockAlign = ReadUInt16(bytes, formatOffset + 12);
+    var bitsPerSample = ReadUInt16(bytes, formatOffset + 14);
+    if (format == ExtensibleFormat) {
+      if (formatSize < 40 || ReadUInt16(bytes, formatOffset + 16) < 22) return sourcePath;
+      if (IsWaveSubFormat(bytes, formatOffset + 24, PcmFormat)) format = PcmFormat;
+      else if (IsWaveSubFormat(bytes, formatOffset + 24, FloatFormat)) format = FloatFormat;
+      else return sourcePath;
+    }
+
+    var multiplier = 1.0 + (gainPercent / 100.0);
+    var changed = format == PcmFormat
+      ? AmplifyPcm(bytes, dataOffset, dataSize, channels, blockAlign, bitsPerSample, multiplier)
+      : format == FloatFormat
+        && AmplifyFloat(bytes, dataOffset, dataSize, channels, blockAlign, bitsPerSample, multiplier);
+    if (!changed) return sourcePath;
+
+    var outputPath = Path.Combine(
+      Path.GetTempPath(),
+      "dsh-notification-" + Guid.NewGuid().ToString("N") + ".wav"
+    );
+    File.WriteAllBytes(outputPath, bytes);
+    return outputPath;
+  }
+}
+
 public sealed class DeepSeekPetInputReader {
   private readonly ConcurrentQueue<string> lines = new ConcurrentQueue<string>();
   private volatile bool reachedEnd;
@@ -408,6 +601,7 @@ $fish.Data = [System.Windows.Media.Geometry]::Parse([string]$icon.svg.path.d)
 $script:settings = [pscustomobject]@{
   completionSound = 'subtle'
   confirmationSound = 'prominent'
+  soundGain = 0
   completionCustomSoundPath = ''
   confirmationCustomSoundPath = ''
   petEnabled = $false
@@ -426,6 +620,7 @@ $script:stopping = $false
 $script:pendingStop = $false
 $script:soundPlaying = $false
 $script:soundDeadline = [DateTime]::MinValue
+$script:amplifiedSoundPath = ''
 $inputReader = [DeepSeekPetInputReader]::new([Console]::In)
 $script:mediaPlayer = [System.Windows.Media.MediaPlayer]::new()
 
@@ -833,18 +1028,84 @@ function Play-IdleTrick {
   $script:nextIdleTrick = [DateTime]::UtcNow.AddSeconds((Get-Random -Minimum 5 -Maximum 10))
 }
 
-function Finish-CustomSound {
+function Remove-AmplifiedSound {
+  if ($script:amplifiedSoundPath.Length -eq 0) { return }
+  $path = $script:amplifiedSoundPath
+  $script:amplifiedSoundPath = ''
+  try {
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+      Remove-Item -LiteralPath $path -Force
+    }
+  } catch {
+    # Media Foundation can briefly retain the file after Close; the OS will
+    # eventually clean the profile-independent temporary directory.
+  }
+}
+
+function Finish-Sound {
   $script:soundPlaying = $false
   $script:mediaPlayer.Stop()
   $script:mediaPlayer.Close()
+  Remove-AmplifiedSound
   if ($script:pendingStop) {
     $window.Close()
     $application.Shutdown()
   }
 }
 
-$script:mediaPlayer.Add_MediaEnded({ Finish-CustomSound })
-$script:mediaPlayer.Add_MediaFailed({ Finish-CustomSound })
+$script:mediaPlayer.Add_MediaEnded({ Finish-Sound })
+$script:mediaPlayer.Add_MediaFailed({ Finish-Sound })
+
+function Resolve-SystemSoundPath([string]$alias, [string]$fallbackName) {
+  $registryPath = "Registry::HKEY_CURRENT_USER\AppEvents\Schemes\Apps\.Default\$alias\.Current"
+  try {
+    if (Test-Path -LiteralPath $registryPath) {
+      $configured = (Get-Item -LiteralPath $registryPath).GetValue('')
+      if ($null -ne $configured -and ([string]$configured).Length -gt 0) {
+        $expanded = [Environment]::ExpandEnvironmentVariables([string]$configured)
+        if (Test-Path -LiteralPath $expanded -PathType Leaf) { return $expanded }
+      }
+    }
+  } catch {
+    # Fall back to the standard Windows media file below.
+  }
+  if ($null -ne $env:WINDIR -and ([string]$env:WINDIR).Length -gt 0) {
+    $fallback = Join-Path ([string]$env:WINDIR) "Media\$fallbackName"
+    if (Test-Path -LiteralPath $fallback -PathType Leaf) { return $fallback }
+  }
+  return ''
+}
+
+function Get-SoundGain {
+  $percent = 0
+  if ($null -ne $script:settings.soundGain) {
+    $percent = [int]$script:settings.soundGain
+  }
+  return [Math]::Min(100, [Math]::Max(0, $percent))
+}
+
+function Play-MediaSound([string]$path) {
+  if ($path.Length -eq 0 -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { return $false }
+  $script:mediaPlayer.Stop()
+  $script:mediaPlayer.Close()
+  Remove-AmplifiedSound
+  $playbackPath = $path
+  try {
+    $playbackPath = [DeepSeekNotificationGain]::CreateAmplifiedCopy($path, (Get-SoundGain))
+  } catch {
+    [Console]::Error.WriteLine("notification sound gain failed: $($_.Exception.Message)")
+    $playbackPath = $path
+  }
+  if (-not [StringComparer]::OrdinalIgnoreCase.Equals($playbackPath, $path)) {
+    $script:amplifiedSoundPath = $playbackPath
+  }
+  $script:mediaPlayer.Volume = 1.0
+  $script:mediaPlayer.Open([Uri]::new($playbackPath))
+  $script:mediaPlayer.Play()
+  $script:soundPlaying = $true
+  $script:soundDeadline = [DateTime]::UtcNow.AddSeconds(30)
+  return $true
+}
 
 function Play-ConfiguredSound([string]$kind) {
   $choice = if ($kind -eq 'completion') {
@@ -859,24 +1120,29 @@ function Play-ConfiguredSound([string]$kind) {
     } else {
       [string]$script:settings.confirmationCustomSoundPath
     }
-    if ($path.Length -gt 0 -and (Test-Path -LiteralPath $path -PathType Leaf)) {
-      $script:mediaPlayer.Stop()
-      $script:mediaPlayer.Close()
-      $script:mediaPlayer.Open([Uri]::new($path))
-      $script:mediaPlayer.Play()
-      $script:soundPlaying = $true
-      $script:soundDeadline = [DateTime]::UtcNow.AddSeconds(30)
-      return
-    }
+    if (Play-MediaSound $path) { return }
     $choice = 'subtle'
   }
+  $alias = ''
+  $fallbackName = ''
   if ($kind -eq 'completion') {
-    if ($choice -eq 'prominent') { [System.Media.SystemSounds]::Exclamation.Play() }
-    else { [System.Media.SystemSounds]::Asterisk.Play() }
+    if ($choice -eq 'prominent') {
+      $alias = 'SystemExclamation'
+      $fallbackName = 'Windows Exclamation.wav'
+    } else {
+      $alias = 'SystemAsterisk'
+      $fallbackName = 'Windows Ding.wav'
+    }
   } else {
-    if ($choice -eq 'prominent') { [System.Media.SystemSounds]::Hand.Play() }
-    else { [System.Media.SystemSounds]::Question.Play() }
+    if ($choice -eq 'prominent') {
+      $alias = 'SystemHand'
+      $fallbackName = 'Windows Critical Stop.wav'
+    } else {
+      $alias = 'SystemQuestion'
+      $fallbackName = 'Windows Default.wav'
+    }
   }
+  [void](Play-MediaSound (Resolve-SystemSoundPath $alias $fallbackName))
 }
 
 function Request-Stop {
@@ -984,7 +1250,7 @@ $inputTimer.Add_Tick({
     Set-Placement
   }
   if ($script:soundPlaying -and [DateTime]::UtcNow -ge $script:soundDeadline) {
-    Finish-CustomSound
+    Finish-Sound
   }
   if ($script:visualMode -ne 'state' -and $now -ge $script:visualUntil) {
     Set-StateVisual
@@ -1014,6 +1280,7 @@ $window.Add_Closed({
   $inputTimer.Stop()
   $script:mediaPlayer.Stop()
   $script:mediaPlayer.Close()
+  Remove-AmplifiedSound
   if ($null -ne $script:windowSource -and $null -ne $script:windowHook) {
     $script:windowSource.RemoveHook($script:windowHook)
   }

@@ -1,6 +1,8 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { promisify } from 'node:util'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import { describe, expect, it, vi } from 'vitest'
@@ -12,6 +14,8 @@ import {
 import { NotificationConfigRemote } from '../../src/notification/host/remote.ts'
 import { NotificationStateTracker } from '../../src/notification/host/state.ts'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '../../src/notification/shared.ts'
+
+const execFileAsync = promisify(execFile)
 
 function session(id: string, origin?: 'subagent', events: SessionEvent[] = []): Session {
   return {
@@ -105,6 +109,9 @@ describe('desktop notification assets and defaults', () => {
     expect(Config({})).toEqual(DEFAULT_NOTIFICATION_SETTINGS)
     expect(() => Config({ petSize: 20 })).toThrow()
     expect(() => Config({ completionSound: 'unknown' })).toThrow()
+    expect(() => Config({ soundGain: -1 })).toThrow()
+    expect(() => Config({ soundGain: 101 })).toThrow()
+    expect(() => Config({ soundGain: 50.5 })).toThrow()
   })
 
   it('ships a movable WPF companion and the official fish vector', async () => {
@@ -130,10 +137,67 @@ describe('desktop notification assets and defaults', () => {
     expect(script).toContain('petIdleTopmost')
     expect(script).toContain('Write-PositionEvent')
     expect(script).toContain('MediaPlayer')
+    expect(script).toContain('soundGain = 0')
+    expect(script).toContain('Resolve-SystemSoundPath')
+    expect(script).toContain('DeepSeekNotificationGain')
+    expect(script).toContain('1.0 + (gainPercent / 100.0)')
+    expect(script).toContain('Math.Tanh')
+    expect(script).toContain('Remove-AmplifiedSound')
+    expect(script).toContain('$script:mediaPlayer.Volume = 1.0')
+    expect(script).not.toContain('[System.Media.SystemSounds]')
     expect(script).toContain("'working'")
     expect(script).toContain("'confirmation'")
     expect(icon).toContain('fill="#4D6BFE"')
     expect(icon).toContain('<path')
+  })
+
+  it.runIf(process.platform === 'win32')('keeps 0% at source level and applies real 100% PCM gain', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-notification-gain-'))
+    const petScript = resolve(import.meta.dirname, '../../assets/notification/desktop-pet.ps1')
+    const wavePath = join(directory, 'source.wav')
+    const helperPath = join(directory, 'verify-gain.ps1')
+    let amplifiedPath = ''
+    try {
+      const samples = [8192, -8192]
+      const wave = Buffer.alloc(44 + (samples.length * 2))
+      wave.write('RIFF', 0, 'ascii')
+      wave.writeUInt32LE(wave.length - 8, 4)
+      wave.write('WAVEfmt ', 8, 'ascii')
+      wave.writeUInt32LE(16, 16)
+      wave.writeUInt16LE(1, 20)
+      wave.writeUInt16LE(1, 22)
+      wave.writeUInt32LE(8000, 24)
+      wave.writeUInt32LE(16000, 28)
+      wave.writeUInt16LE(2, 32)
+      wave.writeUInt16LE(16, 34)
+      wave.write('data', 36, 'ascii')
+      wave.writeUInt32LE(samples.length * 2, 40)
+      samples.forEach((sample, index) => wave.writeInt16LE(sample, 44 + (index * 2)))
+      await writeFile(wavePath, wave)
+      await writeFile(helperPath, String.raw`param([string]$PetScript, [string]$WavePath)
+$source = Get-Content -Raw -LiteralPath $PetScript
+$match = [regex]::Match($source, "(?s)Add-Type -TypeDefinition @'\r?\n(?<code>.*?)\r?\n'@")
+if (-not $match.Success) { throw 'embedded C# block not found' }
+Add-Type -TypeDefinition $match.Groups['code'].Value
+[Console]::Out.WriteLine([DeepSeekNotificationGain]::CreateAmplifiedCopy($WavePath, 0))
+[Console]::Out.WriteLine([DeepSeekNotificationGain]::CreateAmplifiedCopy($WavePath, 100))
+`)
+      const { stdout } = await execFileAsync('powershell.exe', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', helperPath, petScript, wavePath,
+      ])
+      const [original, amplified] = stdout.trim().split(/\r?\n/)
+      amplifiedPath = amplified ?? ''
+      expect(original).toBe(wavePath)
+      expect(amplifiedPath).not.toBe(wavePath)
+      const result = await readFile(amplifiedPath)
+      expect(result.readInt16LE(44)).toBe(16384)
+      expect(result.readInt16LE(46)).toBe(-16384)
+    } finally {
+      if (amplifiedPath.length > 0 && amplifiedPath !== wavePath) {
+        await rm(amplifiedPath, { force: true })
+      }
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 
   it('validates and persists independent normalized positions for multiple displays', async () => {
@@ -189,10 +253,13 @@ describe('desktop notification assets and defaults', () => {
 })
 
 describe('desktop notification configuration Remote', () => {
-  function remoteFixture(documentPath?: string) {
+  function remoteFixture(
+    documentPath?: string,
+    initial: Partial<typeof DEFAULT_NOTIFICATION_SETTINGS> = {},
+  ) {
     let revision = 2
     let user: Record<string, unknown> | undefined
-    const value = { ...DEFAULT_NOTIFICATION_SETTINGS }
+    const value = { ...DEFAULT_NOTIFICATION_SETTINGS, ...initial }
     const settings = {
       writable: true,
       ...(documentPath === undefined ? {} : { documentPath }),
@@ -213,17 +280,20 @@ describe('desktop notification configuration Remote', () => {
         revision += 1
       }),
     }
+    const companion = { preview: vi.fn() }
     const remote = new NotificationConfigRemote({
       settings,
       get: (name: string) => name === 'settings' ? settings : undefined,
       logger: { warn: vi.fn() },
-    } as never)
-    return { remote, settings, bump: () => { revision += 1 } }
+    } as never, companion)
+    return { remote, settings, companion, bump: () => { revision += 1 } }
   }
 
   it('returns layered values and commits a fenced field edit with write-after-read', async () => {
     const { remote, settings } = remoteFixture()
-    expect(remote.describe()).toMatchObject({ registered: true, writable: true, revision: 2 })
+    await expect(remote.describe()).resolves.toMatchObject({
+      registered: true, writable: true, revision: 2, customSounds: [],
+    })
     await expect(remote.mutate({
       op: { op: 'set', path: ['petEnabled'], value: true },
       expectedRevision: 2,
@@ -249,6 +319,14 @@ describe('desktop notification configuration Remote', () => {
         user: { petEnabled: true, petIdleTopmost: false },
       },
     })
+
+    await expect(remote.mutate({
+      op: { op: 'set', path: ['soundGain'], value: 65 },
+      expectedRevision: 4,
+    })).resolves.toMatchObject({
+      kind: 'ok',
+      view: { registered: true, revision: 5, value: { soundGain: 65 }, user: { soundGain: 65 } },
+    })
   })
 
   it('returns the latest view on conflict and rejects unknown fields at the wire boundary', async () => {
@@ -264,22 +342,57 @@ describe('desktop notification configuration Remote', () => {
     } as never)).rejects.toThrow('known scalar field')
   })
 
-  it('stores an uploaded WAV under an opaque profile-local id and selects it atomically', async () => {
+  it('previews the current committed choice and keeps Off silent', async () => {
+    const { remote, companion } = remoteFixture()
+    await remote.preview({ kind: 'completion' })
+    expect(companion.preview).toHaveBeenCalledWith('completion', {
+      ...DEFAULT_NOTIFICATION_SETTINGS,
+    })
+
+    await remote.mutate({
+      op: { op: 'set', path: ['completionSound'], value: 'off' },
+      expectedRevision: 2,
+    })
+    await remote.preview({ kind: 'completion' })
+    expect(companion.preview).toHaveBeenCalledTimes(1)
+    await expect(remote.preview({ kind: 'unknown' } as never)).rejects.toThrow('known sound kind')
+  })
+
+  it('stores multiple WAV files in one shared library and selects them independently', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'dsh-notification-'))
     try {
       const { remote, settings } = remoteFixture(join(directory, 'settings.yaml'))
       const wav = Buffer.from('RIFF\u0004\u0000\u0000\u0000WAVE', 'binary').toString('base64')
-      await expect(remote.upload({
-        kind: 'completion',
-        fileName: 'done.wav',
-        dataBase64: wav,
-        expectedRevision: 2,
-      })).resolves.toMatchObject({
+      const first = await remote.upload({ fileName: 'done.wav', dataBase64: wav })
+      const second = await remote.upload({ fileName: 'attention.wav', dataBase64: wav })
+      expect(second).toMatchObject({
         kind: 'ok',
         view: {
           registered: true,
-          revision: 3,
-          value: { completionSound: 'custom', completionCustomSoundName: 'done.wav' },
+          revision: 2,
+          customSounds: [
+            { name: 'done.wav' },
+            { name: 'attention.wav' },
+          ],
+        },
+      })
+      if (!first.view.registered || !second.view.registered) throw new Error('expected registered view')
+      const done = first.view.customSounds[0]!
+      const attention = second.view.customSounds[1]!
+
+      await expect(remote.selectSound({
+        kind: 'completion', sound: 'custom', customSoundFile: done.fileId, expectedRevision: 2,
+      })).resolves.toMatchObject({
+        kind: 'ok',
+        view: { revision: 3, value: { completionSound: 'custom', completionCustomSoundName: 'done.wav' } },
+      })
+      await expect(remote.selectSound({
+        kind: 'confirmation', sound: 'custom', customSoundFile: attention.fileId, expectedRevision: 3,
+      })).resolves.toMatchObject({
+        kind: 'ok',
+        view: {
+          revision: 4,
+          value: { confirmationSound: 'custom', confirmationCustomSoundName: 'attention.wav' },
         },
       })
       expect(settings.mutate).toHaveBeenCalledWith(
@@ -291,8 +404,37 @@ describe('desktop notification configuration Remote', () => {
         2,
       )
       const files = await readdir(join(directory, 'desktop-notifications', 'sounds'))
-      expect(files).toHaveLength(1)
-      expect(files[0]).toMatch(/^completion-[0-9a-f-]{36}\.wav$/)
+      expect(files).toHaveLength(2)
+      expect(files).toEqual(expect.arrayContaining([
+        expect.stringMatching(/^sound-[0-9a-f-]{36}\.wav$/),
+        expect.stringMatching(/^sound-[0-9a-f-]{36}\.wav$/),
+      ]))
+      await expect(readFile(join(directory, 'desktop-notifications', 'sound-library.json'), 'utf8'))
+        .resolves.toContain('attention.wav')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('imports existing per-event custom WAV selections into the shared library', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-notification-legacy-'))
+    try {
+      const fileId = 'completion-97c2610c-4f42-44ff-8329-3d04f0e52680.wav'
+      const soundDirectory = join(directory, 'desktop-notifications', 'sounds')
+      await mkdir(soundDirectory, { recursive: true })
+      await writeFile(join(soundDirectory, fileId), Buffer.from('RIFF\u0004\u0000\u0000\u0000WAVE', 'binary'))
+      const { remote } = remoteFixture(join(directory, 'settings.yaml'), {
+        completionSound: 'custom',
+        completionCustomSoundFile: fileId,
+        completionCustomSoundName: 'original-done.wav',
+      })
+
+      await expect(remote.describe()).resolves.toMatchObject({
+        registered: true,
+        customSounds: [{ fileId, name: 'original-done.wav' }],
+      })
+      await expect(readFile(join(directory, 'desktop-notifications', 'sound-library.json'), 'utf8'))
+        .resolves.toContain('original-done.wav')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
@@ -303,10 +445,8 @@ describe('desktop notification configuration Remote', () => {
     try {
       const { remote, settings } = remoteFixture(join(directory, 'settings.yaml'))
       await expect(remote.upload({
-        kind: 'confirmation',
         fileName: 'wrong.wav',
         dataBase64: Buffer.from('not a wave').toString('base64'),
-        expectedRevision: 2,
       })).rejects.toThrow('RIFF/WAVE')
       expect(settings.mutate).not.toHaveBeenCalled()
     } finally {

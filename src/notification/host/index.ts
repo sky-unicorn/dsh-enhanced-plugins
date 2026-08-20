@@ -19,6 +19,7 @@ export {
   type PetPlacementState,
   type PetPositionEvent,
 } from './position-store.js'
+export { CustomSoundLibrary } from './sound-library.js'
 export { NotificationStateTracker, type NotificationTransition } from './state.js'
 export type {
   NotificationSettings, NotificationSound, PetOutcome, PetPosition, PetSize, PetState,
@@ -41,7 +42,7 @@ export function apply(ctx: Context, config: NotificationSettings): void {
   // The standard Host settings RPC deliberately hides third-party namespaces.
   // Mount a plugin-owned, revision-fenced Remote exactly while settings exists.
   ctx.inject(['settings'], (settingsContext) => {
-    new NotificationConfigRemote(settingsContext)
+    new NotificationConfigRemote(settingsContext, companion)
   })
 
   ctx.effect(() => {

@@ -63,7 +63,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 位置：**设置 → 桌面宠物**。它现在是设置左侧导航中的独立入口，不再放在“插件配置”卡片中。
 
-1. 为任务完成和需要确认两类事件分别选择**关闭**、两档内置默认音或**自定义 WAV**。上传 WAV 后会立即选中；文件不得超过 2 MiB，并保存在当前 DSH profile 中。
+1. 先向共享的**自定义提示音库**上传一个或多个 WAV，再为任务完成和需要确认两类事件分别选择**关闭**、两档内置默认音或任意已上传的 WAV。切换到可播放选项时会自动试听，也可以点击旁边的**试听**按钮再次播放当前选项；选择“关闭”时不播放。公共的**提示音增益**滑杆统一增强默认音和自定义音：0% 保持原始音量，100% 约为 2 倍振幅（+6 dB），接近峰值时会软限幅以减少破音。增益处理支持 PCM 和 IEEE Float WAV，其他仍可播放的 WAV 编码会回退为原始音量。每个文件不得超过 2 MiB，提示音库最多保存 64 个文件，且都保存在当前 DSH profile 中；升级前为两类事件分别上传的旧 WAV 会自动导入公共库。
 2. 打开**启用桌面宠物**，即可在浏览器之外显示原生 DeepSeek 鱼图标。**空闲时保持置顶**默认开启；关闭后空闲宠物可被其他窗口遮挡，任务中、需要确认和结束反馈仍会置顶。
 3. 选择宠物大小和启动位置；显示后可以在桌面上自由拖动。宠物不能越过物理桌面的外边缘，但相邻显示器之间的边界保持开放，可以直接拖到另一块屏幕。松开鼠标时窗口会完整落在目标显示器的可见工作区内，插件同时在当前 profile 内按显示器记录归一化位置；大小和位置在修改其他设置或重启后都会恢复。分辨率、缩放或工作区发生变化时会重新换算并限制在可见区域；原显示器离线时回退到另一台保存过的在线显示器或配置角落，重新连接后仍能恢复原显示器位置。修改“启动位置”会清除这些拖动记录并重新使用所选角落。
 
@@ -157,12 +157,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 | --- | --- | --- |
 | `completionSound` | `subtle` | 任务完成提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
 | `confirmationSound` | `prominent` | 需要关注提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
+| `soundGain` | `0` | 默认音和自定义提示音共用的 0–100% 正向增益；0 保持原声，100 约为 +6 dB |
 | `petEnabled` | `false` | 是否显示原生全局桌面宠物 |
 | `petIdleTopmost` | `true` | 空闲状态是否仍保持窗口置顶 |
 | `petSize` | `112` | 宠物尺寸：`80`、`112`、`144` 或 `176` 设备无关像素 |
 | `petPosition` | `bottom-right` | 回退/重置角落：`top-left`、`top-right`、`bottom-left` 或 `bottom-right` |
 
-四个 `*CustomSoundFile` / `*CustomSoundName` 字段由 Host 管理上传元数据，请通过设置页面选择自定义提示音，不要手工编辑这些字段。
+四个 `*CustomSoundFile` / `*CustomSoundName` 字段是由 Host 管理的两类提示音选择引用；共享目录保存在 profile 内的 `desktop-notifications/sound-library.json`。请通过设置页面上传和选择自定义提示音，不要手工编辑这些内容。
 
 </details>
 

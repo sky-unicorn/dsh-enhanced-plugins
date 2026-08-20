@@ -65,7 +65,7 @@ The screenshots below use the Simplified Chinese locale; DSH translates labels a
 
 Location: **Settings → Desktop pet**. This is an independent entry in the left Settings navigation, not a card under Plugins.
 
-1. Choose **Off**, either built-in default sound, or **Custom WAV** independently for task-completion and confirmation sounds. Uploading a WAV selects it immediately; files are limited to 2 MiB and stored inside the current DSH profile.
+1. Upload one or more WAV files into the shared **Custom sound library**, then independently choose **Off**, either built-in default sound, or any uploaded WAV for task-completion and confirmation sounds. Switching to a playable choice previews it automatically, and the adjacent **Preview** button plays the current choice again; choosing Off stays silent. A shared game-style **Notification gain** slider boosts both built-in and custom sounds: 0% preserves the source level and 100% is about twice the amplitude (+6 dB), with soft limiting near peaks. Gain processing supports PCM and IEEE-float WAV; another playable WAV encoding falls back to its source level. Each file is limited to 2 MiB, the library holds up to 64 files, and all files stay inside the current DSH profile. Existing per-event custom WAVs are imported into the library automatically after an upgrade.
 2. Turn on **Enable desktop pet** to show the native DeepSeek fish outside the browser. **Keep idle pet on top** defaults on; when disabled, other windows may cover the idle pet while working, attention, and end reactions remain topmost.
 3. Choose its size and starting corner, then drag it anywhere. Physical desktop outer edges block the pet, while adjoining display boundaries stay open so it can move directly to another screen. On mouse release the complete window lands inside the target display's visible work area, and the plugin stores a normalized position per display inside the current profile. Both size and position survive other setting changes and restarts. Resolution, scaling, and work-area changes are clamped back on-screen. If the active display is offline, the pet falls back to another connected display with a saved position or to the configured corner; reconnecting the original display can restore its position. Changing **Starting position** clears the dragged positions and applies that corner again.
 
@@ -159,12 +159,13 @@ The default composition is in [`cordis.patch.yml`](cordis.patch.yml). A later pr
 | --- | --- | --- |
 | `completionSound` | `subtle` | `off`, `subtle`, `prominent`, or uploaded `custom` task-completion sound |
 | `confirmationSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` attention sound |
+| `soundGain` | `0` | Shared 0–100% positive gain; 0 preserves the source and 100 is about +6 dB |
 | `petEnabled` | `false` | Show the native global desktop pet |
 | `petIdleTopmost` | `true` | Keep the pet above other windows while it is idle |
 | `petSize` | `112` | Pet size: `80`, `112`, `144`, or `176` device-independent pixels |
 | `petPosition` | `bottom-right` | Fallback/reset corner: `top-left`, `top-right`, `bottom-left`, or `bottom-right` |
 
-The four `*CustomSoundFile` / `*CustomSoundName` settings fields are Host-owned upload metadata. Select custom sounds through the Settings page instead of editing those fields manually.
+The four `*CustomSoundFile` / `*CustomSoundName` settings fields are Host-owned references to the two selections. The shared catalog is stored in the profile-local `desktop-notifications/sound-library.json`; select and upload custom sounds through the Settings page instead of editing either representation manually.
 
 </details>
 

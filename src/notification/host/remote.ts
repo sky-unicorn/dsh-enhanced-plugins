@@ -9,13 +9,17 @@ import type {
   NotificationMutateOutcome,
   NotificationMutateRequest,
   NotificationSettings,
+  NotificationSoundPreviewRequest,
+  NotificationSoundSelectionRequest,
   NotificationSoundUploadRequest,
 } from '../shared.js'
 import { SETTINGS_NAMESPACE } from './config.js'
-import { removeCustomSound, saveCustomSound } from './sound-files.js'
+import type { DesktopCompanion } from './desktop.js'
+import { CustomSoundLibrary } from './sound-library.js'
 
 const FIELDS = new Set<keyof NotificationSettings>([
-  'completionSound', 'confirmationSound', 'petEnabled', 'petIdleTopmost', 'petSize', 'petPosition',
+  'completionSound', 'confirmationSound', 'soundGain',
+  'petEnabled', 'petIdleTopmost', 'petSize', 'petPosition',
 ])
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -30,10 +34,12 @@ function validFieldValue(field: keyof NotificationSettings, value: unknown): boo
   switch (field) {
     case 'completionSound':
     case 'confirmationSound':
-      return value === 'off' || value === 'subtle' || value === 'prominent' || value === 'custom'
+      return value === 'off' || value === 'subtle' || value === 'prominent'
     case 'petEnabled':
     case 'petIdleTopmost':
       return typeof value === 'boolean'
+    case 'soundGain':
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100
     case 'petSize':
       return value === 80 || value === 112 || value === 144 || value === 176
     case 'petPosition':
@@ -51,25 +57,49 @@ function validFieldValue(field: keyof NotificationSettings, value: unknown): boo
 
 function assertUploadRequest(value: unknown): NotificationSoundUploadRequest {
   if (!isPlainObject(value)
-    || (value['kind'] !== 'completion' && value['kind'] !== 'confirmation')
     || typeof value['fileName'] !== 'string'
     || typeof value['dataBase64'] !== 'string') {
-    throw new TypeError('notificationConfig/upload: request must contain kind, fileName, and dataBase64')
+    throw new TypeError('notificationConfig/upload: request must contain fileName and dataBase64')
   }
-  const expectedRevision = value['expectedRevision']
+  return { fileName: value['fileName'], dataBase64: value['dataBase64'] }
+}
+
+function validRevision(value: unknown, operation: string): number | undefined {
+  const expectedRevision = value
   if (expectedRevision !== undefined && (
     typeof expectedRevision !== 'number'
     || !Number.isInteger(expectedRevision)
     || expectedRevision < 0
   )) {
-    throw new TypeError('notificationConfig/upload: expectedRevision must be a non-negative integer')
+    throw new TypeError(`${operation}: expectedRevision must be a non-negative integer`)
   }
+  return expectedRevision
+}
+
+function assertSelectionRequest(value: unknown): NotificationSoundSelectionRequest {
+  if (!isPlainObject(value)
+    || (value['kind'] !== 'completion' && value['kind'] !== 'confirmation')
+    || (value['sound'] !== 'off' && value['sound'] !== 'subtle'
+      && value['sound'] !== 'prominent' && value['sound'] !== 'custom')
+    || (value['sound'] === 'custom' && typeof value['customSoundFile'] !== 'string')
+    || (value['sound'] !== 'custom' && value['customSoundFile'] !== undefined)) {
+    throw new TypeError('notificationConfig/selectSound: request must contain a valid sound selection')
+  }
+  const expectedRevision = validRevision(value['expectedRevision'], 'notificationConfig/selectSound')
   return {
     kind: value['kind'],
-    fileName: value['fileName'],
-    dataBase64: value['dataBase64'],
+    sound: value['sound'],
+    ...(value['sound'] === 'custom' ? { customSoundFile: value['customSoundFile'] as string } : {}),
     ...(expectedRevision === undefined ? {} : { expectedRevision }),
   }
+}
+
+function assertPreviewRequest(value: unknown): NotificationSoundPreviewRequest {
+  if (!isPlainObject(value)
+    || (value['kind'] !== 'completion' && value['kind'] !== 'confirmation')) {
+    throw new TypeError('notificationConfig/preview: request must contain a known sound kind')
+  }
+  return { kind: value['kind'] }
 }
 
 function assertNever(value: never): never {
@@ -95,14 +125,7 @@ function assertMutateRequest(value: unknown): NotificationMutateRequest {
   if (op['op'] === 'unset' && op['value'] !== undefined) {
     throw new TypeError('notificationConfig/mutate: unset must not carry a value')
   }
-  const expectedRevision = value['expectedRevision']
-  if (expectedRevision !== undefined && (
-    typeof expectedRevision !== 'number'
-    || !Number.isInteger(expectedRevision)
-    || expectedRevision < 0
-  )) {
-    throw new TypeError('notificationConfig/mutate: expectedRevision must be a non-negative integer')
-  }
+  const expectedRevision = validRevision(value['expectedRevision'], 'notificationConfig/mutate')
   return {
     op: op['op'] === 'set'
       ? { op: 'set', path: [field], value: op['value'] }
@@ -115,32 +138,48 @@ function assertMutateRequest(value: unknown): NotificationMutateRequest {
 export class NotificationConfigRemote extends TypertRemoteService {
   static inject = ['settings']
 
-  constructor(ctx: Context) {
+  constructor(
+    ctx: Context,
+    private readonly companion: Pick<DesktopCompanion, 'preview'>,
+    private readonly soundLibrary = new CustomSoundLibrary(ctx),
+  ) {
     super(ctx, 'notificationConfig')
   }
 
-  private view(): NotificationConfigView {
+  private async view(): Promise<NotificationConfigView> {
     const descriptor = this.ctx.settings.describe()
       .find(entry => entry.ns === SETTINGS_NAMESPACE)
     if (descriptor === undefined) return { registered: false }
+    const value = descriptor.value as NotificationSettings
     return {
       registered: true,
       writable: this.ctx.settings.writable,
-      value: descriptor.value as NotificationSettings,
+      value,
       ...(descriptor.base === undefined ? {} : {
         base: descriptor.base as Partial<NotificationSettings>,
       }),
       ...(descriptor.user === undefined ? {} : {
         user: descriptor.user as Partial<NotificationSettings>,
       }),
+      customSounds: await this.soundLibrary.list(value),
       revision: descriptor.revision,
     }
   }
 
   /** Read the authoritative layered section without exposing the document path. */
   @Remote('describe')
-  describe(): NotificationConfigView {
+  describe(): Promise<NotificationConfigView> {
     return this.view()
+  }
+
+  /** Play the currently committed selection without exposing profile-local file paths. */
+  @Remote('preview')
+  async preview(request: NotificationSoundPreviewRequest): Promise<void> {
+    const valid = assertPreviewRequest(request)
+    const view = await this.view()
+    if (!view.registered) throw new Error('notificationConfig/preview: settings namespace is not registered')
+    if (view.value[`${valid.kind}Sound`] === 'off') return
+    this.companion.preview(valid.kind, view.value)
   }
 
   /** Commit one field set/reset under the caller's last observed revision, then re-read. */
@@ -154,38 +193,45 @@ export class NotificationConfigRemote extends TypertRemoteService {
         valid.expectedRevision,
       )
     } catch (error: unknown) {
-      if (error instanceof SettingsConflictError) return { kind: 'conflict', view: this.view() }
+      if (error instanceof SettingsConflictError) return { kind: 'conflict', view: await this.view() }
       throw error
     }
-    return { kind: 'ok', view: this.view() }
+    return { kind: 'ok', view: await this.view() }
   }
 
-  /** Store one validated custom WAV and atomically select it for its event kind. */
+  /** Atomically select a built-in sound or one shared custom-library entry. */
+  @Remote('selectSound')
+  async selectSound(request: NotificationSoundSelectionRequest): Promise<NotificationMutateOutcome> {
+    const valid = assertSelectionRequest(request)
+    const before = await this.view()
+    if (!before.registered) throw new Error('notificationConfig/selectSound: settings namespace is not registered')
+    const ops: SettingsPathOp[] = [{
+      op: 'set', path: [`${valid.kind}Sound`], value: valid.sound,
+    }]
+    if (valid.sound === 'custom') {
+      const selected = before.customSounds.find(entry => entry.fileId === valid.customSoundFile)
+      if (selected === undefined) throw new TypeError('notificationConfig/selectSound: unknown custom sound')
+      ops.push(
+        { op: 'set', path: [`${valid.kind}CustomSoundFile`], value: selected.fileId },
+        { op: 'set', path: [`${valid.kind}CustomSoundName`], value: selected.name },
+      )
+    }
+    try {
+      await this.ctx.settings.mutate(SETTINGS_NAMESPACE, ops, valid.expectedRevision)
+    } catch (error: unknown) {
+      if (error instanceof SettingsConflictError) return { kind: 'conflict', view: await this.view() }
+      throw error
+    }
+    return { kind: 'ok', view: await this.view() }
+  }
+
+  /** Add one validated WAV to the common library without changing either selection. */
   @Remote('upload')
   async upload(request: NotificationSoundUploadRequest): Promise<NotificationMutateOutcome> {
     const valid = assertUploadRequest(request)
-    const before = this.view()
+    const before = await this.view()
     if (!before.registered) throw new Error('notificationConfig/upload: settings namespace is not registered')
-    const stored = await saveCustomSound(this.ctx, valid.kind, valid.fileName, valid.dataBase64)
-    const fileField = `${valid.kind}CustomSoundFile` as const
-    const nameField = `${valid.kind}CustomSoundName` as const
-    const previousFile = before.value[fileField]
-    try {
-      await this.ctx.settings.mutate(SETTINGS_NAMESPACE, [
-        { op: 'set', path: [fileField], value: stored.fileId },
-        { op: 'set', path: [nameField], value: stored.name },
-        { op: 'set', path: [`${valid.kind}Sound`], value: 'custom' },
-      ], valid.expectedRevision)
-    } catch (error: unknown) {
-      await removeCustomSound(this.ctx, stored.fileId)
-      if (error instanceof SettingsConflictError) return { kind: 'conflict', view: this.view() }
-      throw error
-    }
-    if (previousFile !== '' && previousFile !== stored.fileId) {
-      await removeCustomSound(this.ctx, previousFile).catch((error: unknown) => {
-        this.ctx.logger.warn(`desktop notifications: unable to remove replaced custom sound: ${String(error)}`)
-      })
-    }
-    return { kind: 'ok', view: this.view() }
+    await this.soundLibrary.upload(before.value, valid.fileName, valid.dataBase64)
+    return { kind: 'ok', view: await this.view() }
   }
 }

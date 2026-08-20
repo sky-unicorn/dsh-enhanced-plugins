@@ -4,15 +4,15 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { NotificationSettings, PetOutcome, PetState } from '../shared.js'
+import type {
+  NotificationSettings, NotificationSoundEvent, PetOutcome, PetState,
+} from '../shared.js'
 import {
   PetPositionStore,
   parsePetPositionEvent,
   type PetPlacementState,
 } from './position-store.js'
 import { customSoundPath } from './sound-files.js'
-
-type SoundEvent = 'completion' | 'confirmation'
 
 interface CompanionMessage {
   command: 'config' | 'effect' | 'sound' | 'state' | 'stop'
@@ -21,7 +21,7 @@ interface CompanionMessage {
     confirmationCustomSoundPath?: string
     placementState?: PetPlacementState
   }
-  kind?: SoundEvent
+  kind?: NotificationSoundEvent
   outcome?: PetOutcome
   state?: PetState
 }
@@ -95,16 +95,26 @@ export class DesktopCompanion {
   }
 
   /** Play one configured sound, using a short-lived companion when the pet is hidden. */
-  play(kind: SoundEvent): void {
-    if (this.settings[`${kind}Sound`] === 'off') return
+  play(kind: NotificationSoundEvent): void {
+    this.playConfigured(kind, () => this.settings)
+  }
+
+  /** Preview one authoritative settings snapshot without exposing its custom path to the browser. */
+  preview(kind: NotificationSoundEvent, settings: NotificationSettings): void {
+    this.playConfigured(kind, () => settings)
+  }
+
+  private playConfigured(kind: NotificationSoundEvent, settingsSource: () => NotificationSettings): void {
+    if (settingsSource()[`${kind}Sound`] === 'off') return
     this.enqueue(async () => {
-      if (this.settings[`${kind}Sound`] === 'off') return
+      const settings = settingsSource()
+      if (settings[`${kind}Sound`] === 'off') return
       const handle = await this.ensure()
       if (handle === undefined) return
-      await this.send(handle, { command: 'config', config: this.companionConfig() })
+      await this.send(handle, { command: 'config', config: this.companionConfig(settings) })
       await this.send(handle, { command: 'sound', kind })
-      if (!this.settings.petEnabled) {
-        await this.stop(handle, this.settings[`${kind}Sound`] === 'custom' ? 30_500 : 1_500)
+      if (!settings.petEnabled) {
+        await this.stop(handle, settings[`${kind}Sound`] === 'custom' ? 30_500 : 1_500)
       }
     })
   }
@@ -201,12 +211,12 @@ export class DesktopCompanion {
     })
   }
 
-  private companionConfig(): NonNullable<CompanionMessage['config']> {
-    const completionCustomSoundPath = customSoundPath(this.ctx, this.settings.completionCustomSoundFile)
-    const confirmationCustomSoundPath = customSoundPath(this.ctx, this.settings.confirmationCustomSoundFile)
+  private companionConfig(settings: NotificationSettings = this.settings): NonNullable<CompanionMessage['config']> {
+    const completionCustomSoundPath = customSoundPath(this.ctx, settings.completionCustomSoundFile)
+    const confirmationCustomSoundPath = customSoundPath(this.ctx, settings.confirmationCustomSoundFile)
     const placementState = this.positionStore.snapshot()
     return {
-      ...this.settings,
+      ...settings,
       ...(completionCustomSoundPath === undefined ? {} : { completionCustomSoundPath }),
       ...(confirmationCustomSoundPath === undefined ? {} : { confirmationCustomSoundPath }),
       ...(placementState.activeDisplay === '' ? {} : { placementState }),
