@@ -46,9 +46,6 @@ public static class DeepSeekPetNativeCursor {
   [DllImport("user32.dll")]
   public static extern IntPtr SetCursor(IntPtr cursor);
 
-  [DllImport("user32.dll")]
-  private static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
-
   [DllImport("user32.dll", CharSet = CharSet.Auto)]
   private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
@@ -111,6 +108,47 @@ public static class DeepSeekPetNativeCursor {
     return dx * dx + dy * dy;
   }
 
+  private static long EdgeDistanceSquared(NativeRect first, NativeRect second) {
+    long dx = 0;
+    long dy = 0;
+    if (first.Right < second.Left) dx = (long)second.Left - first.Right;
+    else if (second.Right < first.Left) dx = (long)first.Left - second.Right;
+    if (first.Bottom < second.Top) dy = (long)second.Top - first.Bottom;
+    else if (second.Bottom < first.Top) dy = (long)first.Top - second.Bottom;
+    return dx * dx + dy * dy;
+  }
+
+  private static bool TrySelectNearestMonitor(NativeRect bounds, out MonitorInfo target) {
+    var monitors = ReadMonitors();
+    target = new MonitorInfo();
+    if (monitors.Count == 0) return false;
+
+    target = monitors[0];
+    long bestIntersection = -1;
+    long bestEdgeDistance = Int64.MaxValue;
+    long bestCenterDistance = Int64.MaxValue;
+    foreach (var monitor in monitors) {
+      var intersection = IntersectionArea(bounds, monitor.Work);
+      var edgeDistance = EdgeDistanceSquared(bounds, monitor.Work);
+      var centerDistance = CenterDistanceSquared(bounds, monitor.Work);
+      if (
+        intersection > bestIntersection
+        || (intersection == bestIntersection && edgeDistance < bestEdgeDistance)
+        || (
+          intersection == bestIntersection
+          && edgeDistance == bestEdgeDistance
+          && centerDistance < bestCenterDistance
+        )
+      ) {
+        target = monitor;
+        bestIntersection = intersection;
+        bestEdgeDistance = edgeDistance;
+        bestCenterDistance = centerDistance;
+      }
+    }
+    return true;
+  }
+
   private static bool ClampIntoWorkArea(ref NativeRect bounds, NativeRect work) {
     var width = Math.Max(1, bounds.Right - bounds.Left);
     var height = Math.Max(1, bounds.Bottom - bounds.Top);
@@ -149,45 +187,11 @@ public static class DeepSeekPetNativeCursor {
     return !String.IsNullOrEmpty(device) && FindMonitor(device) != IntPtr.Zero;
   }
 
-  public static bool ConstrainMovingRect(IntPtr rectangle) {
-    if (rectangle == IntPtr.Zero) return false;
-    var bounds = (NativeRect)Marshal.PtrToStructure(rectangle, typeof(NativeRect));
-    var width = Math.Max(0, bounds.Right - bounds.Left);
-    var height = Math.Max(0, bounds.Bottom - bounds.Top);
-    if (width == 0 || height == 0) return false;
-    var monitors = ReadMonitors();
-    if (monitors.Count == 0) return false;
-
-    var windowArea = (long)width * height;
-    long coveredArea = 0;
-    foreach (var monitor in monitors) coveredArea += IntersectionArea(bounds, monitor.Work);
-    // Adjacent displays jointly cover a cross-display drag, so the internal
-    // boundary stays open. Only uncovered physical desktop edges are clamped.
-    if (coveredArea >= windowArea) return false;
-
-    var target = monitors[0];
-    long bestIntersection = -1;
-    long bestDistance = Int64.MaxValue;
-    foreach (var monitor in monitors) {
-      var intersection = IntersectionArea(bounds, monitor.Work);
-      var distance = CenterDistanceSquared(bounds, monitor.Work);
-      if (intersection > bestIntersection || (intersection == bestIntersection && distance < bestDistance)) {
-        target = monitor;
-        bestIntersection = intersection;
-        bestDistance = distance;
-      }
-    }
-    if (!ClampIntoWorkArea(ref bounds, target.Work)) return false;
-    Marshal.StructureToPtr(bounds, rectangle, false);
-    return true;
-  }
-
   public static DeepSeekPetPlacement CapturePlacement(IntPtr window) {
     NativeRect bounds;
     if (!GetWindowRect(window, out bounds)) return null;
-    var monitor = MonitorFromWindow(window, 2);
-    if (monitor == IntPtr.Zero) return null;
-    var info = ReadMonitor(monitor);
+    MonitorInfo info;
+    if (!TrySelectNearestMonitor(bounds, out info)) return null;
     if (ClampIntoWorkArea(ref bounds, info.Work)) {
       SetWindowPos(window, IntPtr.Zero, bounds.Left, bounds.Top, 0, 0, 0x0015);
     }
@@ -1234,15 +1238,13 @@ $window.Add_MouseLeftButtonUp({
   $window.Cursor = [System.Windows.Input.Cursors]::Arrow
 })
 
-# WM_MOVING constrains only uncovered outer desktop edges; adjacent monitor
-# work areas remain open so the pet can cross between displays. Display changes
-# are deferred to the normal Dispatcher tick so they cannot re-enter a drag.
+# DragMove remains unconstrained so the pet can follow the pointer beyond every
+# desktop edge. Its finally block snaps and records the window after release.
+# Display changes are deferred to the normal Dispatcher tick so they cannot
+# re-enter a drag.
 $script:windowSource = [System.Windows.Interop.HwndSource]::FromHwnd($script:windowHandle)
 $script:windowHook = [System.Windows.Interop.HwndSourceHook]{
   param($hwnd, $message, $wParam, $lParam, [ref]$handled)
-  if ($message -eq 0x0216 -and $script:isDragging) {
-    [DeepSeekPetNativeCursor]::ConstrainMovingRect($lParam) | Out-Null
-  }
   if ($message -eq 0x007E) { $script:placementPending = $true }
   return [IntPtr]::Zero
 }

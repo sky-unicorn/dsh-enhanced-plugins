@@ -42,7 +42,14 @@ describe('desktop notification state', () => {
       turn: 1, step: 1, callId: 'question-1', name: 'ask_user_question', arguments: '{}',
     }, 1))).toEqual({ state: 'confirmation', confirmation: true, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('tool/result', {
-      turn: 1, step: 1, message: { role: 'tool', toolCallId: 'question-1', content: [] },
+      turn: 1,
+      step: 1,
+      message: {
+        id: 'message-1',
+        role: 'user',
+        source: { kind: 'tool', callId: 'question-1' },
+        content: [{ type: 'tool-result', toolCallId: 'question-1', content: [], isError: false }],
+      },
     }, 2))).toEqual({ state: 'working', confirmation: false, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('approval/asked', { id: 'approval-1', toolName: 'bash' }, 3)))
       .toEqual({ state: 'confirmation', confirmation: true, completion: false, outcome: undefined })
@@ -85,8 +92,36 @@ describe('desktop notification state', () => {
       turn: 1, step: 1, callId: 'plan-1', name: 'exit_plan_mode', arguments: '{}',
     }))).toEqual({ state: 'confirmation', confirmation: true, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('tool/result', {
-      turn: 1, step: 1, message: { role: 'tool', toolCallId: 'plan-1', content: [] },
+      turn: 1,
+      step: 1,
+      message: {
+        id: 'message-1',
+        role: 'user',
+        source: { kind: 'tool', callId: 'plan-1' },
+        content: [{ type: 'tool-result', toolCallId: 'plan-1', content: [], isError: false }],
+      },
     }))).toEqual({ state: 'working', confirmation: false, completion: false, outcome: undefined })
+  })
+
+  it('reconstructs an answered question as working from canonical DSH events', () => {
+    const answered = session('answered', undefined, [
+      event('turn/start', { turn: 1 }),
+      event('tool/call', {
+        turn: 1, step: 1, callId: 'question-1', name: 'ask_user_question', arguments: '{}',
+      }, 1),
+      event('tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          id: 'message-1',
+          role: 'user',
+          source: { kind: 'tool', callId: 'question-1' },
+          content: [{ type: 'tool-result', toolCallId: 'question-1', content: [], isError: false }],
+        },
+      }, 2),
+    ])
+
+    expect(new NotificationStateTracker().initialize([answered])).toBe('working')
   })
 
   it('shows a blocked reaction only for unsuccessful top-level turns', () => {
@@ -130,8 +165,11 @@ describe('desktop notification assets and defaults', () => {
     expect(script).toContain('ClientAreaAnimation')
     expect(script).toContain('CapturePlacement')
     expect(script).toContain('RestorePlacement')
-    expect(script).toContain('ConstrainMovingRect')
-    expect(script).toContain('$message -eq 0x0216')
+    expect(script).toContain('TrySelectNearestMonitor')
+    expect(script).toContain('EdgeDistanceSquared')
+    expect(script).toContain('DragMove remains unconstrained')
+    expect(script).not.toContain('ConstrainMovingRect')
+    expect(script).not.toContain('$message -eq 0x0216')
     expect(script).toContain('$message -eq 0x007E')
     expect(script).toContain('Set-TopmostForState')
     expect(script).toContain('petIdleTopmost')

@@ -40,7 +40,9 @@ function stringField(value: unknown, key: string): string | undefined {
 
 function resultCallId(data: unknown): string | undefined {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) return undefined
-  return stringField((data as Record<string, unknown>)['message'], 'toolCallId')
+  const message = (data as Record<string, unknown>)['message']
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) return undefined
+  return stringField((message as Record<string, unknown>)['source'], 'callId')
 }
 
 /** Tracks all live sessions so concurrent tasks project one global pet state. */

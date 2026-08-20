@@ -95,7 +95,7 @@ Enabling the desktop pet shows a native DeepSeek fish outside the browser. It ag
 - **Confirmation needed:** bounces, shakes, pulses, and displays an exclamation mark; this state has the highest priority.
 - **Completed / blocked:** brief feedback for the top-level task only, so subagent completion does not duplicate alerts.
 
-The pet can be dragged across monitors. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select static state frames when animations are reduced.
+The pet can be dragged freely across monitors and beyond desktop edges. On release, it snaps fully into the work area with the greatest overlap, or the nearest screen edge when released in a gap between displays. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select static state frames when animations are reduced.
 
 Settings apply live. The resident pet and short-lived sound processes are managed through the DSH subprocess service and exit cooperatively without leaving helper processes behind.
 
