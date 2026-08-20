@@ -18,7 +18,7 @@ import type { DesktopCompanion } from './desktop.js'
 import { CustomSoundLibrary } from './sound-library.js'
 
 const FIELDS = new Set<keyof NotificationSettings>([
-  'completionSound', 'confirmationSound', 'soundGain',
+  'completionSound', 'confirmationSound', 'blockedSound', 'soundGain',
   'petEnabled', 'petIdleTopmost', 'petSize', 'petPosition',
 ])
 
@@ -34,6 +34,7 @@ function validFieldValue(field: keyof NotificationSettings, value: unknown): boo
   switch (field) {
     case 'completionSound':
     case 'confirmationSound':
+    case 'blockedSound':
       return value === 'off' || value === 'subtle' || value === 'prominent'
     case 'petEnabled':
     case 'petIdleTopmost':
@@ -49,6 +50,8 @@ function validFieldValue(field: keyof NotificationSettings, value: unknown): boo
     case 'completionCustomSoundName':
     case 'confirmationCustomSoundFile':
     case 'confirmationCustomSoundName':
+    case 'blockedCustomSoundFile':
+    case 'blockedCustomSoundName':
       return false
     default:
       return assertNever(field)
@@ -78,7 +81,7 @@ function validRevision(value: unknown, operation: string): number | undefined {
 
 function assertSelectionRequest(value: unknown): NotificationSoundSelectionRequest {
   if (!isPlainObject(value)
-    || (value['kind'] !== 'completion' && value['kind'] !== 'confirmation')
+    || (value['kind'] !== 'completion' && value['kind'] !== 'confirmation' && value['kind'] !== 'blocked')
     || (value['sound'] !== 'off' && value['sound'] !== 'subtle'
       && value['sound'] !== 'prominent' && value['sound'] !== 'custom')
     || (value['sound'] === 'custom' && typeof value['customSoundFile'] !== 'string')
@@ -96,7 +99,7 @@ function assertSelectionRequest(value: unknown): NotificationSoundSelectionReque
 
 function assertPreviewRequest(value: unknown): NotificationSoundPreviewRequest {
   if (!isPlainObject(value)
-    || (value['kind'] !== 'completion' && value['kind'] !== 'confirmation')) {
+    || (value['kind'] !== 'completion' && value['kind'] !== 'confirmation' && value['kind'] !== 'blocked')) {
     throw new TypeError('notificationConfig/preview: request must contain a known sound kind')
   }
   return { kind: value['kind'] }
@@ -225,7 +228,7 @@ export class NotificationConfigRemote extends TypertRemoteService {
     return { kind: 'ok', view: await this.view() }
   }
 
-  /** Add one validated WAV to the common library without changing either selection. */
+  /** Add one validated WAV to the common library without changing any event selection. */
   @Remote('upload')
   async upload(request: NotificationSoundUploadRequest): Promise<NotificationMutateOutcome> {
     const valid = assertUploadRequest(request)

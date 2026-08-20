@@ -5,7 +5,7 @@ export const NOTIFICATION_SETTINGS_NAMESPACE = 'desktop-notifications'
 export type NotificationSound = 'off' | 'subtle' | 'prominent' | 'custom'
 export type NotificationBuiltInSound = Exclude<NotificationSound, 'custom'>
 export type NotificationSoundChoice = NotificationBuiltInSound | `custom:${string}`
-export type NotificationSoundEvent = 'completion' | 'confirmation'
+export type NotificationSoundEvent = 'completion' | 'confirmation' | 'blocked'
 export type PetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 export type PetSize = 80 | 112 | 144 | 176
 export type PetState = 'idle' | 'working' | 'confirmation'
@@ -17,6 +17,8 @@ export interface NotificationSettings {
   completionSound: NotificationSound
   /** Sound played when an approval or explicit user question starts waiting. */
   confirmationSound: NotificationSound
+  /** Sound played after an unsuccessful top-level turn ends. */
+  blockedSound: NotificationSound
   /** Positive gain for built-in and custom notification sounds; 0 preserves the source level. */
   soundGain: number
   /** Host-owned file id selected from the shared custom sound library for completion. */
@@ -27,6 +29,10 @@ export interface NotificationSettings {
   confirmationCustomSoundFile: string
   /** Safe display name paired with the selected confirmation sound file. */
   confirmationCustomSoundName: string
+  /** Host-owned file id selected from the shared custom sound library for blocked tasks. */
+  blockedCustomSoundFile: string
+  /** Safe display name paired with the selected blocked-task sound file. */
+  blockedCustomSoundName: string
   /** Show the native DeepSeek fish pet outside the browser. */
   petEnabled: boolean
   /** Keep the pet above other windows while no task is active. */
@@ -93,11 +99,14 @@ export type NotificationMutateOutcome =
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   completionSound: 'subtle',
   confirmationSound: 'prominent',
+  blockedSound: 'prominent',
   soundGain: 0,
   completionCustomSoundFile: '',
   completionCustomSoundName: '',
   confirmationCustomSoundFile: '',
   confirmationCustomSoundName: '',
+  blockedCustomSoundFile: '',
+  blockedCustomSoundName: '',
   petEnabled: false,
   petIdleTopmost: true,
   petSize: 112,

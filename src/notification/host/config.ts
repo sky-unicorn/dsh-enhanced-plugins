@@ -39,6 +39,8 @@ export const Config: z<NotificationSettings> = z.object({
     .description('Sound played when a top-level task completes.'),
   confirmationSound: Sound.default(DEFAULT_NOTIFICATION_SETTINGS.confirmationSound)
     .description('Sound played when a task needs approval or an answer.'),
+  blockedSound: Sound.default(DEFAULT_NOTIFICATION_SETTINGS.blockedSound)
+    .description('Sound played when a top-level task ends unsuccessfully.'),
   soundGain: z.number().step(1).min(0).max(100).default(DEFAULT_NOTIFICATION_SETTINGS.soundGain)
     .description('Positive gain for built-in and custom sounds; 0 preserves the source and 100 doubles its amplitude.'),
   completionCustomSoundFile: z.string().default(DEFAULT_NOTIFICATION_SETTINGS.completionCustomSoundFile)
@@ -49,6 +51,10 @@ export const Config: z<NotificationSettings> = z.object({
     .description('Host-owned file id selected from the shared custom sound library for confirmation.'),
   confirmationCustomSoundName: z.string().default(DEFAULT_NOTIFICATION_SETTINGS.confirmationCustomSoundName)
     .description('Display name paired with the selected confirmation WAV.'),
+  blockedCustomSoundFile: z.string().default(DEFAULT_NOTIFICATION_SETTINGS.blockedCustomSoundFile)
+    .description('Host-owned file id selected from the shared custom sound library for blocked tasks.'),
+  blockedCustomSoundName: z.string().default(DEFAULT_NOTIFICATION_SETTINGS.blockedCustomSoundName)
+    .description('Display name paired with the selected blocked-task WAV.'),
   petEnabled: z.boolean().default(DEFAULT_NOTIFICATION_SETTINGS.petEnabled)
     .description('Show the native DeepSeek desktop pet outside the browser.'),
   petIdleTopmost: z.boolean().default(DEFAULT_NOTIFICATION_SETTINGS.petIdleTopmost)

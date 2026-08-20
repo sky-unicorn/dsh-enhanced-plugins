@@ -23,6 +23,7 @@
       config:
         completionSound: subtle
         confirmationSound: prominent
+        blockedSound: prominent
         petEnabled: false
         petIdleTopmost: true
         petSize: 112

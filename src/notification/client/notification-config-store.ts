@@ -33,10 +33,14 @@ export function decodeNotificationSettings(value: unknown): NotificationSettings
       && value['completionSound'] !== 'prominent' && value['completionSound'] !== 'custom')
     || (value['confirmationSound'] !== 'off' && value['confirmationSound'] !== 'subtle'
       && value['confirmationSound'] !== 'prominent' && value['confirmationSound'] !== 'custom')
+    || (value['blockedSound'] !== 'off' && value['blockedSound'] !== 'subtle'
+      && value['blockedSound'] !== 'prominent' && value['blockedSound'] !== 'custom')
     || typeof value['completionCustomSoundFile'] !== 'string'
     || typeof value['completionCustomSoundName'] !== 'string'
     || typeof value['confirmationCustomSoundFile'] !== 'string'
     || typeof value['confirmationCustomSoundName'] !== 'string'
+    || typeof value['blockedCustomSoundFile'] !== 'string'
+    || typeof value['blockedCustomSoundName'] !== 'string'
     || typeof value['soundGain'] !== 'number'
     || !Number.isInteger(value['soundGain'])
     || value['soundGain'] < 0
@@ -64,6 +68,7 @@ function decodeLayer(value: unknown): Partial<NotificationSettings> | undefined 
     if (single === undefined || !Object.hasOwn(single, field)) return undefined
     if (field === 'completionSound') decoded.completionSound = single.completionSound
     else if (field === 'confirmationSound') decoded.confirmationSound = single.confirmationSound
+    else if (field === 'blockedSound') decoded.blockedSound = single.blockedSound
     else if (field === 'soundGain') decoded.soundGain = single.soundGain
     else if (field === 'petEnabled') decoded.petEnabled = single.petEnabled
     else if (field === 'petIdleTopmost') decoded.petIdleTopmost = single.petIdleTopmost
@@ -73,6 +78,8 @@ function decodeLayer(value: unknown): Partial<NotificationSettings> | undefined 
     else if (field === 'completionCustomSoundName') decoded.completionCustomSoundName = single.completionCustomSoundName
     else if (field === 'confirmationCustomSoundFile') decoded.confirmationCustomSoundFile = single.confirmationCustomSoundFile
     else if (field === 'confirmationCustomSoundName') decoded.confirmationCustomSoundName = single.confirmationCustomSoundName
+    else if (field === 'blockedCustomSoundFile') decoded.blockedCustomSoundFile = single.blockedCustomSoundFile
+    else if (field === 'blockedCustomSoundName') decoded.blockedCustomSoundName = single.blockedCustomSoundName
     else return undefined
   }
   return decoded
@@ -106,7 +113,7 @@ function decodeView(value: unknown): NotificationConfigView | undefined {
   }
 }
 
-const CUSTOM_SOUND_FILE = /^(?:sound|completion|confirmation)-[0-9a-f-]{36}\.wav$/
+const CUSTOM_SOUND_FILE = /^(?:sound|completion|confirmation|blocked)-[0-9a-f-]{36}\.wav$/
 
 function decodeCustomSounds(value: unknown): NotificationCustomSound[] | undefined {
   if (!Array.isArray(value) || value.length > 64) return undefined

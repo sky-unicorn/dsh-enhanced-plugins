@@ -19,6 +19,7 @@ interface CompanionMessage {
   config?: NotificationSettings & {
     completionCustomSoundPath?: string
     confirmationCustomSoundPath?: string
+    blockedCustomSoundPath?: string
     placementState?: PetPlacementState
   }
   kind?: NotificationSoundEvent
@@ -214,11 +215,13 @@ export class DesktopCompanion {
   private companionConfig(settings: NotificationSettings = this.settings): NonNullable<CompanionMessage['config']> {
     const completionCustomSoundPath = customSoundPath(this.ctx, settings.completionCustomSoundFile)
     const confirmationCustomSoundPath = customSoundPath(this.ctx, settings.confirmationCustomSoundFile)
+    const blockedCustomSoundPath = customSoundPath(this.ctx, settings.blockedCustomSoundFile)
     const placementState = this.positionStore.snapshot()
     return {
       ...settings,
       ...(completionCustomSoundPath === undefined ? {} : { completionCustomSoundPath }),
       ...(confirmationCustomSoundPath === undefined ? {} : { confirmationCustomSoundPath }),
+      ...(blockedCustomSoundPath === undefined ? {} : { blockedCustomSoundPath }),
       ...(placementState.activeDisplay === '' ? {} : { placementState }),
     }
   }

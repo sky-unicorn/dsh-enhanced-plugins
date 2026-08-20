@@ -7,7 +7,7 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, resolve, sep } from 'node:path'
 
 export const MAX_CUSTOM_SOUND_BYTES = 2 * 1024 * 1024
-const FILE_ID = /^(?:sound|completion|confirmation)-[0-9a-f-]{36}\.wav$/
+const FILE_ID = /^(?:sound|completion|confirmation|blocked)-[0-9a-f-]{36}\.wav$/
 
 export function profileSoundRoot(ctx: Context): string | undefined {
   const documentPath = ctx.get('settings')?.documentPath

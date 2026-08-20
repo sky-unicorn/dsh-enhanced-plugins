@@ -72,6 +72,17 @@ describe('desktop notification sound controls', () => {
     expect(preview).not.toHaveBeenCalled()
   })
 
+  it('offers an independent blocked-task sound with automatic and manual preview', async () => {
+    const { selectSound, preview } = renderSection()
+
+    fireEvent.change(screen.getByLabelText(zh.blockedSound), { target: { value: 'subtle' } })
+    await waitFor(() => expect(selectSound).toHaveBeenCalledWith('blocked', 'subtle'))
+    await waitFor(() => expect(preview).toHaveBeenCalledWith('blocked'))
+
+    fireEvent.click(screen.getByRole('button', { name: zh.previewBlockedSound }))
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(2))
+  })
+
   it('writes positive notification gain from both controls', () => {
     const set = vi.fn()
     renderSection({ set })
@@ -100,7 +111,7 @@ describe('desktop notification sound controls', () => {
     expect(preview).not.toHaveBeenCalled()
   })
 
-  it('lists shared custom sounds in both dropdowns and previews the selected file', async () => {
+  it('lists shared custom sounds in all three dropdowns and previews the selected file', async () => {
     const sounds = [
       { fileId: 'sound-11111111-1111-1111-1111-111111111111.wav', name: 'ready.wav' },
       { fileId: 'sound-22222222-2222-2222-2222-222222222222.wav', name: 'attention.wav' },
@@ -108,8 +119,10 @@ describe('desktop notification sound controls', () => {
     const { selectSound, preview } = renderSection({}, sounds)
     const completion = screen.getByLabelText(zh.completionSound)
     const confirmation = screen.getByLabelText(zh.confirmationSound)
+    const blocked = screen.getByLabelText(zh.blockedSound)
     expect(completion.textContent).toContain('ready.wav')
     expect(confirmation.textContent).toContain('attention.wav')
+    expect(blocked.textContent).toContain('ready.wav')
 
     fireEvent.change(confirmation, { target: { value: `custom:${sounds[1]!.fileId}` } })
     await waitFor(() => expect(selectSound).toHaveBeenCalledWith(

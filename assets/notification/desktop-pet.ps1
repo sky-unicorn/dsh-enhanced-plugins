@@ -601,9 +601,11 @@ $fish.Data = [System.Windows.Media.Geometry]::Parse([string]$icon.svg.path.d)
 $script:settings = [pscustomobject]@{
   completionSound = 'subtle'
   confirmationSound = 'prominent'
+  blockedSound = 'prominent'
   soundGain = 0
   completionCustomSoundPath = ''
   confirmationCustomSoundPath = ''
+  blockedCustomSoundPath = ''
   petEnabled = $false
   petIdleTopmost = $true
   petSize = 112
@@ -1108,17 +1110,18 @@ function Play-MediaSound([string]$path) {
 }
 
 function Play-ConfiguredSound([string]$kind) {
-  $choice = if ($kind -eq 'completion') {
-    [string]$script:settings.completionSound
-  } else {
-    [string]$script:settings.confirmationSound
+  $choice = switch ($kind) {
+    'completion' { [string]$script:settings.completionSound; break }
+    'confirmation' { [string]$script:settings.confirmationSound; break }
+    'blocked' { [string]$script:settings.blockedSound; break }
+    default { return }
   }
   if ($choice -eq 'off') { return }
   if ($choice -eq 'custom') {
-    $path = if ($kind -eq 'completion') {
-      [string]$script:settings.completionCustomSoundPath
-    } else {
-      [string]$script:settings.confirmationCustomSoundPath
+    $path = switch ($kind) {
+      'completion' { [string]$script:settings.completionCustomSoundPath; break }
+      'confirmation' { [string]$script:settings.confirmationCustomSoundPath; break }
+      'blocked' { [string]$script:settings.blockedCustomSoundPath; break }
     }
     if (Play-MediaSound $path) { return }
     $choice = 'subtle'
@@ -1132,6 +1135,14 @@ function Play-ConfiguredSound([string]$kind) {
     } else {
       $alias = 'SystemAsterisk'
       $fallbackName = 'Windows Ding.wav'
+    }
+  } elseif ($kind -eq 'confirmation') {
+    if ($choice -eq 'prominent') {
+      $alias = 'SystemExclamation'
+      $fallbackName = 'Windows Exclamation.wav'
+    } else {
+      $alias = 'SystemQuestion'
+      $fallbackName = 'Windows Default.wav'
     }
   } else {
     if ($choice -eq 'prominent') {

@@ -147,6 +147,9 @@ describe('desktop notification assets and defaults', () => {
     expect(script).not.toContain('[System.Media.SystemSounds]')
     expect(script).toContain("'working'")
     expect(script).toContain("'confirmation'")
+    expect(script).toContain('blockedSound')
+    expect(script).toContain('blockedCustomSoundPath')
+    expect(script).toContain("'blocked'")
     expect(icon).toContain('fill="#4D6BFE"')
     expect(icon).toContain('<path')
   })
@@ -348,13 +351,17 @@ describe('desktop notification configuration Remote', () => {
     expect(companion.preview).toHaveBeenCalledWith('completion', {
       ...DEFAULT_NOTIFICATION_SETTINGS,
     })
+    await remote.preview({ kind: 'blocked' })
+    expect(companion.preview).toHaveBeenCalledWith('blocked', {
+      ...DEFAULT_NOTIFICATION_SETTINGS,
+    })
 
     await remote.mutate({
       op: { op: 'set', path: ['completionSound'], value: 'off' },
       expectedRevision: 2,
     })
     await remote.preview({ kind: 'completion' })
-    expect(companion.preview).toHaveBeenCalledTimes(1)
+    expect(companion.preview).toHaveBeenCalledTimes(2)
     await expect(remote.preview({ kind: 'unknown' } as never)).rejects.toThrow('known sound kind')
   })
 
@@ -365,7 +372,8 @@ describe('desktop notification configuration Remote', () => {
       const wav = Buffer.from('RIFF\u0004\u0000\u0000\u0000WAVE', 'binary').toString('base64')
       const first = await remote.upload({ fileName: 'done.wav', dataBase64: wav })
       const second = await remote.upload({ fileName: 'attention.wav', dataBase64: wav })
-      expect(second).toMatchObject({
+      const third = await remote.upload({ fileName: 'blocked.wav', dataBase64: wav })
+      expect(third).toMatchObject({
         kind: 'ok',
         view: {
           registered: true,
@@ -373,12 +381,16 @@ describe('desktop notification configuration Remote', () => {
           customSounds: [
             { name: 'done.wav' },
             { name: 'attention.wav' },
+            { name: 'blocked.wav' },
           ],
         },
       })
-      if (!first.view.registered || !second.view.registered) throw new Error('expected registered view')
+      if (!first.view.registered || !second.view.registered || !third.view.registered) {
+        throw new Error('expected registered view')
+      }
       const done = first.view.customSounds[0]!
       const attention = second.view.customSounds[1]!
+      const blocked = third.view.customSounds[2]!
 
       await expect(remote.selectSound({
         kind: 'completion', sound: 'custom', customSoundFile: done.fileId, expectedRevision: 2,
@@ -395,6 +407,15 @@ describe('desktop notification configuration Remote', () => {
           value: { confirmationSound: 'custom', confirmationCustomSoundName: 'attention.wav' },
         },
       })
+      await expect(remote.selectSound({
+        kind: 'blocked', sound: 'custom', customSoundFile: blocked.fileId, expectedRevision: 4,
+      })).resolves.toMatchObject({
+        kind: 'ok',
+        view: {
+          revision: 5,
+          value: { blockedSound: 'custom', blockedCustomSoundName: 'blocked.wav' },
+        },
+      })
       expect(settings.mutate).toHaveBeenCalledWith(
         'desktop-notifications',
         expect.arrayContaining([
@@ -404,7 +425,7 @@ describe('desktop notification configuration Remote', () => {
         2,
       )
       const files = await readdir(join(directory, 'desktop-notifications', 'sounds'))
-      expect(files).toHaveLength(2)
+      expect(files).toHaveLength(3)
       expect(files).toEqual(expect.arrayContaining([
         expect.stringMatching(/^sound-[0-9a-f-]{36}\.wav$/),
         expect.stringMatching(/^sound-[0-9a-f-]{36}\.wav$/),

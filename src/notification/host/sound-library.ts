@@ -53,6 +53,7 @@ function legacySounds(settings: NotificationSettings): NotificationCustomSound[]
   const candidates = [
     { fileId: settings.completionCustomSoundFile, name: settings.completionCustomSoundName },
     { fileId: settings.confirmationCustomSoundFile, name: settings.confirmationCustomSoundName },
+    { fileId: settings.blockedCustomSoundFile, name: settings.blockedCustomSoundName },
   ]
   const sounds: NotificationCustomSound[] = []
   for (const candidate of candidates) {
@@ -113,7 +114,7 @@ export class CustomSoundLibrary {
     return this.snapshot()
   }
 
-  /** Add one WAV without changing either task event's current selection. */
+  /** Add one WAV without changing any task event's current selection. */
   async upload(
     settings: NotificationSettings,
     fileName: string,

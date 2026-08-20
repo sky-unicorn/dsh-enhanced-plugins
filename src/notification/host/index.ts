@@ -53,6 +53,7 @@ export function apply(ctx: Context, config: NotificationSettings): void {
       companion.setState(transition.state)
       if (transition.confirmation) companion.play('confirmation')
       if (transition.completion) companion.play('completion')
+      if (transition.outcome === 'blocked') companion.play('blocked')
       if (transition.outcome !== undefined) companion.showOutcome(transition.outcome)
     })
     const disposeSession = ctx.on('session/disposed', (session) => {
