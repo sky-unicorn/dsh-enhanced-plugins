@@ -2,52 +2,45 @@
 
 [English](README.md) | 中文
 
-`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的增强插件集合。既可安装聚合包一次获得全部功能，也可只安装所选功能的独立 Host、Client 和 bundle。
+`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的增强插件集合。一次安装可获得全部 7 项功能，也可以只保留需要的独立 bundle。
 
-本项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。七项功能分别维护自己的 Host、Client、Settings 和运行时生命周期，因此某个可选依赖不可用时不会阻止其他功能加载。
+项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。各功能分别管理自己的 Host、Client、Settings 和运行时生命周期，可独立构建、安装和卸载。
+
+[功能一览](#功能一览) · [快速安装](#快速安装) · [功能指南](#功能指南) · [配置参考](#配置参考) · [开发与验证](#开发与验证)
 
 ## 功能一览
 
-| 功能 | 安装名称 | 使用位置 | 用途 |
+“安装名称”用于安装脚本的 `-Features` 参数，也是按需安装时唯一需要记住的标识。
+
+| 功能 | 安装名称 | 使用位置 | 主要用途 |
 | --- | --- | --- | --- |
-| [桌面提示与宠物](#桌面提示与宠物) | `notification` | 设置 → 桌面宠物 | 播放默认或自定义任务提示音，并可显示原生动态 DeepSeek 鱼宠物 |
+| [桌面提示与宠物](#桌面提示与宠物) | `notification` | 设置 → 桌面宠物 | 任务提示音、自定义 WAV 音效库与原生动态 DeepSeek 鱼宠物 |
 | [插件社区](#插件社区) | `plugin-market` | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
-| [MCP 服务器管理](#mcp-服务器管理) | `mcp-server-manager` | 设置 → 插件 → 插件配置 → MCP 服务器 | 管理 stdio / Streamable HTTP MCP 服务器 |
-| [pi-ai 模型请求类型](#pi-ai-模型请求类型) | `model-input-types` | 设置 → 插件 → 插件配置 → pi-ai 模型请求类型 | 声明模型接受纯文本还是图片请求 |
-| [工作区文件引用](#工作区文件引用) | `referenced-file` | 会话输入框中输入 `#` | 搜索文件并把文本快照加入下一次请求 |
+| [MCP 服务器管理](#mcp-服务器管理) | `mcp-server-manager` | 设置 → 插件 → 插件配置 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
+| [pi-ai 模型请求类型](#pi-ai-模型请求类型) | `model-input-types` | 设置 → 插件 → 插件配置 | 声明模型接受纯文本还是图片请求 |
+| [工作区文件引用](#工作区文件引用) | `referenced-file` | 会话输入框中输入 `#` | 搜索工作区文件并把安全的文本快照加入下一次请求 |
 | [编辑上一条消息](#编辑上一条消息) | `edit-last-message` | 最后一条用户消息气泡 | 修改该轮内容并在当前会话重新生成 |
 | [产品子智能体](#产品子智能体) | `sub-agent` | 设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
 
-## 运行要求
+## 快速安装
+
+### 开始前
 
 - Node.js 22.19 或更高版本。
-- DSH Web profile；本仓库当前针对 DSH `0.1.0-rc.5` 的公开 ABI 验证，本地基准 commit 为 `47f943859bef60e4160492346772ded9b24f765a`。
-- 原生提示音与桌面宠物功能需要 Windows 10 或更高版本及 Windows PowerShell 5.1；包内其他功能仍可跨平台使用。
-- DSH 官方包由 Harness 提供，本插件不会复制或 patch DSH 核心。
+- DSH Web profile。本仓库针对 DSH `0.1.0-rc.5` 的公开 ABI 验证，本地基准 commit 为 `47f943859bef60e4160492346772ded9b24f765a`。
+- 原生提示音和桌面宠物需要 Windows 10 或更高版本及 Windows PowerShell 5.1；其余功能可跨平台使用。
 
-DSH 仍处于开发者预览阶段。升级 DSH 后若出现接口不兼容，请先核对本项目支持的 ABI 再升级插件。
+DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH 后若遇到问题，请先核对上述 ABI 版本。
 
-## 安装
+> [!CAUTION]
+> **先确认 DSH 与插件仓库的目录关系，再复制安装命令：**
+>
+> - **同目录安装：** 两个仓库位于**同一父目录**，直接使用下方命令。
+> - **非同目录安装：** 两个仓库位于**不同父目录**，命令必须额外传入 `-DshCheckout "DSH 源码绝对路径"`。
 
-安装脚本会自动完成依赖安装、所选插件构建、`web` profile 安装和加载验证。以下命令都需要在 `dsh-enhanced-plugins` 仓库根目录执行。
+### 安装全部功能
 
-先查看可选功能：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
-```
-
-只安装指定功能时，通过逗号分隔“功能一览”中的安装名称：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
-```
-
-`-Features` 表示 profile 最终保留的增强功能集合。脚本先安装所选独立 bundle，成功后再移除原聚合包、未选择的增强 bundle，以及与所选功能冲突的旧包。省略参数或传入 `-Features all` 仍安装原来的全量聚合包。
-
-### 插件与 DSH 源码位于同一父目录
-
-目录结构如下：
+**同目录安装**：当 `deepseek-harness` 与本仓库位于同一父目录时，在本仓库根目录运行：
 
 ```text
 <工作目录>/
@@ -55,114 +48,130 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 └── dsh-enhanced-plugins/
 ```
 
-脚本会自动找到同级的 `deepseek-harness`；以下命令安装全部功能：
-
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-### 插件与 DSH 源码位于不同目录
+省略 `-Features` 或传入 `-Features all` 都会安装聚合包。
 
-通过 `-DshCheckout` 指定 DSH 源码目录：
+### 按需安装
+
+先列出当前版本提供的功能：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
+```
+
+再用逗号分隔“功能一览”中的安装名称，例如只保留桌面提示、MCP 管理和文件引用：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
+```
+
+`-Features` 表示目标 profile **最终保留的增强功能集合**。脚本会先成功构建并安装全部所选 bundle，再移除聚合包、未选择的同仓库 bundle，以及与所选功能冲突的旧包；安装失败时不会提前破坏原有可用组合。
+
+**非同目录安装**：如果 DSH checkout 不在同级目录，通过 `-DshCheckout` 指定位置：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -DshCheckout "E:\projects\deepseek-harness"
 ```
 
-脚本执行成功后，如果 DSH 已在运行，重启一次即可使用。
+安装脚本会完成依赖安装、构建、`web` profile 安装与加载验证。成功后若 DSH 正在运行，重启一次即可使用。
 
-## 使用说明
+## 功能指南
 
 ### 桌面提示与宠物
 
-位置：**设置 → 桌面宠物**。它现在是设置左侧导航中的独立入口，不再放在“插件配置”卡片中。
+安装名称：`notification` · 位置：**设置 → 桌面宠物**
 
-1. 先向共享的**自定义提示音库**上传一个或多个 WAV，再为**需要确认**、**任务完成**和**任务受阻**三类事件分别选择**关闭**、两档内置默认音或任意已上传的 WAV。切换到可播放选项时会自动试听，也可以点击旁边的**试听**按钮再次播放当前选项；选择“关闭”时不播放。公共的**提示音增益**滑杆统一增强默认音和自定义音：0% 保持原始音量，100% 约为 2 倍振幅（+6 dB），接近峰值时会软限幅以减少破音。增益处理支持 PCM 和 IEEE Float WAV，其他仍可播放的 WAV 编码会回退为原始音量。每个文件不得超过 2 MiB，提示音库最多保存 64 个文件，且都保存在当前 DSH profile 中；升级前分别上传的旧 WAV 会自动导入公共库。
-2. 打开**启用桌面宠物**，即可在浏览器之外显示原生 DeepSeek 鱼图标。**空闲时保持置顶**默认开启；关闭后空闲宠物可被其他窗口遮挡，任务中、需要确认和结束反馈仍会置顶。
-3. 选择宠物大小和启动位置；显示后可以在桌面上自由拖动。宠物不能越过物理桌面的外边缘，但相邻显示器之间的边界保持开放，可以直接拖到另一块屏幕。松开鼠标时窗口会完整落在目标显示器的可见工作区内，插件同时在当前 profile 内按显示器记录归一化位置；大小和位置在修改其他设置或重启后都会恢复。分辨率、缩放或工作区发生变化时会重新换算并限制在可见区域；原显示器离线时回退到另一台保存过的在线显示器或配置角落，重新连接后仍能恢复原显示器位置。修改“启动位置”会清除这些拖动记录并重新使用所选角落。
+![桌面提示、自定义音效库与宠物设置](assets/readme/desktop-notifications.png)
 
-宠物采用独立实现的 Hatch 风格动态表现，但不复制 Codex 的私有素材或实现：启用时先孵化登场，**空闲**时缓慢漂浮、呼吸并随机做待机动作，**任务中**会游动、吐泡泡并旋转进度环，**需要确认**时会跳动、摇晃、脉冲并显示感叹号；顶层任务结束后还会短暂显示**已完成**庆祝或**任务受阻**反馈。状态会汇总所有会话，“需要确认”拥有最高优先级。任务完成和任务受阻提示音及结束反馈只针对顶层任务，子智能体结束不会造成重复提示。
+提示音支持“需要确认”“任务完成”“任务受阻”三类事件。每类可分别选择关闭、两档内置默认音或公共音效库中的自定义 WAV；切换选项会自动试听，也可手动点击“试听”。共享增益范围为 0–100%，100% 约为 +6 dB，并对接近峰值的 PCM / IEEE Float WAV 软限幅。单文件最多 2 MiB，音效库最多 64 个文件，全部保存在当前 DSH profile 中。
 
-设置实时生效。动画由 WPF 原生动画系统执行，窗口保持响应；鼠标悬浮会触发轻微互动并保持箭头光标，拖动期间才显示移动光标。Windows 开启“减弱动画”后，宠物自动使用静态状态帧。关闭宠物时，插件会协作式关闭并等待其 PowerShell/WPF 进程退出；宠物关闭但提示音开启时，仅为一次提示启动短生命周期进程，不留下常驻 helper。子进程只接收固定脚本路径与 stdin JSON 控制消息，并由 DSH subprocess service 负责进程树清理。
+打开“启用桌面宠物”后，浏览器之外会显示原生 DeepSeek 鱼。它会根据所有会话汇总为以下状态：
+
+- **空闲**：漂浮、呼吸并随机待机；可选择空闲时不置顶。
+- **任务中**：游动、吐泡泡并显示进度环。
+- **需要确认**：跳动、摇晃、脉冲并显示感叹号，优先级最高。
+- **已完成 / 任务受阻**：顶层任务结束后的短暂反馈；子智能体结束不会重复提示。
+
+宠物可跨显示器拖动，按显示器保存归一化位置，并在分辨率、缩放、工作区或显示器连接状态变化后重新换算到可见区域。修改“启动位置”会清除拖动记录并恢复到所选角落。Windows 开启“减弱动画”后会自动使用静态状态帧。
+
+设置实时生效。常驻宠物及短生命周期提示音进程均由 DSH subprocess service 管理；关闭功能时会协作式退出，不遗留 helper 进程。
 
 ### 插件社区
 
-位置：**设置 → 插件社区**。
-
-1. 首次打开会读取内置插件快照；需要刷新社区数据时点击“同步渠道”。
-2. 在搜索框按仓库名、包名、描述或 topic 查找插件。
-3. 安装前打开 GitHub 仓库核对来源；点击“安装”后等待操作完成。
-4. 在“已安装”标签页查看或卸载由插件社区安装的项目。
-5. 安装或卸载完成后，按页面提示重启当前 Web profile。
-
-未配置 GitHub Token 也能使用内置快照。若同步触发 GitHub API 限流，可点击“配置”，保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并保存在 credentials 服务中。
+安装名称：`plugin-market` · 位置：**设置 → 插件社区**
 
 ![插件社区页面](assets/readme/plugin-community.png)
 
+1. 首次打开使用内置插件快照；需要最新社区数据时点击“同步渠道”。
+2. 按仓库名、包名、描述或 topic 搜索，安装前可打开 GitHub 仓库核对来源。
+3. 在“已安装”标签页查看或卸载由插件社区安装的项目。
+4. 安装或卸载后，按页面提示重启当前 Web profile。
+
+未配置 GitHub Token 也能使用内置快照。若同步触发 GitHub API 限流，可在“配置”中保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并由 credentials 服务保存。
+
 ### MCP 服务器管理
 
-位置：**设置 → 插件 → 插件配置 → MCP 服务器**。
-
-1. 点击“添加服务器”，填写唯一名称并选择传输类型。
-2. `stdio` 服务器填写命令、参数、工作目录和环境变量；Streamable HTTP 服务器填写 HTTP(S) URL 与请求头。
-3. 也可以点击“一键导入 Claude Code 与 Codex”，由 Host 读取本机已有配置。名称或内容重复的项目会跳过，无法安全转换的项目会给出原因。
-4. 检查卡片顶部的格式审计结果，然后点击“保存”。保存成功后 Host 会按服务器分别启动、更新或卸载连接。
-
-浏览器重新读取已有服务器时，环境变量和请求头的值会被掩码；未修改的机密不会从脱敏快照重建或覆盖。
+安装名称：`mcp-server-manager` · 位置：**设置 → 插件 → 插件配置 → MCP 服务器**
 
 ![MCP 服务器管理](assets/readme/mcp-server-manager.png)
 
+1. 点击“添加服务器”，填写唯一名称并选择 `stdio` 或 Streamable HTTP。
+2. `stdio` 配置命令、参数、工作目录和环境变量；HTTP 配置 HTTP(S) URL 与请求头。
+3. 也可以“一键导入 Claude Code 与 Codex”，由 Host 读取本机已有配置；重复项会跳过，无法安全转换的项目会说明原因。
+4. 检查卡片顶部的格式审计结果后保存。Host 会按服务器分别启动、更新或卸载连接。
+
+浏览器读取已有服务器时会掩码环境变量和请求头的值；未修改的机密不会从脱敏快照重建或覆盖。
+
 ### pi-ai 模型请求类型
 
-位置：**设置 → 插件 → 插件配置 → pi-ai 模型请求类型**。
-
-1. 先在 DSH 的“模型”页面或 `settings.yaml` 中添加 pi-ai 模型覆盖。
-2. 展开“pi-ai 模型请求类型”卡片。
-3. 为每个模型选择“提供方默认”“仅文本”或“文本与图片”；选择会立即保存。
-
-只有官方 `llm-pi-ai` settings namespace 可用时才显示此卡片。这里保存的是能力声明，不会探测实际端点；把模型声明为“文本与图片”之前，请确认提供方确实接受图片请求。
+安装名称：`model-input-types` · 位置：**设置 → 插件 → 插件配置 → pi-ai 模型请求类型**
 
 ![pi-ai 模型请求类型](assets/readme/model-input-types.png)
 
+先在 DSH“模型”页或 `settings.yaml` 中添加 pi-ai 模型覆盖，再为每个模型选择“提供方默认”“仅文本”或“文本与图片”。选择会立即保存。
+
+只有官方 `llm-pi-ai` settings namespace 可用时才显示此卡片。这里保存的是能力声明，不会探测实际端点；声明“文本与图片”前请确认提供方确实接受图片请求。
+
 ### 工作区文件引用
 
-位置：**任意已选择工作区的会话输入框**。
-
-1. 输入 `#`，并继续输入文件名或路径片段缩小候选范围。
-2. 使用 `↑` / `↓` 选择文件，按 `Enter` 插入引用；也可以直接点击候选。
-3. 继续编写问题并发送。Host 会在提交时重新解析路径、检查工作区边界，并把文件的 UTF-8 文本快照加入本次模型请求。
-
-默认最多引用 8 个文件，单文件 128 KiB、总计 512 KiB。二进制文件、非法 UTF-8、超限文件、非常规文件和工作区外路径会被拒绝。
+安装名称：`referenced-file` · 位置：**任意已选择工作区的会话输入框**
 
 ![在输入框中引用工作区文件](assets/readme/referenced-files.png)
 
+1. 输入 `#`，继续输入文件名或路径片段缩小候选范围。
+2. 使用 `↑` / `↓` 选择并按 `Enter` 插入，也可以直接点击候选。
+3. 发送消息时，Host 会重新解析路径、检查工作区边界，并把文件的 UTF-8 文本快照加入本次模型请求。
+
+默认最多引用 8 个文件，单文件 128 KiB、总计 512 KiB。二进制文件、非法 UTF-8、超限文件、非常规文件和工作区外路径会被拒绝。
+
 ### 编辑上一条消息
 
-位置：**当前会话最后一条可编辑的用户消息气泡，位于“复制”旁边**。
-
-1. 等待当前会话结束，或先手动停止正在运行的会话。
-2. 点击“编辑上一条消息”，在气泡内修改文本。
-3. 点击“重新发送”，或按 `Ctrl/⌘ + Enter`；按 `Esc` 或“取消”可退出编辑。
-
-重新发送仍在当前会话内完成。插件会从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH 的原始 Session 日志保持追加式审计记录；已经执行的工具产生的外部副作用不会回滚。为避免静默丢失内容，包含图片或其他非文本块的消息不提供编辑入口。
+安装名称：`edit-last-message` · 位置：**当前会话最后一条可编辑的用户消息气泡**
 
 ![编辑上一条消息并重新发送](assets/readme/edit-last-message.png)
 
+1. 等待当前会话结束，或先停止正在运行的会话。
+2. 点击“编辑上一条消息”，在气泡内修改文本。
+3. 点击“重新发送”或按 `Ctrl/⌘ + Enter`；按 `Esc` 或“取消”退出编辑。
+
+重新发送仍在当前会话内完成：插件从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH Session 日志保持追加式审计记录，已执行工具的外部副作用不会回滚。包含图片或其他非文本块的消息不提供编辑入口，避免静默丢失内容。
+
 ### 产品子智能体
 
-位置：**设置 → 子智能体**。
-
-1. 打开 Claude Code 或 Codex 开关。
-2. 变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话，无需重启 profile。
-3. 关闭开关会实时移除对应工具；本机对应产品及其官方 DSH provider 仍需可用。
-
-两个开关默认均为关闭。开关只按路径写入对应布尔值，并使用设置修订号防止覆盖其他页面或外部编辑产生的新值。
+安装名称：`sub-agent` · 位置：**设置 → 子智能体**
 
 ![Claude Code 与 Codex 子智能体开关](assets/readme/subagent-toggles.png)
 
-## 高级配置
+打开 Claude Code 或 Codex 后，变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话，无需重启 profile；关闭开关会实时移除对应工具。本机仍需安装对应产品及其官方 DSH provider。
 
-插件的默认组合位于 [`cordis.patch.yml`](cordis.patch.yml)。后应用的 profile patch 会整体替换目标 Loader 行的 `config`，覆盖时请重述该行需要保留的全部字段。
+两个开关默认关闭。写入使用 path-addressed 操作和设置修订号，不会用脱敏或过期快照覆盖其他页面及外部编辑产生的新值。
+
+## 配置参考
+
+默认组合位于 [`cordis.patch.yml`](cordis.patch.yml)。后应用的 profile patch 会整体替换目标 Loader 行的 `config`；覆盖时需要重述该行必须保留的全部字段。
 
 <details>
 <summary>桌面提示默认配置</summary>
@@ -172,13 +181,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 | `completionSound` | `subtle` | 任务完成提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
 | `confirmationSound` | `prominent` | 需要关注提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
 | `blockedSound` | `prominent` | 任务受阻提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
-| `soundGain` | `0` | 默认音和自定义提示音共用的 0–100% 正向增益；0 保持原声，100 约为 +6 dB |
+| `soundGain` | `0` | 默认音和自定义音共用的 0–100% 正向增益；100 约为 +6 dB |
 | `petEnabled` | `false` | 是否显示原生全局桌面宠物 |
-| `petIdleTopmost` | `true` | 空闲状态是否仍保持窗口置顶 |
+| `petIdleTopmost` | `true` | 空闲状态是否仍保持置顶 |
 | `petSize` | `112` | 宠物尺寸：`80`、`112`、`144` 或 `176` 设备无关像素 |
 | `petPosition` | `bottom-right` | 回退/重置角落：`top-left`、`top-right`、`bottom-left` 或 `bottom-right` |
 
-六个 `*CustomSoundFile` / `*CustomSoundName` 字段是由 Host 管理的三类提示音选择引用；共享目录保存在 profile 内的 `desktop-notifications/sound-library.json`。请通过设置页面上传和选择自定义提示音，不要手工编辑这些内容。
+六个 `*CustomSoundFile` / `*CustomSoundName` 字段由 Host 管理三类提示音的选择引用。共享目录保存在 profile 内的 `desktop-notifications/sound-library.json`；请通过设置页面上传和选择自定义音，不要手工编辑这些字段。
 
 </details>
 
@@ -218,7 +227,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 ## 开发与验证
 
-仓库规则使用以下只读 sibling checkout 作为 DSH API、类型和真实 Web 组装基准：
+仓库使用以下只读 sibling checkout 作为 DSH API、类型和真实 Web 组装基准：
 
 ```text
 D:\work\workspace\github\deepseek-harness
@@ -235,7 +244,7 @@ npm run pack:dry-run
 git diff --check
 ```
 
-浏览器 bundle 使用 CSS Modules，并且只消费 DSH 的 `--dsw-alias-*` 语义主题 token，因此自动跟随浅色、深色和系统外观。
+浏览器 bundle 使用 CSS Modules，并且只消费 DSH 的 `--dsw-alias-*` 语义主题 token，因此会自动跟随 light、dark 和 system 外观。
 
 ## License
 

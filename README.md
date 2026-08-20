@@ -2,52 +2,45 @@
 
 English | [中文](README.zh.md)
 
-`dsh-enhanced-plugins` is an enhancement collection for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. Install the aggregate bundle for every feature, or install only the independent Host, Client, and bundle packages you select.
+`dsh-enhanced-plugins` is a collection of enhancements for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. Install all seven features in one bundle, or keep only the independent bundles you need.
 
-The package uses only public DSH plugin extension points and does not modify DSH core. Each of the seven features owns its applicable Host, Client, Settings, and runtime lifecycle, so an unavailable optional dependency does not prevent unrelated features from loading.
+The project uses public DSH plugin extension points and does not modify DSH core. Each feature owns its Host, Client, Settings, and runtime lifecycle and can be built, installed, and removed independently.
 
-## Features at a glance
+[Feature overview](#feature-overview) · [Quick install](#quick-install) · [Feature guide](#feature-guide) · [Configuration reference](#configuration-reference) · [Development](#development-and-verification)
 
-| Feature | Install name | Location | Purpose |
+## Feature overview
+
+The “install name” is the value accepted by the installer’s `-Features` parameter and is the only identifier needed for a selective install.
+
+| Feature | Install name | Where to find it | What it adds |
 | --- | --- | --- | --- |
-| [Desktop alerts & pet](#desktop-alerts--pet) | `notification` | Settings → Desktop pet | Play default or custom task-state sounds and optionally show an animated native DeepSeek fish |
-| [Plugin Community](#plugin-community) | `plugin-market` | Settings → Plugin Community | Find, install, and remove community DSH plugins |
-| [MCP server manager](#mcp-server-manager) | `mcp-server-manager` | Settings → Plugins → Plugin configuration → MCP servers | Manage stdio and Streamable HTTP MCP servers |
-| [pi-ai model request types](#pi-ai-model-request-types) | `model-input-types` | Settings → Plugins → Plugin configuration → pi-ai model request types | Declare whether models accept text or image requests |
-| [Workspace file references](#workspace-file-references) | `referenced-file` | Type `#` in the session composer | Search files and add a text snapshot to the next request |
-| [Edit last message](#edit-last-message) | `edit-last-message` | Latest user-message bubble | Revise a turn and regenerate in the current session |
+| [Desktop alerts & pet](#desktop-alerts--pet) | `notification` | Settings → Desktop Pet | Event sounds, a custom WAV library, and a native animated DeepSeek fish pet |
+| [Plugin Community](#plugin-community) | `plugin-market` | Settings → Plugin Community | Search, install, and remove community DSH plugins |
+| [MCP server manager](#mcp-server-manager) | `mcp-server-manager` | Settings → Plugins → Plugin configuration | Manage stdio / Streamable HTTP servers and import local configurations |
+| [pi-ai model request types](#pi-ai-model-request-types) | `model-input-types` | Settings → Plugins → Plugin configuration | Declare whether each model accepts text-only or image requests |
+| [Workspace file references](#workspace-file-references) | `referenced-file` | Type `#` in the conversation input | Search workspace files and attach safe text snapshots to the next request |
+| [Edit last message](#edit-last-message) | `edit-last-message` | Latest user-message bubble | Edit that turn and regenerate within the current session |
 | [Product subagents](#product-subagents) | `sub-agent` | Settings → Subagents | Enable or disable Claude Code / Codex tools live |
 
-## Requirements
+## Quick install
 
-- Node.js 22.19 or newer.
-- A DSH Web profile. This repository is currently verified against the DSH `0.1.0-rc.5` public ABI, using local baseline commit `47f943859bef60e4160492346772ded9b24f765a`.
-- Windows 10 or newer with Windows PowerShell 5.1 for the native sound and desktop-pet feature. The other bundle features remain portable.
-- Official DSH packages are supplied by Harness; this plugin neither copies nor patches DSH core.
+### Before you start
 
-DSH is still a developer preview. After upgrading DSH, check this project's supported ABI before upgrading the plugin if compatibility errors appear.
+- Node.js 22.19 or later.
+- A DSH Web profile. This repository is verified against the public ABI in DSH `0.1.0-rc.5`; its local baseline commit is `47f943859bef60e4160492346772ded9b24f765a`.
+- Native sounds and the desktop pet require Windows 10 or later and Windows PowerShell 5.1. The other features are cross-platform.
 
-## Installation
+DSH is still a developer preview and may introduce compatibility-breaking changes. If an upgrade breaks the plugin, compare its ABI with the baseline above first.
 
-The installer handles dependency installation, selected-package builds, `web` profile installation, and load verification. Run the following commands from the `dsh-enhanced-plugins` repository root.
+> [!CAUTION]
+> **Check the DSH/plugin repository layout before copying an install command:**
+>
+> - **Sibling-directory install:** both repositories share the **same parent directory**; use the commands below as written.
+> - **Different-directory install:** the repositories have **different parent directories**; add `-DshCheckout "absolute path to the DSH source"` to the command.
 
-List the available features first:
+### Install every feature
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
-```
-
-Pass comma-separated install names from the feature table to install only those features:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
-```
-
-`-Features` describes the final enhanced-feature set for the profile. The script installs the selected bundles first, then removes the aggregate bundle, unselected enhanced bundles, and legacy packages that conflict with selected features. Omitting the option or passing `-Features all` preserves the original aggregate installation.
-
-### Plugin and DSH source under the same parent directory
-
-Use this directory layout:
+**Sibling-directory install:** when `deepseek-harness` and this repository share a parent directory, run the installer from this repository root:
 
 ```text
 <workspace>/
@@ -55,132 +48,146 @@ Use this directory layout:
 └── dsh-enhanced-plugins/
 ```
 
-The installer discovers the sibling `deepseek-harness` checkout automatically; this command installs every feature:
-
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-### Plugin and DSH source in different directories
+Omitting `-Features` or passing `-Features all` installs the aggregate bundle.
 
-Pass the DSH source checkout explicitly with `-DshCheckout`:
+### Install selected features
+
+List the features provided by the current checkout:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
+```
+
+Then pass comma-separated install names from the feature overview. For example, keep only desktop alerts, MCP management, and file references:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
+```
+
+`-Features` describes the enhanced feature set the target profile should **retain after the operation**. The installer first builds and installs every selected bundle, then removes the aggregate package, unselected sibling bundles, and declared conflicting legacy packages. A failed installation does not remove the previously working set early.
+
+**Different-directory install:** if the DSH checkout is elsewhere, pass it explicitly:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -DshCheckout "E:\projects\deepseek-harness"
 ```
 
-Restart DSH once after installation if it is already running.
+The script installs dependencies, builds the packages, installs them into the `web` profile, and verifies that the profile loads. If DSH is already running, restart it once after the script succeeds.
 
-## Usage
-
-The screenshots below use the Simplified Chinese locale; DSH translates labels according to the selected application language.
+## Feature guide
 
 ### Desktop alerts & pet
 
-Location: **Settings → Desktop pet**. This is an independent entry in the left Settings navigation, not a card under Plugins.
+Install name: `notification` · Location: **Settings → Desktop Pet**
 
-1. Upload one or more WAV files into the shared **Custom sound library**, then independently choose **Off**, either built-in default sound, or any uploaded WAV for **confirmation**, **task-completion**, and **blocked-task** sounds. Switching to a playable choice previews it automatically, and the adjacent **Preview** button plays the current choice again; choosing Off stays silent. A shared game-style **Notification gain** slider boosts both built-in and custom sounds: 0% preserves the source level and 100% is about twice the amplitude (+6 dB), with soft limiting near peaks. Gain processing supports PCM and IEEE-float WAV; another playable WAV encoding falls back to its source level. Each file is limited to 2 MiB, the library holds up to 64 files, and all files stay inside the current DSH profile. Existing per-event custom WAVs are imported into the library automatically after an upgrade.
-2. Turn on **Enable desktop pet** to show the native DeepSeek fish outside the browser. **Keep idle pet on top** defaults on; when disabled, other windows may cover the idle pet while working, attention, and end reactions remain topmost.
-3. Choose its size and starting corner, then drag it anywhere. Physical desktop outer edges block the pet, while adjoining display boundaries stay open so it can move directly to another screen. On mouse release the complete window lands inside the target display's visible work area, and the plugin stores a normalized position per display inside the current profile. Both size and position survive other setting changes and restarts. Resolution, scaling, and work-area changes are clamped back on-screen. If the active display is offline, the pet falls back to another connected display with a saved position or to the configured corner; reconnecting the original display can restore its position. Changing **Starting position** clears the dragged positions and applies that corner again.
+![Desktop alerts, custom sound library, and pet settings](assets/readme/desktop-notifications.png)
 
-The pet uses an independently implemented Hatch-style motion system without copying Codex's private assets or implementation. It hatches in when enabled; **Idle** gently floats, breathes, and performs occasional tricks; **Working** swims with bubbles and a rotating activity ring; and **Needs attention** hops, shakes, pulses, and displays an alert badge. A top-level turn ending also produces a short **Ready** celebration or **Blocked** reaction. State is folded across all sessions, with Needs attention taking highest priority. Completion and blocked-task sounds plus end reactions fire only for top-level tasks, so subagents do not create duplicates.
+Sounds cover three event families: confirmation needed, task completed, and task blocked. Each can independently use off, one of two built-in sounds, or a WAV from the shared library. Changing a playable option previews it automatically, and the Preview button plays it again. A shared 0–100% gain reaches about +6 dB at 100% and softly limits near-peak PCM / IEEE Float WAV files. Each file may be up to 2 MiB; the profile-local library holds up to 64 files.
 
-Settings apply live. Pet motion uses native WPF animations so the window remains responsive; hovering triggers a small reaction while keeping the arrow cursor, and dragging temporarily uses the move cursor. When Windows Reduced Motion is enabled, the pet automatically uses static state frames. Turning the pet off closes and joins its managed PowerShell/WPF process; with the pet disabled, sound notifications use a short-lived process and leave no resident helper. The child receives only a fixed script path plus JSON control messages over stdin, and DSH's subprocess service owns tree cleanup.
+Enabling the desktop pet shows a native DeepSeek fish outside the browser. It aggregates all sessions into these states:
+
+- **Idle:** floats, breathes, and performs random idle actions; idle topmost behavior is configurable.
+- **Working:** swims, produces bubbles, and shows a progress ring.
+- **Confirmation needed:** bounces, shakes, pulses, and displays an exclamation mark; this state has the highest priority.
+- **Completed / blocked:** brief feedback for the top-level task only, so subagent completion does not duplicate alerts.
+
+The pet can be dragged across monitors. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select static state frames when animations are reduced.
+
+Settings apply live. The resident pet and short-lived sound processes are managed through the DSH subprocess service and exit cooperatively without leaving helper processes behind.
 
 ### Plugin Community
 
-Location: **Settings → Plugin Community**.
-
-1. The first visit reads the bundled catalog snapshot. Select **Sync channel** when you want fresh community data.
-2. Search by repository, package name, description, or topic.
-3. Open the GitHub repository and verify its source before selecting **Install**.
-4. Use the **Installed** tab to inspect or remove plugins installed through this page.
-5. Restart the current Web profile after an install or removal, as prompted by the page.
-
-The bundled snapshot works without a GitHub token. If synchronization hits GitHub API limits, open **Configure** and store a read-only, short-lived fine-grained token. It is sent only to the local DSH Host and kept by the credentials service.
+Install name: `plugin-market` · Location: **Settings → Plugin Community**
 
 ![Plugin Community page](assets/readme/plugin-community.png)
 
+1. The first visit uses the bundled plugin snapshot; choose Sync sources when you need current community data.
+2. Search by repository, package, description, or topic, and open the GitHub repository to verify its source before installing.
+3. Use the Installed tab to inspect or remove items installed by Plugin Community.
+4. Restart the current Web profile when prompted after an install or removal.
+
+The bundled snapshot works without a GitHub token. If synchronization hits GitHub API rate limits, save a read-only, short-lived fine-grained token under Configure. The token is sent only to the local DSH Host and stored by the credentials service.
+
 ### MCP server manager
 
-Location: **Settings → Plugins → Plugin configuration → MCP servers**.
-
-1. Select **Add server**, enter a unique name, and choose a transport.
-2. For `stdio`, provide the command, arguments, working directory, and environment variables. For Streamable HTTP, provide an HTTP(S) URL and request headers.
-3. Alternatively, select **Import Claude Code and Codex**. The Host reads supported local configuration, skips duplicate names or definitions, and explains entries that cannot be converted safely.
-4. Review the format audit at the top of the card, then select **Save**. The Host starts, updates, or disposes each server connection independently after a successful commit.
-
-When the browser reads an existing server, environment-variable and header values are masked. Unchanged secrets are not reconstructed or overwritten from the redacted view.
+Install name: `mcp-server-manager` · Location: **Settings → Plugins → Plugin configuration → MCP Servers**
 
 ![MCP server manager](assets/readme/mcp-server-manager.png)
 
+1. Choose Add server, give it a unique name, and select `stdio` or Streamable HTTP.
+2. Configure command, arguments, working directory, and environment variables for `stdio`; configure an HTTP(S) URL and headers for HTTP.
+3. Import Claude Code and Codex configurations in one step if desired. The Host skips duplicate names or content and explains entries it cannot convert safely.
+4. Review the format audit at the top of the card, then save. The Host starts, updates, or removes each server connection independently.
+
+Environment-variable and header values are masked when the browser reads existing servers. Unchanged secrets are never reconstructed from a redacted snapshot or overwritten.
+
 ### pi-ai model request types
 
-Location: **Settings → Plugins → Plugin configuration → pi-ai model request types**.
-
-1. Add pi-ai model overrides on DSH's Models page or in `settings.yaml` first.
-2. Expand the **pi-ai model request types** card.
-3. For each model, select **Provider default**, **Text only**, or **Text and images**. The choice is saved immediately.
-
-The card appears only while the official `llm-pi-ai` settings namespace is available. These are capability declarations, not endpoint probes. Confirm that the provider really accepts image requests before declaring **Text and images**.
+Install name: `model-input-types` · Location: **Settings → Plugins → Plugin configuration → pi-ai model request types**
 
 ![pi-ai model request types](assets/readme/model-input-types.png)
 
+Add pi-ai model overrides on the DSH Models page or in `settings.yaml`, then choose Provider default, Text only, or Text and images for each model. Changes save immediately.
+
+The card appears only while the official `llm-pi-ai` settings namespace is available. It stores a capability declaration and does not probe the endpoint; verify provider support before declaring Text and images.
+
 ### Workspace file references
 
-Location: **the session composer after selecting a workspace**.
+Install name: `referenced-file` · Location: **the conversation input for any selected workspace**
 
-1. Type `#`, then continue with part of a file name or path to narrow the results.
-2. Use `↑` / `↓` and `Enter`, or click a result, to insert the reference.
-3. Finish the prompt and send it. At submission, the Host resolves the path again, checks workspace containment, and adds a UTF-8 text snapshot to that model request.
+![Referencing workspace files from the input](assets/readme/referenced-files.png)
 
-Defaults allow up to 8 files, 128 KiB per file, and 512 KiB total. Binary, invalid UTF-8, oversized, non-regular, and outside-workspace files are rejected.
+1. Type `#`, then continue with a file name or path fragment to narrow the candidates.
+2. Use `↑` / `↓` and `Enter`, or click a candidate directly.
+3. When the message is submitted, the Host resolves the path again, enforces the workspace boundary, and adds a UTF-8 text snapshot to that model request.
 
-![Referencing workspace files from the composer](assets/readme/referenced-files.png)
+By default, one request may include up to 8 files, 128 KiB per file, and 512 KiB total. Binary files, invalid UTF-8, oversized files, non-regular files, and paths outside the workspace are rejected.
 
 ### Edit last message
 
-Location: **beside Copy on the latest editable user-message bubble**.
+Install name: `edit-last-message` · Location: **the latest editable user-message bubble in the current conversation**
 
-1. Wait for the current session to finish, or stop it manually.
-2. Select **Edit last message** and revise the text inline.
-3. Select **Resend** or press `Ctrl/⌘ + Enter`. Press `Esc` or select **Cancel** to leave edit mode.
+![Editing and resending the latest message](assets/readme/edit-last-message.png)
 
-Resending stays in the current session. The plugin replaces the active model context from the edited user message onward and regenerates through the same AgentLoop. The underlying DSH Session log remains append-only audit history, and external side effects from tools that already ran are not rolled back. Messages containing images or other non-text blocks do not expose Edit, preventing silent content loss.
+1. Wait for the current run to finish, or stop it first.
+2. Choose Edit last message and update the text in place.
+3. Choose Resend or press `Ctrl/⌘ + Enter`; press `Esc` or Cancel to exit editing.
 
-![Editing and resending the last message](assets/readme/edit-last-message.png)
+Resending stays in the current session. The plugin replaces model context from the edited user message onward, then runs the same AgentLoop again. The DSH Session log remains an append-only audit record, and external side effects from already-executed tools are not rolled back. Messages containing images or other non-text blocks do not expose the editor, which avoids silently dropping content.
 
 ### Product subagents
 
-Location: **Settings → Subagents**.
+Install name: `sub-agent` · Location: **Settings → Subagents**
 
-1. Turn on Claude Code or Codex.
-2. The change applies immediately to Agent presets that load this controller, including running sessions; the profile does not need a restart.
-3. Turning a product off removes its tool live. The corresponding local product and official DSH provider must still be available.
+![Claude Code and Codex subagent toggles](assets/readme/subagent-toggles.png)
 
-Both switches default to off. Each update writes only its Boolean path under settings revision fencing, avoiding accidental overwrite of newer edits from another page or external writer.
+Enable Claude Code or Codex and the change applies immediately to Agent presets that load this controller, including running sessions; no profile restart is needed. Disabling a toggle removes the corresponding tool live. The matching local product and official DSH provider must still be available.
 
-![Claude Code and Codex subagent switches](assets/readme/subagent-toggles.png)
+Both toggles default to off. Writes use path-addressed operations and a settings revision fence, so they do not replace unrelated changes from another page or external editor with a stale or redacted snapshot.
 
-## Advanced configuration
+## Configuration reference
 
-The default composition is in [`cordis.patch.yml`](cordis.patch.yml). A later profile patch replaces an entire Loader row's `config`; when overriding one, repeat every field that must be preserved.
+The default composition lives in [`cordis.patch.yml`](cordis.patch.yml). A later profile patch replaces an entire Loader row’s `config`; repeat every field that must be preserved when overriding one.
 
 <details>
-<summary>Desktop notification defaults</summary>
+<summary>Desktop-alert defaults</summary>
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `completionSound` | `subtle` | `off`, `subtle`, `prominent`, or uploaded `custom` task-completion sound |
+| `completionSound` | `subtle` | `off`, `subtle`, `prominent`, or uploaded `custom` completion sound |
 | `confirmationSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` attention sound |
 | `blockedSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` blocked-task sound |
-| `soundGain` | `0` | Shared 0–100% positive gain; 0 preserves the source and 100 is about +6 dB |
+| `soundGain` | `0` | Shared 0–100% positive gain; 100 is about +6 dB |
 | `petEnabled` | `false` | Show the native global desktop pet |
-| `petIdleTopmost` | `true` | Keep the pet above other windows while it is idle |
+| `petIdleTopmost` | `true` | Keep the pet above other windows while idle |
 | `petSize` | `112` | Pet size: `80`, `112`, `144`, or `176` device-independent pixels |
 | `petPosition` | `bottom-right` | Fallback/reset corner: `top-left`, `top-right`, `bottom-left`, or `bottom-right` |
 
-The six `*CustomSoundFile` / `*CustomSoundName` settings fields are Host-owned references to the three selections. The shared catalog is stored in the profile-local `desktop-notifications/sound-library.json`; select and upload custom sounds through the Settings page instead of editing either representation manually.
+The six `*CustomSoundFile` / `*CustomSoundName` fields are Host-owned references for the three sound selections. The shared catalog is stored at `desktop-notifications/sound-library.json` below the profile; upload and select custom sounds through Settings instead of editing these fields manually.
 
 </details>
 
@@ -196,7 +203,7 @@ The six `*CustomSoundFile` / `*CustomSoundName` settings fields are Host-owned r
 | `githubTokenEnv` | `GITHUB_TOKEN` | Credentials reference name |
 | `cliPath` | empty | Optional absolute DSH executable path |
 
-The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is read-only. Synchronized cache data and marketplace install records are stored below the DSH home marketplace data directory.
+The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is read-only. Synchronized cache data and installation records are stored in the marketplace data directory below DSH home.
 
 </details>
 
@@ -220,13 +227,13 @@ To expose product-subagent tools only to selected Agent presets, disable or remo
 
 ## Development and verification
 
-Repository rules use this read-only sibling checkout as the DSH API, type, and real Web assembly baseline:
+The repository uses this read-only sibling checkout as the DSH API, type, and real Web assembly baseline:
 
 ```text
 D:\work\workspace\github\deepseek-harness
 ```
 
-Run the standard checks with the package manager selected by the repository lockfile:
+Standard verification commands:
 
 ```powershell
 npm install
