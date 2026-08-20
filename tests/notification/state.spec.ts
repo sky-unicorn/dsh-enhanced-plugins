@@ -149,9 +149,16 @@ describe('desktop notification assets and defaults', () => {
     expect(() => Config({ soundGain: 50.5 })).toThrow()
   })
 
-  it('ships a movable WPF companion and the official fish vector', async () => {
+  it('ships a movable WPF companion with state and idle-interaction RGBA sprite sheets', async () => {
     const script = await readFile(resolve(import.meta.dirname, '../../assets/notification/desktop-pet.ps1'), 'utf8')
-    const icon = await readFile(resolve(import.meta.dirname, '../../assets/notification/deepseek-fish.svg'), 'utf8')
+    const sprites = await readFile(resolve(
+      import.meta.dirname,
+      '../../assets/notification/deepseek-pet-sprites.png',
+    ))
+    const idleSprites = await readFile(resolve(
+      import.meta.dirname,
+      '../../assets/notification/deepseek-pet-idle-sprites.png',
+    ))
     expect(script).toContain('Topmost="True"')
     expect(script).toContain('DeepSeekPetInputReader')
     expect(script).toContain('thread.IsBackground = true')
@@ -161,8 +168,29 @@ describe('desktop notification assets and defaults', () => {
     expect(script).toContain('New-OneShotAnimation')
     expect(script).toContain('Show-Hatch')
     expect(script).toContain('Show-Outcome')
-    expect(script).toContain('Play-IdleTrick')
+    expect(script).toContain("'idle-sleep'")
+    expect(script).toContain("'idle-eager'")
+    expect(script).toContain('Update-IdleInteractionVisual')
+    expect(script).toContain('$window.Add_MouseLeave')
+    expect(script).not.toContain('Play-IdleTrick')
+    expect(script).toContain('CroppedBitmap')
+    expect(script).toContain('Set-SpriteState')
+    expect(script).toContain('Advance-SpriteAnimation')
+    expect(script).toContain('$script:spriteFrameCount = 5')
+    expect(script).toContain('$script:spriteColumnEdges = @(0, 311, 609, 921, 1222, 1536)')
+    expect(script).toContain('$script:spriteRowEdges = @(0, 204, 396, 605, 786, 1024)')
+    expect(script).toContain('$idleSpriteColumnEdges = @(0, 307, 614, 921, 1228, 1536)')
+    expect(script).toContain('$idleSpriteRowEdges = @(0, 512, 1024)')
+    expect(script).toContain('idle = 0')
+    expect(script).toContain('working = 1')
+    expect(script).toContain('confirmation = 2')
+    expect(script).toContain('ready = 3')
+    expect(script).toContain('blocked = 4')
+    expect(script).not.toContain('(New-Animation -4 4 0.45)')
+    expect(script).not.toContain('(New-Animation -5 5 0.10)')
+    expect(script).not.toContain('(New-Animation -6 6 0.09)')
     expect(script).toContain('ClientAreaAnimation')
+    expect(script).toContain('$script:staticSpriteFrames')
     expect(script).toContain('CapturePlacement')
     expect(script).toContain('RestorePlacement')
     expect(script).toContain('TrySelectNearestMonitor')
@@ -188,8 +216,16 @@ describe('desktop notification assets and defaults', () => {
     expect(script).toContain('blockedSound')
     expect(script).toContain('blockedCustomSoundPath')
     expect(script).toContain("'blocked'")
-    expect(icon).toContain('fill="#4D6BFE"')
-    expect(icon).toContain('<path')
+    expect(sprites.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+    expect(sprites.readUInt32BE(16)).toBe(1536)
+    expect(sprites.readUInt32BE(20)).toBe(1024)
+    expect(sprites[24]).toBe(8)
+    expect(sprites[25]).toBe(6)
+    expect(idleSprites.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+    expect(idleSprites.readUInt32BE(16)).toBe(1536)
+    expect(idleSprites.readUInt32BE(20)).toBe(1024)
+    expect(idleSprites[24]).toBe(8)
+    expect(idleSprites[25]).toBe(6)
   })
 
   it.runIf(process.platform === 'win32')('keeps 0% at source level and applies real 100% PCM gain', async () => {

@@ -1,6 +1,8 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$IconPath
+  [string]$SpritePath,
+  [Parameter(Mandatory = $true)]
+  [string]$IdleSpritePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -495,7 +497,7 @@ public sealed class DeepSeekPetInputReader {
       </Ellipse>
     </Canvas>
 
-    <Grid x:Name="PetVisual" Margin="10" RenderTransformOrigin="0.5,0.5"
+    <Grid x:Name="PetVisual" Margin="4" RenderTransformOrigin="0.5,0.5"
           Cursor="Arrow" ForceCursor="True">
       <Grid.RenderTransform>
         <TransformGroup>
@@ -510,13 +512,12 @@ public sealed class DeepSeekPetInputReader {
           <TranslateTransform x:Name="PetEntranceMotion" />
         </TransformGroup>
       </Grid.RenderTransform>
-      <Border x:Name="PetBubble" CornerRadius="999" Background="#6477C9">
+      <Border x:Name="PetBubble" CornerRadius="999" Background="Transparent">
         <Border.Effect>
           <DropShadowEffect x:Name="Shadow" BlurRadius="18" ShadowDepth="4" Opacity="0.35" Color="#4D6BFE" />
         </Border.Effect>
-        <Viewbox Margin="20" IsHitTestVisible="False">
-          <Path x:Name="Fish" Fill="White" Stretch="Uniform" />
-        </Viewbox>
+        <Image x:Name="SpriteFrame" Stretch="Uniform" IsHitTestVisible="False"
+               RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" />
       </Border>
     </Grid>
 
@@ -582,7 +583,7 @@ $petEntranceMotion = $window.FindName('PetEntranceMotion')
 $petEntranceScale = $window.FindName('PetEntranceScale')
 $petBubble = $window.FindName('PetBubble')
 $shadow = $window.FindName('Shadow')
-$fish = $window.FindName('Fish')
+$spriteFrame = $window.FindName('SpriteFrame')
 $hatchShell = $window.FindName('HatchShell')
 $hatchTop = $window.FindName('HatchTop')
 $hatchBottom = $window.FindName('HatchBottom')
@@ -599,8 +600,79 @@ $badgeText = $window.FindName('BadgeText')
 $script:arrowCursorHandle = [DeepSeekPetNativeCursor]::LoadCursor([IntPtr]::Zero, 32512)
 $script:sizeAllCursorHandle = [DeepSeekPetNativeCursor]::LoadCursor([IntPtr]::Zero, 32646)
 
-[xml]$icon = Get-Content -Raw -LiteralPath $IconPath
-$fish.Data = [System.Windows.Media.Geometry]::Parse([string]$icon.svg.path.d)
+function Read-SpriteBitmap([string]$path, [string]$description) {
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    throw "Desktop pet $description sprite sheet does not exist: $path"
+  }
+  $stream = [System.IO.File]::OpenRead($path)
+  try {
+    $bitmap = [System.Windows.Media.Imaging.BitmapImage]::new()
+    $bitmap.BeginInit()
+    $bitmap.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+    $bitmap.StreamSource = $stream
+    $bitmap.EndInit()
+    $bitmap.Freeze()
+    return $bitmap
+  } finally {
+    $stream.Dispose()
+  }
+}
+
+$spriteBitmap = Read-SpriteBitmap $SpritePath 'state'
+$idleSpriteBitmap = Read-SpriteBitmap $IdleSpritePath 'idle interaction'
+$script:spriteFrameCount = 5
+$script:spriteRows = [ordered]@{
+  idle = 0
+  working = 1
+  confirmation = 2
+  ready = 3
+  blocked = 4
+}
+if ($spriteBitmap.PixelWidth -ne 1536 -or $spriteBitmap.PixelHeight -ne 1024) {
+  throw 'Desktop pet state sprite sheet must be the bundled 1536 by 1024 frame grid.'
+}
+if ($idleSpriteBitmap.PixelWidth -ne 1536 -or $idleSpriteBitmap.PixelHeight -ne 1024) {
+  throw 'Desktop pet idle interaction sprite sheet must be the bundled 1536 by 1024 frame grid.'
+}
+# The generated sheet uses transparent gutters around each animation cell.
+# These audited edges keep fins and state accents out of adjacent crops.
+$script:spriteColumnEdges = @(0, 311, 609, 921, 1222, 1536)
+$script:spriteRowEdges = @(0, 204, 396, 605, 786, 1024)
+$script:spriteFrames = @{}
+foreach ($spriteEntry in $script:spriteRows.GetEnumerator()) {
+  $frames = @()
+  for ($frameIndex = 0; $frameIndex -lt $script:spriteFrameCount; $frameIndex++) {
+    $left = $script:spriteColumnEdges[$frameIndex]
+    $right = $script:spriteColumnEdges[$frameIndex + 1]
+    $top = $script:spriteRowEdges[$spriteEntry.Value]
+    $bottom = $script:spriteRowEdges[$spriteEntry.Value + 1]
+    $crop = [System.Windows.Int32Rect]::new($left, $top, $right - $left, $bottom - $top)
+    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($spriteBitmap, $crop)
+    $frame.Freeze()
+    $frames += $frame
+  }
+  $script:spriteFrames[$spriteEntry.Key] = $frames
+}
+$idleSpriteRows = [ordered]@{
+  'idle-sleep' = 0
+  'idle-eager' = 1
+}
+$idleSpriteColumnEdges = @(0, 307, 614, 921, 1228, 1536)
+$idleSpriteRowEdges = @(0, 512, 1024)
+foreach ($idleSpriteEntry in $idleSpriteRows.GetEnumerator()) {
+  $frames = @()
+  for ($frameIndex = 0; $frameIndex -lt $script:spriteFrameCount; $frameIndex++) {
+    $left = $idleSpriteColumnEdges[$frameIndex]
+    $right = $idleSpriteColumnEdges[$frameIndex + 1]
+    $top = $idleSpriteRowEdges[$idleSpriteEntry.Value]
+    $bottom = $idleSpriteRowEdges[$idleSpriteEntry.Value + 1]
+    $crop = [System.Windows.Int32Rect]::new($left, $top, $right - $left, $bottom - $top)
+    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($idleSpriteBitmap, $crop)
+    $frame.Freeze()
+    $frames += $frame
+  }
+  $script:spriteFrames[$idleSpriteEntry.Key] = $frames
+}
 
 $script:settings = [pscustomobject]@{
   completionSound = 'subtle'
@@ -618,9 +690,28 @@ $script:settings = [pscustomobject]@{
 $script:state = 'idle'
 $script:visualMode = 'state'
 $script:visualUntil = [DateTime]::MinValue
-$script:nextIdleTrick = [DateTime]::UtcNow.AddSeconds(6)
 $script:motionEnabled = [System.Windows.SystemParameters]::ClientAreaAnimation
+$script:spriteState = 'idle-sleep'
+$script:spriteFrameIndex = 0
+$script:nextSpriteFrame = [DateTime]::MinValue
+$script:spriteFrameDurations = @{
+  'idle-sleep' = 650
+  'idle-eager' = 110
+  working = 100
+  confirmation = 100
+  ready = 120
+  blocked = 130
+}
+$script:staticSpriteFrames = @{
+  'idle-sleep' = 2
+  'idle-eager' = 2
+  working = 2
+  confirmation = 2
+  ready = 2
+  blocked = 3
+}
 $script:isDragging = $false
+$script:isPointerOver = $false
 $script:placementPending = $false
 $script:stopping = $false
 $script:pendingStop = $false
@@ -632,6 +723,56 @@ $script:mediaPlayer = [System.Windows.Media.MediaPlayer]::new()
 
 function Brush([string]$color) {
   return [System.Windows.Media.BrushConverter]::new().ConvertFromString($color)
+}
+
+function Show-SpriteFrame([int]$index) {
+  $frames = $script:spriteFrames[$script:spriteState]
+  if ($null -eq $frames -or $frames.Count -ne $script:spriteFrameCount) {
+    throw "Desktop pet sprite state is unavailable: $($script:spriteState)"
+  }
+  $bounded = [Math]::Max(0, [Math]::Min($script:spriteFrameCount - 1, $index))
+  $script:spriteFrameIndex = $bounded
+  $spriteFrame.Source = $frames[$bounded]
+}
+
+function Set-SpriteState([string]$stateName) {
+  if (-not $script:spriteFrames.ContainsKey($stateName)) { $stateName = 'idle-sleep' }
+  if ($script:spriteState -eq $stateName -and $null -ne $spriteFrame.Source) { return }
+  $script:spriteState = $stateName
+  $script:nextSpriteFrame = [DateTime]::MinValue
+
+  if (-not $script:motionEnabled) {
+    Show-SpriteFrame ([int]$script:staticSpriteFrames[$stateName])
+    return
+  }
+
+  Show-SpriteFrame 0
+  $script:nextSpriteFrame = [DateTime]::UtcNow.AddMilliseconds(
+    [double]$script:spriteFrameDurations[$stateName]
+  )
+}
+
+function Advance-SpriteAnimation([DateTime]$now) {
+  if (-not $script:motionEnabled -or $window.Visibility -ne [System.Windows.Visibility]::Visible) { return }
+  if ($now -lt $script:nextSpriteFrame) { return }
+
+  $nextFrame = $script:spriteFrameIndex + 1
+  if ($nextFrame -ge $script:spriteFrameCount) { $nextFrame = 0 }
+  Show-SpriteFrame $nextFrame
+  $script:nextSpriteFrame = $now.AddMilliseconds(
+    [double]$script:spriteFrameDurations[$script:spriteState]
+  )
+}
+
+function Get-StateSpriteState {
+  if ($script:state -ne 'idle') { return $script:state }
+  if ($script:isDragging -or $script:isPointerOver) { return 'idle-eager' }
+  return 'idle-sleep'
+}
+
+function Update-IdleInteractionVisual {
+  if ($script:state -ne 'idle' -or $script:visualMode -ne 'state') { return }
+  Set-SpriteState (Get-StateSpriteState)
 }
 
 function New-Animation(
@@ -841,64 +982,37 @@ function Set-StateVisual {
   $script:visualUntil = [DateTime]::MinValue
   Set-TopmostForState
   Clear-Animations
+  Set-SpriteState (Get-StateSpriteState)
+  $petBubble.Background = [System.Windows.Media.Brushes]::Transparent
   $groundShadow.Opacity = 0.2
+  $bubbles.Opacity = 0
+  $sparks.Opacity = 0
+  $badge.Visibility = 'Collapsed'
   switch ($script:state) {
     'working' {
-      $petBubble.Background = Brush '#4D6BFE'
       $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#4D6BFE')
       $ring.Stroke = Brush '#4D6BFE'
-      $ring.Opacity = 0.85
-      $bubbles.Opacity = 1
-      $badge.Visibility = 'Visible'
-      $badge.Background = Brush '#4D6BFE'
-      $badgeText.Text = '...'
-      $badgeText.FontSize = 9
+      $ring.Opacity = 0.72
       if (-not $script:motionEnabled) { return }
-      $petMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::XProperty, (New-Animation -4 4 0.45))
-      $petMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-Animation -2 2 0.34))
-      $petRotation.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, (New-Animation -7 7 0.45))
-      Animate-Scale 0.98 1.06 0.34
       $ringRotation.BeginAnimation(
         [System.Windows.Media.RotateTransform]::AngleProperty,
         (New-Animation 0 360 1.2 $false)
       )
-      $bubbleOneMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-Animation 10 -25 1.0 $false))
-      $bubbleTwoMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-Animation 12 -20 0.8 $false 0.25))
     }
     'confirmation' {
-      $petBubble.Background = Brush '#F59E0B'
       $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#F59E0B')
       $ring.Stroke = Brush '#F59E0B'
       $ring.Opacity = 1
-      $bubbles.Opacity = 0
-      $badge.Visibility = 'Visible'
-      $badge.Background = Brush '#EF4444'
-      $badgeText.Text = '!'
-      $badgeText.FontSize = 16
       if (-not $script:motionEnabled) { return }
-      $petMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::XProperty, (New-Animation -5 5 0.10))
-      $petMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-Animation 1 -7 0.28))
-      $petRotation.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, (New-Animation -6 6 0.10))
-      Animate-Scale 1 1.08 0.28
       $ring.BeginAnimation([System.Windows.UIElement]::OpacityProperty, (New-Animation 0.45 1 0.32))
       $ringRotation.BeginAnimation(
         [System.Windows.Media.RotateTransform]::AngleProperty,
         (New-Animation 0 360 0.65 $false)
       )
-      $badgeScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, (New-Animation 0.9 1.16 0.28))
-      $badgeScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, (New-Animation 0.9 1.16 0.28))
     }
     default {
-      $petBubble.Background = Brush '#6477C9'
       $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#4D6BFE')
       $ring.Opacity = 0
-      $bubbles.Opacity = 0
-      $badge.Visibility = 'Collapsed'
-      $script:nextIdleTrick = [DateTime]::UtcNow.AddSeconds((Get-Random -Minimum 5 -Maximum 10))
-      if (-not $script:motionEnabled) { return }
-      $petMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-Animation -3 3 1.55))
-      $petRotation.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, (New-Animation -3 3 2.1))
-      Animate-Scale 0.98 1.03 1.25
     }
   }
 }
@@ -912,7 +1026,8 @@ function Show-Hatch {
   $script:visualUntil = [DateTime]::UtcNow.AddSeconds(1.55)
   $window.Topmost = $true
   Clear-Animations
-  $petBubble.Background = Brush '#4D6BFE'
+  Set-SpriteState (Get-StateSpriteState)
+  $petBubble.Background = [System.Windows.Media.Brushes]::Transparent
   $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#4D6BFE')
   $ring.Opacity = 0
   $bubbles.Opacity = 0
@@ -957,81 +1072,18 @@ function Show-Outcome([string]$outcome) {
   $script:visualUntil = [DateTime]::UtcNow.AddSeconds(1.8)
   $window.Topmost = $true
   Clear-Animations
+  Set-SpriteState $outcome
+  $petBubble.Background = [System.Windows.Media.Brushes]::Transparent
   $bubbles.Opacity = 0
-  $ring.Opacity = 0.9
-  $badge.Visibility = 'Visible'
+  $ring.Opacity = 0
+  $badge.Visibility = 'Collapsed'
   $groundShadow.Opacity = 0.2
 
   if ($outcome -eq 'ready') {
-    $petBubble.Background = Brush '#10B981'
     $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#10B981')
-    $ring.Stroke = Brush '#34D399'
-    $badge.Background = Brush '#10B981'
-    $badgeText.Text = [char]0x2713
-    $badgeText.FontSize = 16
-    $sparks.Opacity = 1
-    if (-not $script:motionEnabled) { return }
-    $petMotion.BeginAnimation(
-      [System.Windows.Media.TranslateTransform]::YProperty,
-      (New-OneShotAnimation 0 -12 0.28 $true)
-    )
-    $petRotation.BeginAnimation(
-      [System.Windows.Media.RotateTransform]::AngleProperty,
-      (New-OneShotAnimation -7 7 0.2 $true 0.08)
-    )
-    Animate-OneShotScale $petEntranceScale 0.84 1.12 0.3 $true
-    $ringRotation.BeginAnimation(
-      [System.Windows.Media.RotateTransform]::AngleProperty,
-      (New-OneShotAnimation 0 360 0.75)
-    )
-    $sparkOneMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-OneShotAnimation 8 -20 0.62 $true))
-    $sparkTwoMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-OneShotAnimation 8 -17 0.55 $true 0.08))
-    $sparkThreeMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-OneShotAnimation 8 -22 0.68 $true 0.04))
-    $sparkFourMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, (New-OneShotAnimation 8 -18 0.58 $true 0.12))
   } else {
-    $petBubble.Background = Brush '#EF4444'
     $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#EF4444')
-    $ring.Stroke = Brush '#F87171'
-    $badge.Background = Brush '#DC2626'
-    $badgeText.Text = [char]0x00D7
-    $badgeText.FontSize = 17
-    $sparks.Opacity = 0
-    if (-not $script:motionEnabled) { return }
-    $petMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::XProperty, (New-Animation -6 6 0.09))
-    $petRotation.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, (New-Animation -5 5 0.09))
-    $ring.BeginAnimation([System.Windows.UIElement]::OpacityProperty, (New-Animation 0.35 1 0.25))
-    $badgeScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, (New-Animation 0.9 1.15 0.24))
-    $badgeScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, (New-Animation 0.9 1.15 0.24))
   }
-}
-
-function Play-IdleTrick {
-  if (-not $script:motionEnabled -or $script:state -ne 'idle' -or $script:visualMode -ne 'state') { return }
-  switch (Get-Random -Minimum 0 -Maximum 3) {
-    0 {
-      $petTrickMotion.BeginAnimation(
-        [System.Windows.Media.TranslateTransform]::YProperty,
-        (New-OneShotAnimation 0 -10 0.28 $true)
-      )
-    }
-    1 {
-      $petTrickRotation.BeginAnimation(
-        [System.Windows.Media.RotateTransform]::AngleProperty,
-        (New-OneShotAnimation 0 14 0.24 $true)
-      )
-    }
-    default {
-      $petTrickScale.BeginAnimation(
-        [System.Windows.Media.ScaleTransform]::ScaleXProperty,
-        (New-OneShotAnimation 1 1.12 0.24 $true)
-      )
-      $petTrickScale.BeginAnimation(
-        [System.Windows.Media.ScaleTransform]::ScaleYProperty,
-        (New-OneShotAnimation 1 0.88 0.24 $true)
-      )
-    }
-  }
-  $script:nextIdleTrick = [DateTime]::UtcNow.AddSeconds((Get-Random -Minimum 5 -Maximum 10))
 }
 
 function Remove-AmplifiedSound {
@@ -1199,6 +1251,7 @@ function Apply-Message($message) {
 }
 
 $window.Add_MouseEnter({
+  $script:isPointerOver = $true
   [System.Windows.Input.Mouse]::OverrideCursor = [System.Windows.Input.Cursors]::Arrow
   [DeepSeekPetNativeCursor]::SetCursor($script:arrowCursorHandle) | Out-Null
   $window.Cursor = [System.Windows.Input.Cursors]::Arrow
@@ -1207,6 +1260,11 @@ $window.Add_MouseEnter({
   if ($script:motionEnabled) {
     Animate-OneShotScale $petHoverScale 1 1.09 0.16 $true
   }
+  Update-IdleInteractionVisual
+})
+$window.Add_MouseLeave({
+  $script:isPointerOver = $false
+  Update-IdleInteractionVisual
 })
 $window.Add_MouseMove({
   if ($_.LeftButton -eq [System.Windows.Input.MouseButtonState]::Pressed) {
@@ -1217,25 +1275,30 @@ $window.Add_MouseMove({
 })
 $window.Add_MouseLeftButtonDown({
   $script:isDragging = $true
+  Update-IdleInteractionVisual
   [System.Windows.Input.Mouse]::OverrideCursor = [System.Windows.Input.Cursors]::SizeAll
   [DeepSeekPetNativeCursor]::SetCursor($script:sizeAllCursorHandle) | Out-Null
   $window.Cursor = [System.Windows.Input.Cursors]::SizeAll
   if ($_.ButtonState -eq [System.Windows.Input.MouseButtonState]::Pressed) {
     try { $window.DragMove() } finally {
       $script:isDragging = $false
+      $script:isPointerOver = [bool]$window.IsMouseOver
       $script:placementPending = $false
       Write-PositionEvent
       [System.Windows.Input.Mouse]::OverrideCursor = [System.Windows.Input.Cursors]::Arrow
       [DeepSeekPetNativeCursor]::SetCursor($script:arrowCursorHandle) | Out-Null
       $window.Cursor = [System.Windows.Input.Cursors]::Arrow
+      Update-IdleInteractionVisual
     }
   }
 })
 $window.Add_MouseLeftButtonUp({
   $script:isDragging = $false
+  $script:isPointerOver = [bool]$window.IsMouseOver
   [System.Windows.Input.Mouse]::OverrideCursor = [System.Windows.Input.Cursors]::Arrow
   [DeepSeekPetNativeCursor]::SetCursor($script:arrowCursorHandle) | Out-Null
   $window.Cursor = [System.Windows.Input.Cursors]::Arrow
+  Update-IdleInteractionVisual
 })
 
 # DragMove remains unconstrained so the pet can follow the pointer beyond every
@@ -1253,9 +1316,10 @@ $script:windowSource.AddHook($script:windowHook)
 # A background .NET thread owns the blocking stdin read. Windows PowerShell 5
 # may block before ReadLineAsync returns, so starting it on the Dispatcher would
 # make the window look hung and turn the mouse cursor into a busy spinner.
-# This timer only drains already-queued messages; WPF animations run natively.
+# This timer drains queued messages and advances cached sprite frames; WPF
+# still owns the ring, hover, and hatch animations natively.
 $inputTimer = [System.Windows.Threading.DispatcherTimer]::new()
-$inputTimer.Interval = [TimeSpan]::FromMilliseconds(80)
+$inputTimer.Interval = [TimeSpan]::FromMilliseconds(50)
 $inputTimer.Add_Tick({
   $now = [DateTime]::UtcNow
   if ($script:placementPending -and -not $script:isDragging) {
@@ -1268,10 +1332,7 @@ $inputTimer.Add_Tick({
   if ($script:visualMode -ne 'state' -and $now -ge $script:visualUntil) {
     Set-StateVisual
   }
-  $shouldPlayIdleTrick = $window.Visibility -eq [System.Windows.Visibility]::Visible -and $script:state -eq 'idle' -and $script:visualMode -eq 'state' -and $now -ge $script:nextIdleTrick
-  if ($shouldPlayIdleTrick) {
-    Play-IdleTrick
-  }
+  Advance-SpriteAnimation $now
   [string]$line = $null
   while ($inputReader.TryDequeue([ref]$line)) {
     if ($line.Trim().Length -gt 0) {

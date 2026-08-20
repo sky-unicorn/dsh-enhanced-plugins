@@ -90,12 +90,13 @@ Sounds cover three event families: confirmation needed, task completed, and task
 
 Enabling the desktop pet shows a native DeepSeek fish outside the browser. It aggregates all sessions into these states:
 
-- **Idle:** floats, breathes, and performs random idle actions; idle topmost behavior is configurable.
-- **Working:** swims, produces bubbles, and shows a progress ring.
-- **Confirmation needed:** bounces, shakes, pulses, and displays an exclamation mark; this state has the highest priority.
-- **Completed / blocked:** brief feedback for the top-level task only, so subagent completion does not duplicate alerts.
+- **Idle:** sleeps in a continuous low-amplitude breathing loop with drifting `Zzz`; hovering or dragging switches it to a compact, eager-to-play anticipation loop, and leaving it restores sleep. Idle topmost behavior is configurable.
+- **Working:** loops a dedicated five-frame focused swim cycle with bubbles and a progress ring.
+- **Confirmation needed:** loops a five-frame surprised alert sequence with an exclamation accent and pulsing ring; this state has the highest priority.
+- **Completed:** briefly plays a five-frame joyful fin-wave and sparkle sequence for the top-level task only.
+- **Blocked:** briefly plays a five-frame tired/frustrated sequence for the top-level task only.
 
-The pet can be dragged freely across monitors and beyond desktop edges. On release, it snaps fully into the work area with the greatest overlap, or the nearest screen edge when released in a gap between displays. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select static state frames when animations are reduced.
+The five task states are separate rows in one transparent sprite sheet, while sleeping and eager idle interaction use a dedicated two-row transparent sheet. Motion comes from the fish's pose, fins, tail, eyes, breathing, and expression instead of moving one static image back and forth. The pet can be dragged freely across monitors and beyond desktop edges. On release, it snaps fully into the work area with the greatest overlap, or the nearest screen edge when released in a gap between displays. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select a representative static frame for each state and idle interaction phase when animations are reduced.
 
 Settings apply live. The resident pet and short-lived sound processes are managed through the DSH subprocess service and exit cooperatively without leaving helper processes behind.
 

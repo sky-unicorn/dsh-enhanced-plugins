@@ -28,7 +28,8 @@ interface CompanionMessage {
 }
 
 const SCRIPT_PATH = fileURLToPath(new URL('../../../assets/notification/desktop-pet.ps1', import.meta.url))
-const ICON_PATH = fileURLToPath(new URL('../../../assets/notification/deepseek-fish.svg', import.meta.url))
+const SPRITE_PATH = fileURLToPath(new URL('../../../assets/notification/deepseek-pet-sprites.png', import.meta.url))
+const IDLE_SPRITE_PATH = fileURLToPath(new URL('../../../assets/notification/deepseek-pet-idle-sprites.png', import.meta.url))
 
 /** Owns exactly one companion process and serializes its stdin protocol. */
 export class DesktopCompanion {
@@ -160,8 +161,10 @@ export class DesktopCompanion {
           '-STA',
           '-File',
           SCRIPT_PATH,
-          '-IconPath',
-          ICON_PATH,
+          '-SpritePath',
+          SPRITE_PATH,
+          '-IdleSpritePath',
+          IDLE_SPRITE_PATH,
         ],
         cwd: dirname(SCRIPT_PATH),
         stdio: {
