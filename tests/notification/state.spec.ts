@@ -5,6 +5,10 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import { describe, expect, it, vi } from 'vitest'
 import { Config } from '../../src/notification/host/config.ts'
+import {
+  PetPositionStore,
+  parsePetPositionEvent,
+} from '../../src/notification/host/position-store.ts'
 import { NotificationConfigRemote } from '../../src/notification/host/remote.ts'
 import { NotificationStateTracker } from '../../src/notification/host/state.ts'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '../../src/notification/shared.ts'
@@ -28,20 +32,20 @@ describe('desktop notification state', () => {
     expect(tracker.initialize([root])).toBe('idle')
 
     expect(tracker.consume(root, event('turn/start', { turn: 1 }))).toEqual({
-      state: 'working', confirmation: false, completion: false,
+      state: 'working', confirmation: false, completion: false, outcome: undefined,
     })
     expect(tracker.consume(root, event('tool/call', {
       turn: 1, step: 1, callId: 'question-1', name: 'ask_user_question', arguments: '{}',
-    }, 1))).toEqual({ state: 'confirmation', confirmation: true, completion: false })
+    }, 1))).toEqual({ state: 'confirmation', confirmation: true, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('tool/result', {
       turn: 1, step: 1, message: { role: 'tool', toolCallId: 'question-1', content: [] },
-    }, 2))).toEqual({ state: 'working', confirmation: false, completion: false })
+    }, 2))).toEqual({ state: 'working', confirmation: false, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('approval/asked', { id: 'approval-1', toolName: 'bash' }, 3)))
-      .toEqual({ state: 'confirmation', confirmation: true, completion: false })
+      .toEqual({ state: 'confirmation', confirmation: true, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('approval/decided', { id: 'approval-1', outcome: 'allowed-once' }, 4)))
-      .toEqual({ state: 'working', confirmation: false, completion: false })
+      .toEqual({ state: 'working', confirmation: false, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('turn/end', { turn: 1, reason: { kind: 'completed' } }, 5)))
-      .toEqual({ state: 'idle', confirmation: false, completion: true })
+      .toEqual({ state: 'idle', confirmation: false, completion: true, outcome: 'ready' })
   })
 
   it('folds concurrent sessions globally and never chimes for a subagent turn', () => {
@@ -53,9 +57,9 @@ describe('desktop notification state', () => {
     tracker.consume(child, event('turn/start', { turn: 1 }))
 
     expect(tracker.consume(root, event('turn/end', { turn: 1, reason: { kind: 'completed' } })))
-      .toEqual({ state: 'working', confirmation: false, completion: true })
+      .toEqual({ state: 'working', confirmation: false, completion: true, outcome: 'ready' })
     expect(tracker.consume(child, event('turn/end', { turn: 1, reason: { kind: 'completed' } })))
-      .toEqual({ state: 'idle', confirmation: false, completion: false })
+      .toEqual({ state: 'idle', confirmation: false, completion: false, outcome: undefined })
   })
 
   it('reconstructs pending state silently and removes disposed sessions', () => {
@@ -75,10 +79,24 @@ describe('desktop notification state', () => {
     tracker.consume(root, event('turn/start', { turn: 1 }))
     expect(tracker.consume(root, event('tool/call', {
       turn: 1, step: 1, callId: 'plan-1', name: 'exit_plan_mode', arguments: '{}',
-    }))).toEqual({ state: 'confirmation', confirmation: true, completion: false })
+    }))).toEqual({ state: 'confirmation', confirmation: true, completion: false, outcome: undefined })
     expect(tracker.consume(root, event('tool/result', {
       turn: 1, step: 1, message: { role: 'tool', toolCallId: 'plan-1', content: [] },
-    }))).toEqual({ state: 'working', confirmation: false, completion: false })
+    }))).toEqual({ state: 'working', confirmation: false, completion: false, outcome: undefined })
+  })
+
+  it('shows a blocked reaction only for unsuccessful top-level turns', () => {
+    const tracker = new NotificationStateTracker()
+    const root = session('root')
+    const child = session('child', 'subagent')
+    tracker.initialize([root, child])
+    tracker.consume(root, event('turn/start', { turn: 1 }))
+    tracker.consume(child, event('turn/start', { turn: 1 }))
+
+    expect(tracker.consume(root, event('turn/end', { turn: 1, reason: { kind: 'error' } })))
+      .toEqual({ state: 'working', confirmation: false, completion: false, outcome: 'blocked' })
+    expect(tracker.consume(child, event('turn/end', { turn: 1, reason: { kind: 'blocked' } })))
+      .toEqual({ state: 'idle', confirmation: false, completion: false, outcome: undefined })
   })
 })
 
@@ -89,7 +107,7 @@ describe('desktop notification assets and defaults', () => {
     expect(() => Config({ completionSound: 'unknown' })).toThrow()
   })
 
-  it('ships a topmost WPF companion and the official fish vector', async () => {
+  it('ships a movable WPF companion and the official fish vector', async () => {
     const script = await readFile(resolve(import.meta.dirname, '../../assets/notification/desktop-pet.ps1'), 'utf8')
     const icon = await readFile(resolve(import.meta.dirname, '../../assets/notification/deepseek-fish.svg'), 'utf8')
     expect(script).toContain('Topmost="True"')
@@ -98,11 +116,75 @@ describe('desktop notification assets and defaults', () => {
     expect(script).not.toContain('[Console]::In.ReadLineAsync()')
     expect(script).toContain('Cursor="Arrow"')
     expect(script).toContain('New-Animation')
+    expect(script).toContain('New-OneShotAnimation')
+    expect(script).toContain('Show-Hatch')
+    expect(script).toContain('Show-Outcome')
+    expect(script).toContain('Play-IdleTrick')
+    expect(script).toContain('ClientAreaAnimation')
+    expect(script).toContain('CapturePlacement')
+    expect(script).toContain('RestorePlacement')
+    expect(script).toContain('ConstrainMovingRect')
+    expect(script).toContain('$message -eq 0x0216')
+    expect(script).toContain('$message -eq 0x007E')
+    expect(script).toContain('Set-TopmostForState')
+    expect(script).toContain('petIdleTopmost')
+    expect(script).toContain('Write-PositionEvent')
     expect(script).toContain('MediaPlayer')
     expect(script).toContain("'working'")
     expect(script).toContain("'confirmation'")
     expect(icon).toContain('fill="#4D6BFE"')
     expect(icon).toContain('<path')
+  })
+
+  it('validates and persists independent normalized positions for multiple displays', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-pet-position-'))
+    try {
+      const settings = { documentPath: join(directory, 'settings.yaml') }
+      const context = { get: (name: string) => name === 'settings' ? settings : undefined } as never
+      const first = new PetPositionStore(context)
+      await expect(first.load()).resolves.toBe(true)
+
+      const displayOne = parsePetPositionEvent(JSON.stringify({
+        event: 'position', display: '\\\\.\\DISPLAY1', xRatio: 0.25, yRatio: 0.75,
+      }))
+      const displayTwo = parsePetPositionEvent(JSON.stringify({
+        event: 'position', display: '\\\\.\\DISPLAY2', xRatio: 0.8, yRatio: 0.1,
+      }))
+      expect(displayOne).toBeDefined()
+      expect(displayTwo).toBeDefined()
+      first.record(displayOne!)
+      await first.persist()
+      first.record(displayTwo!)
+      await first.persist()
+
+      const restored = new PetPositionStore(context)
+      await expect(restored.load()).resolves.toBe(true)
+      expect(restored.snapshot()).toEqual({
+        version: 1,
+        activeDisplay: '\\\\.\\DISPLAY2',
+        displays: {
+          '\\\\.\\DISPLAY1': { xRatio: 0.25, yRatio: 0.75 },
+          '\\\\.\\DISPLAY2': { xRatio: 0.8, yRatio: 0.1 },
+        },
+      })
+
+      await restored.reset()
+      const reset = new PetPositionStore(context)
+      await expect(reset.load()).resolves.toBe(true)
+      expect(reset.snapshot()).toEqual({ version: 1, activeDisplay: '', displays: {} })
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects malformed or out-of-range native position events', () => {
+    expect(parsePetPositionEvent('not json')).toBeUndefined()
+    expect(parsePetPositionEvent(JSON.stringify({
+      event: 'position', display: '\\\\.\\DISPLAY1', xRatio: -0.1, yRatio: 0.5,
+    }))).toBeUndefined()
+    expect(parsePetPositionEvent(JSON.stringify({
+      event: 'position', display: '__proto__', xRatio: 0.5, yRatio: 0.5,
+    }))).toBeUndefined()
   })
 })
 
@@ -154,6 +236,19 @@ describe('desktop notification configuration Remote', () => {
       [{ op: 'set', path: ['petEnabled'], value: true }],
       2,
     )
+
+    await expect(remote.mutate({
+      op: { op: 'set', path: ['petIdleTopmost'], value: false },
+      expectedRevision: 3,
+    })).resolves.toMatchObject({
+      kind: 'ok',
+      view: {
+        registered: true,
+        revision: 4,
+        value: { petEnabled: true, petIdleTopmost: false },
+        user: { petEnabled: true, petIdleTopmost: false },
+      },
+    })
   })
 
   it('returns the latest view on conflict and rejects unknown fields at the wire boundary', async () => {

@@ -37,6 +37,7 @@ const HOST_ENTRIES = [
   'src/notification/host/config.ts',
   'src/notification/host/desktop.ts',
   'src/notification/host/index.ts',
+  'src/notification/host/position-store.ts',
   'src/notification/host/remote.ts',
   'src/notification/host/sound-files.ts',
   'src/notification/host/state.ts',

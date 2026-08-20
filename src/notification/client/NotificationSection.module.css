@@ -51,7 +51,7 @@
 
 .statePreview {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(98px, 1fr));
   gap: 8px;
 }
 
@@ -73,6 +73,8 @@
 .stateIdle svg { color: var(--dsw-alias-label-tertiary); }
 .stateWorking svg { color: var(--dsw-alias-brand-primary); }
 .stateConfirmation svg { color: var(--dsw-alias-state-warn-primary); }
+.stateReady svg { color: var(--dsw-alias-state-success-primary); }
+.stateBlocked svg { color: var(--dsw-alias-state-error-primary); }
 
 .group {
   overflow: hidden;

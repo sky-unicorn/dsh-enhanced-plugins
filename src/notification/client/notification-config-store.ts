@@ -36,6 +36,7 @@ export function decodeNotificationSettings(value: unknown): NotificationSettings
     || typeof value['confirmationCustomSoundFile'] !== 'string'
     || typeof value['confirmationCustomSoundName'] !== 'string'
     || typeof value['petEnabled'] !== 'boolean'
+    || typeof value['petIdleTopmost'] !== 'boolean'
     || (value['petSize'] !== 80 && value['petSize'] !== 112
       && value['petSize'] !== 144 && value['petSize'] !== 176)
     || (value['petPosition'] !== 'top-left' && value['petPosition'] !== 'top-right'
@@ -58,6 +59,7 @@ function decodeLayer(value: unknown): Partial<NotificationSettings> | undefined 
     if (field === 'completionSound') decoded.completionSound = single.completionSound
     else if (field === 'confirmationSound') decoded.confirmationSound = single.confirmationSound
     else if (field === 'petEnabled') decoded.petEnabled = single.petEnabled
+    else if (field === 'petIdleTopmost') decoded.petIdleTopmost = single.petIdleTopmost
     else if (field === 'petSize') decoded.petSize = single.petSize
     else if (field === 'petPosition') decoded.petPosition = single.petPosition
     else if (field === 'completionCustomSoundFile') decoded.completionCustomSoundFile = single.completionCustomSoundFile

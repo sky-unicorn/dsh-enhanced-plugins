@@ -200,6 +200,8 @@ export function NotificationSection(props: NotificationSectionProps) {
         <span className={clsx(css.state, css.stateIdle)}><FishLogo size={24} />{t('idle')}</span>
         <span className={clsx(css.state, css.stateWorking)}><FishLogo size={24} />{t('working')}</span>
         <span className={clsx(css.state, css.stateConfirmation)}><FishLogo size={24} />{t('confirmation')}</span>
+        <span className={clsx(css.state, css.stateReady)}><FishLogo size={24} />{t('ready')}</span>
+        <span className={clsx(css.state, css.stateBlocked)}><FishLogo size={24} />{t('blocked')}</span>
       </div>
 
       <div className={css.group}>
@@ -230,6 +232,28 @@ export function NotificationSection(props: NotificationSectionProps) {
               className={clsx(css.toggle, value.petEnabled && css.toggleOn)}
               disabled={disabled}
               onClick={() => { props.set('petEnabled', !value.petEnabled) }}
+            >
+              <span className={css.thumb} />
+            </button>
+          </FieldShell>
+
+          <FieldShell
+            label={t('petIdleTopmost')}
+            hint={t('petIdleTopmostHint')}
+            overridden={overridden('petIdleTopmost')}
+            overrideLabel={t('override')}
+            resetLabel={t('reset')}
+            disabled={disabled}
+            onReset={() => { props.reset('petIdleTopmost') }}
+          >
+            <button
+              type="button"
+              role="switch"
+              aria-checked={value.petIdleTopmost}
+              aria-label={t('petIdleTopmost')}
+              className={clsx(css.toggle, value.petIdleTopmost && css.toggleOn)}
+              disabled={disabled || !value.petEnabled}
+              onClick={() => { props.set('petIdleTopmost', !value.petIdleTopmost) }}
             >
               <span className={css.thumb} />
             </button>
@@ -286,6 +310,7 @@ export function NotificationSection(props: NotificationSectionProps) {
               <option value="bottom-right">{t('bottomRight')}</option>
             </select>
           </FieldShell>
+          <p className={css.note}>{t('petMotionNote')}</p>
         </div>
       )}
       {!snapshot.writable && snapshot.status === 'ready'

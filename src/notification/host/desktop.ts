@@ -4,18 +4,25 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { NotificationSettings, PetState } from '../shared.js'
+import type { NotificationSettings, PetOutcome, PetState } from '../shared.js'
+import {
+  PetPositionStore,
+  parsePetPositionEvent,
+  type PetPlacementState,
+} from './position-store.js'
 import { customSoundPath } from './sound-files.js'
 
 type SoundEvent = 'completion' | 'confirmation'
 
 interface CompanionMessage {
-  command: 'config' | 'sound' | 'state' | 'stop'
+  command: 'config' | 'effect' | 'sound' | 'state' | 'stop'
   config?: NotificationSettings & {
     completionCustomSoundPath?: string
     confirmationCustomSoundPath?: string
+    placementState?: PetPlacementState
   }
   kind?: SoundEvent
+  outcome?: PetOutcome
   state?: PetState
 }
 
@@ -29,6 +36,10 @@ export class DesktopCompanion {
   private settings: NotificationSettings
   private state: PetState = 'idle'
   private tail: Promise<void> = Promise.resolve()
+  private placementTail: Promise<void> = Promise.resolve()
+  private readonly positionStore: PetPositionStore
+  private placementLoaded = false
+  private configured = false
   private disposed = false
   private retryAfter = 0
 
@@ -38,12 +49,20 @@ export class DesktopCompanion {
     private readonly platform: NodeJS.Platform = process.platform,
   ) {
     this.settings = initial
+    this.positionStore = new PetPositionStore(ctx)
   }
 
   /** Apply live settings and start or stop the persistent pet as required. */
   configure(settings: NotificationSettings): void {
+    const startingCornerChanged = this.configured && settings.petPosition !== this.settings.petPosition
+    this.configured = true
     this.settings = settings
     this.enqueue(async () => {
+      await this.loadPlacement()
+      if (startingCornerChanged) {
+        await this.placementTail
+        await this.positionStore.reset()
+      }
       if (settings.petEnabled) {
         const handle = await this.ensure()
         if (handle !== undefined) {
@@ -63,6 +82,15 @@ export class DesktopCompanion {
     this.enqueue(async () => {
       const handle = await this.ensure()
       if (handle !== undefined) await this.send(handle, { command: 'state', state: this.state })
+    })
+  }
+
+  /** Play a transient completion or blocked reaction without changing task state. */
+  showOutcome(outcome: PetOutcome): void {
+    if (!this.settings.petEnabled) return
+    this.enqueue(async () => {
+      const handle = await this.ensure()
+      if (handle !== undefined) await this.send(handle, { command: 'effect', outcome })
     })
   }
 
@@ -86,6 +114,7 @@ export class DesktopCompanion {
     this.disposed = true
     await this.tail
     if (this.handle !== undefined) await this.stop(this.handle)
+    await this.placementTail
   }
 
   private enqueue(operation: () => Promise<void>): void {
@@ -107,6 +136,7 @@ export class DesktopCompanion {
     if (this.handle !== undefined) return this.handle
     if (Date.now() < this.retryAfter) return undefined
     try {
+      await this.loadPlacement()
       this.executable ??= await this.ctx.subprocess.resolveExecutable('powershell.exe')
       const handle = this.ctx.subprocess.spawn({
         argv: [
@@ -125,12 +155,13 @@ export class DesktopCompanion {
         cwd: dirname(SCRIPT_PATH),
         stdio: {
           stdin: 'pipe',
-          stdout: { maxBytes: 4_096 },
+          stdout: 'pipe',
           stderr: { maxBytes: 16_384 },
         },
         graceMs: 1_500,
       })
       this.handle = handle
+      this.attachOutput(handle)
       void handle.done.then(
         (outcome) => {
           if (this.handle === handle) this.handle = undefined
@@ -173,11 +204,55 @@ export class DesktopCompanion {
   private companionConfig(): NonNullable<CompanionMessage['config']> {
     const completionCustomSoundPath = customSoundPath(this.ctx, this.settings.completionCustomSoundFile)
     const confirmationCustomSoundPath = customSoundPath(this.ctx, this.settings.confirmationCustomSoundFile)
+    const placementState = this.positionStore.snapshot()
     return {
       ...this.settings,
       ...(completionCustomSoundPath === undefined ? {} : { completionCustomSoundPath }),
       ...(confirmationCustomSoundPath === undefined ? {} : { confirmationCustomSoundPath }),
+      ...(placementState.activeDisplay === '' ? {} : { placementState }),
     }
+  }
+
+  private async loadPlacement(): Promise<void> {
+    if (this.placementLoaded) return
+    try {
+      this.placementLoaded = await this.positionStore.load()
+    } catch (error) {
+      this.placementLoaded = true
+      this.ctx.logger.warn(
+        `desktop notifications: unable to read saved pet position: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
+  private attachOutput(handle: SubprocessHandle): void {
+    const stdout = handle.stdout
+    if (stdout === undefined) throw new Error('companion stdout is unavailable')
+    stdout.setEncoding('utf8')
+    let buffered = ''
+    stdout.on('data', (chunk: string) => {
+      buffered += chunk
+      if (buffered.length > 16_384) {
+        buffered = ''
+        this.ctx.logger.warn('desktop notifications: discarded oversized companion output')
+        return
+      }
+      let newline = buffered.indexOf('\n')
+      while (newline >= 0) {
+        const line = buffered.slice(0, newline).trim()
+        buffered = buffered.slice(newline + 1)
+        const event = parsePetPositionEvent(line)
+        if (event !== undefined) {
+          this.positionStore.record(event)
+          this.placementTail = this.placementTail.then(() => this.positionStore.persist()).catch((error: unknown) => {
+            this.ctx.logger.warn(
+              `desktop notifications: unable to save pet position: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          })
+        }
+        newline = buffered.indexOf('\n')
+      }
+    })
   }
 
   private async stop(handle: SubprocessHandle, graceMs = 1_500): Promise<void> {

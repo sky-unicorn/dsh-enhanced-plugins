@@ -1,7 +1,7 @@
 /** Fold live Session events into the three desktop-pet states. */
 
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import type { PetState } from '../shared.js'
+import type { PetOutcome, PetState } from '../shared.js'
 
 interface SessionActivity {
   running: boolean
@@ -11,6 +11,7 @@ interface SessionActivity {
 }
 
 const HUMAN_INTERACTION_TOOLS = new Set(['ask_user_question', 'exit_plan_mode'])
+const BLOCKED_END_REASONS = new Set(['blocked', 'error', 'max-tokens', 'interrupted'])
 
 export interface NotificationTransition {
   state: PetState
@@ -18,6 +19,8 @@ export interface NotificationTransition {
   confirmation: boolean
   /** A top-level turn completed successfully. */
   completion: boolean
+  /** A short-lived top-level completion or blocked reaction. */
+  outcome: PetOutcome | undefined
 }
 
 function activityOf(session: Session): SessionActivity {
@@ -87,9 +90,10 @@ export class NotificationStateTracker {
     activity: SessionActivity,
     event: SessionEvent,
     announce: boolean,
-  ): Pick<NotificationTransition, 'confirmation' | 'completion'> {
+  ): Pick<NotificationTransition, 'confirmation' | 'completion' | 'outcome'> {
     let confirmation = false
     let completion = false
+    let outcome: PetOutcome | undefined
     const type = event.type as string
 
     switch (type) {
@@ -103,7 +107,17 @@ export class NotificationStateTracker {
         const reason = event.data !== null && typeof event.data === 'object'
           ? (event.data as { reason?: { kind?: unknown } }).reason
           : undefined
-        completion = announce && activity.topLevel && reason?.kind === 'completed'
+        if (announce && activity.topLevel && reason?.kind === 'completed') {
+          completion = true
+          outcome = 'ready'
+        } else if (
+          announce
+          && activity.topLevel
+          && typeof reason?.kind === 'string'
+          && BLOCKED_END_REASONS.has(reason.kind)
+        ) {
+          outcome = 'blocked'
+        }
         break
       }
       case 'approval/asked': {
@@ -135,6 +149,6 @@ export class NotificationStateTracker {
       }
     }
 
-    return { confirmation, completion }
+    return { confirmation, completion, outcome }
   }
 }

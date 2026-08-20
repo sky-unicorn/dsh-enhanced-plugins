@@ -12,8 +12,17 @@ import { NotificationStateTracker } from './state.js'
 export { Config, SETTINGS_NAMESPACE } from './config.js'
 export { DesktopCompanion } from './desktop.js'
 export { NotificationConfigRemote } from './remote.js'
+export {
+  PetPositionStore,
+  parsePetPositionEvent,
+  type PetDisplayPlacement,
+  type PetPlacementState,
+  type PetPositionEvent,
+} from './position-store.js'
 export { NotificationStateTracker, type NotificationTransition } from './state.js'
-export type { NotificationSettings, NotificationSound, PetPosition, PetSize, PetState } from '../shared.js'
+export type {
+  NotificationSettings, NotificationSound, PetOutcome, PetPosition, PetSize, PetState,
+} from '../shared.js'
 
 export const name = 'desktop-notifications'
 export const inject = ['sessions', 'subprocess']
@@ -43,6 +52,7 @@ export function apply(ctx: Context, config: NotificationSettings): void {
       companion.setState(transition.state)
       if (transition.confirmation) companion.play('confirmation')
       if (transition.completion) companion.play('completion')
+      if (transition.outcome !== undefined) companion.showOutcome(transition.outcome)
     })
     const disposeSession = ctx.on('session/disposed', (session) => {
       companion.setState(tracker.remove(session))

@@ -48,9 +48,11 @@ export const Config: z<NotificationSettings> = z.object({
   confirmationCustomSoundName: z.string().default(DEFAULT_NOTIFICATION_SETTINGS.confirmationCustomSoundName)
     .description('Display name of the uploaded confirmation WAV.'),
   petEnabled: z.boolean().default(DEFAULT_NOTIFICATION_SETTINGS.petEnabled)
-    .description('Show the native always-on-top DeepSeek desktop pet.'),
+    .description('Show the native DeepSeek desktop pet outside the browser.'),
+  petIdleTopmost: z.boolean().default(DEFAULT_NOTIFICATION_SETTINGS.petIdleTopmost)
+    .description('Keep the desktop pet above other windows while it is idle.'),
   petSize: Size.default(DEFAULT_NOTIFICATION_SETTINGS.petSize)
     .description('Desktop pet size in device-independent pixels.'),
   petPosition: Position.default(DEFAULT_NOTIFICATION_SETTINGS.petPosition)
-    .description('Screen corner used when the desktop pet starts.'),
+    .description('Fallback corner used before a dragged desktop-pet position is remembered.'),
 })

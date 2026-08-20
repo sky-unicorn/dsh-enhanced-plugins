@@ -24,6 +24,7 @@
         completionSound: subtle
         confirmationSound: prominent
         petEnabled: false
+        petIdleTopmost: true
         petSize: 112
         petPosition: bottom-right
 

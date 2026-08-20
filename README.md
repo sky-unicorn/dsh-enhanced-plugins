@@ -66,12 +66,12 @@ The screenshots below use the Simplified Chinese locale; DSH translates labels a
 Location: **Settings → Desktop pet**. This is an independent entry in the left Settings navigation, not a card under Plugins.
 
 1. Choose **Off**, either built-in default sound, or **Custom WAV** independently for task-completion and confirmation sounds. Uploading a WAV selects it immediately; files are limited to 2 MiB and stored inside the current DSH profile.
-2. Turn on **Enable desktop pet** to show the DeepSeek fish in a native always-on-top window outside the browser.
-3. Choose its size and starting corner. You can drag the pet anywhere after it appears.
+2. Turn on **Enable desktop pet** to show the native DeepSeek fish outside the browser. **Keep idle pet on top** defaults on; when disabled, other windows may cover the idle pet while working, attention, and end reactions remain topmost.
+3. Choose its size and starting corner, then drag it anywhere. Physical desktop outer edges block the pet, while adjoining display boundaries stay open so it can move directly to another screen. On mouse release the complete window lands inside the target display's visible work area, and the plugin stores a normalized position per display inside the current profile. Both size and position survive other setting changes and restarts. Resolution, scaling, and work-area changes are clamped back on-screen. If the active display is offline, the pet falls back to another connected display with a saved position or to the configured corner; reconnecting the original display can restore its position. Changing **Starting position** clears the dragged positions and applies that corner again.
 
-The pet has three live states across all sessions: **Idle** gently floats and breathes, **Working** swims with bubbles and a rotating activity ring, and **Needs attention** hops, shakes, pulses, and displays an alert badge while an approval, plan review, or `ask_user_question` answer is pending. Needs-attention state has priority when other sessions are still running. Completion sounds fire only for top-level tasks, so completed subagents do not create duplicate chimes.
+The pet uses an independently implemented Hatch-style motion system without copying Codex's private assets or implementation. It hatches in when enabled; **Idle** gently floats, breathes, and performs occasional tricks; **Working** swims with bubbles and a rotating activity ring; and **Needs attention** hops, shakes, pulses, and displays an alert badge. A top-level turn ending also produces a short **Ready** celebration or **Blocked** reaction. State is folded across all sessions, with Needs attention taking highest priority. Completion sounds and end reactions fire only for top-level tasks, so subagents do not create duplicates.
 
-Settings apply live. Pet motion uses native WPF animations so the window remains responsive; hovering keeps the arrow cursor and dragging temporarily uses the move cursor. Turning the pet off closes and joins its managed PowerShell/WPF process; with the pet disabled, sound notifications use a short-lived process and leave no resident helper. The child receives only a fixed script path plus JSON control messages over stdin, and DSH's subprocess service owns tree cleanup.
+Settings apply live. Pet motion uses native WPF animations so the window remains responsive; hovering triggers a small reaction while keeping the arrow cursor, and dragging temporarily uses the move cursor. When Windows Reduced Motion is enabled, the pet automatically uses static state frames. Turning the pet off closes and joins its managed PowerShell/WPF process; with the pet disabled, sound notifications use a short-lived process and leave no resident helper. The child receives only a fixed script path plus JSON control messages over stdin, and DSH's subprocess service owns tree cleanup.
 
 ### Plugin Community
 
@@ -160,8 +160,9 @@ The default composition is in [`cordis.patch.yml`](cordis.patch.yml). A later pr
 | `completionSound` | `subtle` | `off`, `subtle`, `prominent`, or uploaded `custom` task-completion sound |
 | `confirmationSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` attention sound |
 | `petEnabled` | `false` | Show the native global desktop pet |
+| `petIdleTopmost` | `true` | Keep the pet above other windows while it is idle |
 | `petSize` | `112` | Pet size: `80`, `112`, `144`, or `176` device-independent pixels |
-| `petPosition` | `bottom-right` | Starting corner: `top-left`, `top-right`, `bottom-left`, or `bottom-right` |
+| `petPosition` | `bottom-right` | Fallback/reset corner: `top-left`, `top-right`, `bottom-left`, or `bottom-right` |
 
 The four `*CustomSoundFile` / `*CustomSoundName` settings fields are Host-owned upload metadata. Select custom sounds through the Settings page instead of editing those fields manually.
 

@@ -15,7 +15,7 @@ import { SETTINGS_NAMESPACE } from './config.js'
 import { removeCustomSound, saveCustomSound } from './sound-files.js'
 
 const FIELDS = new Set<keyof NotificationSettings>([
-  'completionSound', 'confirmationSound', 'petEnabled', 'petSize', 'petPosition',
+  'completionSound', 'confirmationSound', 'petEnabled', 'petIdleTopmost', 'petSize', 'petPosition',
 ])
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -32,6 +32,7 @@ function validFieldValue(field: keyof NotificationSettings, value: unknown): boo
     case 'confirmationSound':
       return value === 'off' || value === 'subtle' || value === 'prominent' || value === 'custom'
     case 'petEnabled':
+    case 'petIdleTopmost':
       return typeof value === 'boolean'
     case 'petSize':
       return value === 80 || value === 112 || value === 144 || value === 176
