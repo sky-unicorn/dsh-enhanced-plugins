@@ -1,4 +1,5 @@
 lib/
+packages/*/assets/
 node_modules/
 *.tgz
 coverage/

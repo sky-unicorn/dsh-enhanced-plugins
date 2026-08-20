@@ -1,0 +1,10 @@
+- insert:
+    - id: plugin-market
+      name: 'dsh-enhanced-plugin-market'
+      config:
+        profile: web
+        topic: dsh-plugin
+        pageSize: 12
+        operationTimeoutMs: 120000
+        githubTokenEnv: GITHUB_TOKEN
+        cliPath: ''

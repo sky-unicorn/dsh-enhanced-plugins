@@ -2,21 +2,21 @@
 
 English | [中文](README.zh.md)
 
-`dsh-enhanced-plugins` is an all-in-one enhancement bundle for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. One installation adds native desktop alerts and a DeepSeek pet, a plugin community, MCP server management, model request-type declarations, workspace file references, last-message editing, and Claude Code / Codex subagent switches.
+`dsh-enhanced-plugins` is an enhancement collection for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. Install the aggregate bundle for every feature, or install only the independent Host, Client, and bundle packages you select.
 
 The package uses only public DSH plugin extension points and does not modify DSH core. Each of the seven features owns its applicable Host, Client, Settings, and runtime lifecycle, so an unavailable optional dependency does not prevent unrelated features from loading.
 
 ## Features at a glance
 
-| Feature | Location | Purpose |
-| --- | --- | --- |
-| [Desktop alerts & pet](#desktop-alerts--pet) | Settings → Desktop pet | Play default or custom task-state sounds and optionally show an animated native DeepSeek fish |
-| [Plugin Community](#plugin-community) | Settings → Plugin Community | Find, install, and remove community DSH plugins |
-| [MCP server manager](#mcp-server-manager) | Settings → Plugins → Plugin configuration → MCP servers | Manage stdio and Streamable HTTP MCP servers |
-| [pi-ai model request types](#pi-ai-model-request-types) | Settings → Plugins → Plugin configuration → pi-ai model request types | Declare whether models accept text or image requests |
-| [Workspace file references](#workspace-file-references) | Type `#` in the session composer | Search files and add a text snapshot to the next request |
-| [Edit last message](#edit-last-message) | Latest user-message bubble | Revise a turn and regenerate in the current session |
-| [Product subagents](#product-subagents) | Settings → Subagents | Enable or disable Claude Code / Codex tools live |
+| Feature | Install name | Location | Purpose |
+| --- | --- | --- | --- |
+| [Desktop alerts & pet](#desktop-alerts--pet) | `notification` | Settings → Desktop pet | Play default or custom task-state sounds and optionally show an animated native DeepSeek fish |
+| [Plugin Community](#plugin-community) | `plugin-market` | Settings → Plugin Community | Find, install, and remove community DSH plugins |
+| [MCP server manager](#mcp-server-manager) | `mcp-server-manager` | Settings → Plugins → Plugin configuration → MCP servers | Manage stdio and Streamable HTTP MCP servers |
+| [pi-ai model request types](#pi-ai-model-request-types) | `model-input-types` | Settings → Plugins → Plugin configuration → pi-ai model request types | Declare whether models accept text or image requests |
+| [Workspace file references](#workspace-file-references) | `referenced-file` | Type `#` in the session composer | Search files and add a text snapshot to the next request |
+| [Edit last message](#edit-last-message) | `edit-last-message` | Latest user-message bubble | Revise a turn and regenerate in the current session |
+| [Product subagents](#product-subagents) | `sub-agent` | Settings → Subagents | Enable or disable Claude Code / Codex tools live |
 
 ## Requirements
 
@@ -29,7 +29,21 @@ DSH is still a developer preview. After upgrading DSH, check this project's supp
 
 ## Installation
 
-The installer handles dependency installation, package build, `web` profile installation, and load verification. Run the following commands from the `dsh-enhanced-plugins` repository root.
+The installer handles dependency installation, selected-package builds, `web` profile installation, and load verification. Run the following commands from the `dsh-enhanced-plugins` repository root.
+
+List the available features first:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
+```
+
+Pass comma-separated install names from the feature table to install only those features:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
+```
+
+`-Features` describes the final enhanced-feature set for the profile. The script installs the selected bundles first, then removes the aggregate bundle, unselected enhanced bundles, and legacy packages that conflict with selected features. Omitting the option or passing `-Features all` preserves the original aggregate installation.
 
 ### Plugin and DSH source under the same parent directory
 
@@ -41,7 +55,7 @@ Use this directory layout:
 └── dsh-enhanced-plugins/
 ```
 
-The installer discovers the sibling `deepseek-harness` checkout automatically:
+The installer discovers the sibling `deepseek-harness` checkout automatically; this command installs every feature:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
@@ -202,7 +216,7 @@ The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is read-onl
 
 </details>
 
-To expose product-subagent tools only to selected Agent presets, disable or remove the root `subagent-product-toggle-tools` row and mount `dsh-enhanced-plugins/sub-agent/preset` only inside those preset compositions. Do not mount both layouts in the same scope.
+To expose product-subagent tools only to selected Agent presets, disable or remove the root `subagent-product-toggle-tools` row and mount the matching entry only inside those preset compositions: use `dsh-enhanced-plugins/sub-agent/preset` for the aggregate package or `dsh-enhanced-sub-agent/preset` for the independent package. Do not mount both layouts in the same scope.
 
 ## Development and verification
 
@@ -219,7 +233,7 @@ npm install
 npm run typecheck
 npm test
 npm run build
-npm pack --dry-run
+npm run pack:dry-run
 git diff --check
 ```
 

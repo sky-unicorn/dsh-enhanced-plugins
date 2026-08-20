@@ -40,6 +40,7 @@
     "src/edit-last-message/shared.ts",
     "src/edit-last-message/host/**/*.ts",
     "src/mcp-server-manager/host/**/*.ts",
+    "src/model-input-types/host/**/*.ts",
     "src/notification/shared.ts",
     "src/notification/host/**/*.ts",
     "src/plugin-market/*.ts",

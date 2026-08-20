@@ -2,21 +2,21 @@
 
 [English](README.md) | 中文
 
-`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的一体化增强插件包。安装一次即可获得原生桌面提示与 DeepSeek 宠物、插件社区、MCP 服务器管理、模型请求类型、工作区文件引用、上一条消息重发，以及 Claude Code / Codex 子智能体开关。
+`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的增强插件集合。既可安装聚合包一次获得全部功能，也可只安装所选功能的独立 Host、Client 和 bundle。
 
 本项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。七项功能分别维护自己的 Host、Client、Settings 和运行时生命周期，因此某个可选依赖不可用时不会阻止其他功能加载。
 
 ## 功能一览
 
-| 功能 | 使用位置 | 用途 |
-| --- | --- | --- |
-| [桌面提示与宠物](#桌面提示与宠物) | 设置 → 桌面宠物 | 播放默认或自定义任务提示音，并可显示原生动态 DeepSeek 鱼宠物 |
-| [插件社区](#插件社区) | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
-| [MCP 服务器管理](#mcp-服务器管理) | 设置 → 插件 → 插件配置 → MCP 服务器 | 管理 stdio / Streamable HTTP MCP 服务器 |
-| [pi-ai 模型请求类型](#pi-ai-模型请求类型) | 设置 → 插件 → 插件配置 → pi-ai 模型请求类型 | 声明模型接受纯文本还是图片请求 |
-| [工作区文件引用](#工作区文件引用) | 会话输入框中输入 `#` | 搜索文件并把文本快照加入下一次请求 |
-| [编辑上一条消息](#编辑上一条消息) | 最后一条用户消息气泡 | 修改该轮内容并在当前会话重新生成 |
-| [产品子智能体](#产品子智能体) | 设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
+| 功能 | 安装名称 | 使用位置 | 用途 |
+| --- | --- | --- | --- |
+| [桌面提示与宠物](#桌面提示与宠物) | `notification` | 设置 → 桌面宠物 | 播放默认或自定义任务提示音，并可显示原生动态 DeepSeek 鱼宠物 |
+| [插件社区](#插件社区) | `plugin-market` | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
+| [MCP 服务器管理](#mcp-服务器管理) | `mcp-server-manager` | 设置 → 插件 → 插件配置 → MCP 服务器 | 管理 stdio / Streamable HTTP MCP 服务器 |
+| [pi-ai 模型请求类型](#pi-ai-模型请求类型) | `model-input-types` | 设置 → 插件 → 插件配置 → pi-ai 模型请求类型 | 声明模型接受纯文本还是图片请求 |
+| [工作区文件引用](#工作区文件引用) | `referenced-file` | 会话输入框中输入 `#` | 搜索文件并把文本快照加入下一次请求 |
+| [编辑上一条消息](#编辑上一条消息) | `edit-last-message` | 最后一条用户消息气泡 | 修改该轮内容并在当前会话重新生成 |
+| [产品子智能体](#产品子智能体) | `sub-agent` | 设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
 
 ## 运行要求
 
@@ -29,7 +29,21 @@ DSH 仍处于开发者预览阶段。升级 DSH 后若出现接口不兼容，�
 
 ## 安装
 
-安装脚本会自动完成依赖安装、插件构建、`web` profile 安装和加载验证。以下命令都需要在 `dsh-enhanced-plugins` 仓库根目录执行。
+安装脚本会自动完成依赖安装、所选插件构建、`web` profile 安装和加载验证。以下命令都需要在 `dsh-enhanced-plugins` 仓库根目录执行。
+
+先查看可选功能：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
+```
+
+只安装指定功能时，通过逗号分隔“功能一览”中的安装名称：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
+```
+
+`-Features` 表示 profile 最终保留的增强功能集合。脚本先安装所选独立 bundle，成功后再移除原聚合包、未选择的增强 bundle，以及与所选功能冲突的旧包。省略参数或传入 `-Features all` 仍安装原来的全量聚合包。
 
 ### 插件与 DSH 源码位于同一父目录
 
@@ -41,7 +55,7 @@ DSH 仍处于开发者预览阶段。升级 DSH 后若出现接口不兼容，�
 └── dsh-enhanced-plugins/
 ```
 
-脚本会自动找到同级的 `deepseek-harness`：
+脚本会自动找到同级的 `deepseek-harness`；以下命令安装全部功能：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
@@ -200,7 +214,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 </details>
 
-若只想让部分 Agent preset 获得产品子智能体工具，请禁用或移除根层的 `subagent-product-toggle-tools` 行，并只在目标 preset 中挂载 `dsh-enhanced-plugins/sub-agent/preset`。同一 scope 不要同时挂载两种布局。
+若只想让部分 Agent preset 获得产品子智能体工具，请禁用或移除根层的 `subagent-product-toggle-tools` 行，并只在目标 preset 中挂载对应入口：聚合包使用 `dsh-enhanced-plugins/sub-agent/preset`，独立包使用 `dsh-enhanced-sub-agent/preset`。同一 scope 不要同时挂载两种布局。
 
 ## 开发与验证
 
@@ -217,7 +231,7 @@ npm install
 npm run typecheck
 npm test
 npm run build
-npm pack --dry-run
+npm run pack:dry-run
 git diff --check
 ```
 

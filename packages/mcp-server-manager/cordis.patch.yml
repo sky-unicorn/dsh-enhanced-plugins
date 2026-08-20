@@ -1,0 +1,3 @@
+- insert:
+    - id: mcp-manager
+      name: 'dsh-enhanced-mcp-server-manager'

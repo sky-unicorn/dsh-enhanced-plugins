@@ -1,0 +1,3 @@
+- insert:
+    - id: edit-last-message-host
+      name: 'dsh-enhanced-edit-last-message'

@@ -1,0 +1,15 @@
+- insert:
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+
+    - id: subagent-claude-code
+      name: '@deepseek-ai/dsh-subagent-claude-code'
+
+    - id: subagent-product-toggles
+      name: 'dsh-enhanced-sub-agent'
+      config:
+        claudeCode: false
+        codex: false
+
+    - id: subagent-product-toggle-tools
+      name: 'dsh-enhanced-sub-agent/preset'

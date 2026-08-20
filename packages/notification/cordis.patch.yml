@@ -1,0 +1,11 @@
+- insert:
+    - id: desktop-notifications
+      name: 'dsh-enhanced-notification'
+      config:
+        completionSound: subtle
+        confirmationSound: prominent
+        blockedSound: prominent
+        petEnabled: false
+        petIdleTopmost: true
+        petSize: 112
+        petPosition: bottom-right
