@@ -1,7 +1,7 @@
 {
   "name": "dsh-enhanced-plugins",
   "version": "0.1.0",
-  "description": "Aggregate and selective DeepSeek Harness bundles for desktop notifications, editing, MCP management, model request types, plugin discovery, file references, and product subagents",
+  "description": "Aggregate and selective DeepSeek Harness bundles for desktop notifications, editing, MCP management, model request types, plugin discovery, and product subagents",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -11,7 +11,6 @@
     "./mcp-server-manager": "./lib/mcp-server-manager/host/index.js",
     "./notification": "./lib/notification/host/index.js",
     "./plugin-market": "./lib/plugin-market/index.js",
-    "./referenced-file": "./lib/referenced-file/host/index.js",
     "./sub-agent/host": "./lib/sub-agent/host.js",
     "./sub-agent/preset": "./lib/sub-agent/preset.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
@@ -37,11 +36,28 @@
       ]
     }
   },
+  "dshEnhanced": {
+    "retiredFeatures": [
+      {
+        "feature": "referenced-file",
+        "packageNames": [
+          "dsh-enhanced-referenced-file",
+          "dsh-referenced-file"
+        ],
+        "notice": "Official DSH now supports @ workspace file references; update DSH to the latest release."
+      }
+    ]
+  },
   "files": [
     "lib/",
     "assets/plugins-cache.json",
     "assets/notification/",
-    "assets/readme/",
+    "assets/readme/desktop-notifications.png",
+    "assets/readme/edit-last-message.png",
+    "assets/readme/mcp-server-manager.png",
+    "assets/readme/model-input-types.png",
+    "assets/readme/plugin-community.png",
+    "assets/readme/subagent-toggles.png",
     "scripts/migrate-to-enhanced-plugin.ps1",
     "cordis.patch.yml",
     "README.md",
@@ -56,10 +72,9 @@
     "test:model-input-types": "vitest run --config vitest.model-input-types.config.ts",
     "test:notification": "vitest run --config vitest.notification.config.ts",
     "test:market": "vitest run --config vitest.market.config.ts",
-    "test:referenced-file": "vitest run --config vitest.referenced-file.config.ts",
     "test:sub-agent": "vitest run --config vitest.sub-agent.config.ts",
     "test:packages": "vitest run --config vitest.packages.config.ts",
-    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:model-input-types && npm run test:notification && npm run test:market && npm run test:referenced-file && npm run test:sub-agent && npm run test:packages",
+    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:model-input-types && npm run test:notification && npm run test:market && npm run test:sub-agent && npm run test:packages",
     "check": "npm run typecheck && npm test && npm run build",
     "pack:dry-run": "node scripts/pack-dry-run.mjs",
     "prepare": "npm run build"
@@ -93,7 +108,6 @@
     "@deepseek-ai/dsh-client-ui-settings-plugins": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-client-ui-slots": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-credentials": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-fs": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-llm": ">=0.1.0-rc.5 <0.2.0",
     "@deepseek-ai/dsh-mcp-client": ">=0.1.0-rc.5 <0.2.0",

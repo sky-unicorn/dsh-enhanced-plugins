@@ -43,8 +43,6 @@
     "src/notification/client/**/*.tsx",
     "src/plugin-market/client/**/*.ts",
     "src/plugin-market/client/**/*.tsx",
-    "src/referenced-file/client/**/*.ts",
-    "src/referenced-file/client/**/*.tsx",
     "src/sub-agent/client/**/*.ts",
     "src/sub-agent/client/**/*.tsx",
     "src/sub-agent/shared.ts"

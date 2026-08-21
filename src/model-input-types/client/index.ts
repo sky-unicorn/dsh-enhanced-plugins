@@ -54,8 +54,7 @@ export function apply(ctx: ClientContext): void {
 
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
-    id: 'pi-ai-model-input-types',
-    order: 40,
+    key: PI_AI_SETTINGS_NS,
     locale: NS,
     inject: () => controller.inject(),
   }, ModelInputTypesCard))

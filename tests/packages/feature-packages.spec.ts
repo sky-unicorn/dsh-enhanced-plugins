@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -22,7 +22,6 @@ const expectedRows: Record<string, string[]> = {
   'model-input-types': ['model-input-types'],
   notification: ['desktop-notifications'],
   'plugin-market': ['plugin-market'],
-  'referenced-file': ['referenced-file'],
   'sub-agent': [
     'subagent-codex', 'subagent-claude-code', 'subagent-product-toggles', 'subagent-product-toggle-tools',
   ],
@@ -30,7 +29,7 @@ const expectedRows: Record<string, string[]> = {
 
 function featurePackages(): { directory: string, manifest: FeatureManifest, patch: string }[] {
   return readdirSync(packagesRoot, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
+    .filter(entry => entry.isDirectory() && existsSync(resolve(packagesRoot, entry.name, 'package.json')))
     .map((entry) => {
       const directory = resolve(packagesRoot, entry.name)
       const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')) as FeatureManifest
@@ -68,6 +67,7 @@ describe('selective feature packages', () => {
     ], { cwd: root, encoding: 'utf8' })
     expect(listed.status, listed.stderr).toBe(0)
     for (const feature of Object.keys(expectedRows)) expect(listed.stdout).toContain(`${feature}\t`)
+    expect(listed.stdout).not.toContain('referenced-file\t')
 
     const selected = spawnSync('powershell.exe', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
@@ -75,5 +75,25 @@ describe('selective feature packages', () => {
     ], { cwd: root, encoding: 'utf8' })
     expect(selected.status, selected.stderr).toBe(0)
     expect(selected.stdout).toContain("feature set 'mcp-server-manager,notification'")
+
+    const retired = spawnSync('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+      '-Features', 'referenced-file', '-WhatIf',
+    ], { cwd: root, encoding: 'utf8' })
+    expect(retired.status).not.toBe(0)
+    expect(`${retired.stdout}\n${retired.stderr}`).toContain("Feature 'referenced-file' is retired and cannot be installed")
+    expect(`${retired.stdout}\n${retired.stderr}`).toContain('Official DSH now supports @ workspace file references')
+  }, 10_000)
+
+  it('keeps retired package names as migration metadata without publishing the feature', () => {
+    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
+      dshEnhanced: { retiredFeatures: Array<{ feature: string; packageNames: string[]; notice: string }> }
+    }
+    expect(manifest.dshEnhanced.retiredFeatures).toContainEqual({
+      feature: 'referenced-file',
+      packageNames: ['dsh-enhanced-referenced-file', 'dsh-referenced-file'],
+      notice: 'Official DSH now supports @ workspace file references; update DSH to the latest release.',
+    })
+    expect(readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8')).not.toContain('referenced-file')
   })
 })

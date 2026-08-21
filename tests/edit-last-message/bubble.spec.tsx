@@ -29,7 +29,7 @@ function propsOf(options: {
   }
   return {
     node: { key: `user:${seq}`, kind: 'user', data },
-    loadImage: vi.fn(),
+    renderMessageImages: vi.fn(() => null),
     useSession: (selector: (value: typeof snapshot) => unknown) => selector(snapshot),
     editAndResend: options.editAndResend ?? vi.fn().mockResolvedValue(undefined),
     t: (key, values) => {
@@ -116,7 +116,7 @@ describe('EditableUserMessage', () => {
       },
     }
     const shared = {
-      loadImage: vi.fn(),
+      renderMessageImages: vi.fn(() => null),
       useSession: (selector: (value: typeof snapshot) => unknown) => selector(snapshot),
       editAndResend: vi.fn().mockResolvedValue(undefined),
       t: propsOf().t,

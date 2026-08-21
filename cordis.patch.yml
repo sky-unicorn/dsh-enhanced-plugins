@@ -15,9 +15,6 @@
     - id: mcp-manager
       name: 'dsh-enhanced-plugins/mcp-server-manager'
 
-    - id: referenced-file
-      name: 'dsh-enhanced-plugins/referenced-file'
-
     - id: desktop-notifications
       name: 'dsh-enhanced-plugins/notification'
       config:

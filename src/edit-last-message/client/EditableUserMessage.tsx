@@ -3,7 +3,6 @@ import {
 } from 'react'
 import type { UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { ImageGallery } from '@deepseek-ai/dsh-client-ui-attachment'
 import {
   Button, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconLoadingOutline16,
   IconSendOutline16, JsonBlock, MessageText, Tooltip, writeClipboard,
@@ -83,13 +82,13 @@ const EDITOR_MAX_HEIGHT_PX = 192
 
 interface EditableBubbleProps extends EditableUserMessageInjected {
   readonly data: Pick<UserMessageNode, 'seq' | 'time' | 'content' | 'source'>
-  readonly loadImage: EditableUserMessageProps['loadImage']
+  readonly renderMessageImages: EditableUserMessageProps['renderMessageImages']
   readonly useSession: EditableUserMessageProps['useSession']
   readonly t: EditableUserMessageProps['t']
 }
 
 /** Shared bubble body for an append-origin or replacement-projected user message. */
-function EditableUserBubble({ data, loadImage, useSession, editAndResend, t }: EditableBubbleProps) {
+function EditableUserBubble({ data, renderMessageImages, useSession, editAndResend, t }: EditableBubbleProps) {
   const { text, images, rest } = contentParts(data.content)
   const candidate = editableText(data.content)
   const running = useSession(snapshot => snapshot.running)
@@ -171,21 +170,10 @@ function EditableUserBubble({ data, loadImage, useSession, editAndResend, t }: E
     }
   }, [cancelEdit, save])
 
-  const imageLabels = {
-    image: t('image.label'),
-    open: t('image.open'),
-    openNamed: (label: string) => t('image.openNamed', { label }),
-    loading: t('image.loading'),
-    loadFailed: t('image.loadFailed'),
-    lightbox: {
-      dialog: t('image.preview'),
-      close: t('image.closePreview'),
-    },
-  }
   return (
     <div className={css.userRow} data-time-hover-root>
       <div className={css.userStack}>
-        <ImageGallery images={images} load={loadImage} align="end" labels={imageLabels} />
+        {renderMessageImages({ images, align: 'end' })}
         {(text !== '' || rest.length > 0) && (
           <div className={css.bubble} data-editing={editing || undefined}>
             {editing
@@ -271,12 +259,12 @@ function EditableUserBubble({ data, loadImage, useSession, editAndResend, t }: E
 
 /** User bubble with inline edit-and-resend support on the stopped transcript tail. */
 export function EditableUserMessage({
-  node, loadImage, useSession, editAndResend, t,
+  node, renderMessageImages, useSession, editAndResend, t,
 }: EditableUserMessageProps) {
   return (
     <EditableUserBubble
       data={node.data}
-      loadImage={loadImage}
+      renderMessageImages={renderMessageImages}
       useSession={useSession}
       editAndResend={editAndResend}
       t={t}
@@ -341,7 +329,7 @@ function useDiscardedRange(
 
 /** Edited bubble projected at the first version's position in this same session. */
 export function EditedUserMessage({
-  node, loadImage, useSession, editAndResend, t,
+  node, renderMessageImages, useSession, editAndResend, t,
 }: EditedUserMessageProps) {
   const data = node.data
   const latest = useSession(snapshot => isLatestRootEdit(snapshot, data))
@@ -361,7 +349,7 @@ export function EditedUserMessage({
           content: data.content,
           source: data.source,
         }}
-        loadImage={loadImage}
+        renderMessageImages={renderMessageImages}
         useSession={useSession}
         editAndResend={editAndResend}
         t={t}

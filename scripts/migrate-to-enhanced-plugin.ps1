@@ -57,12 +57,94 @@ function Get-ProfileDependencies {
   }
 
   $profileInventory = @($inventory)[0]
+  $dependencyNames = @()
   $dependenciesProperty = $profileInventory.PSObject.Properties['dependencies']
-  if ($null -eq $dependenciesProperty) {
+  if ($null -ne $dependenciesProperty) {
+    $dependencyNames += @($dependenciesProperty.Value.PSObject.Properties | ForEach-Object { $_.Name })
+  }
+
+  # pnpm omits missing or stale-linked direct dependencies from its resolved
+  # inventory. The profile manifest is the ownership source for uninstalling
+  # those historical packages, so merge its declared keys before deciding
+  # whether a retired bundle is absent.
+  $profilePathProperty = $profileInventory.PSObject.Properties['path']
+  if ($null -ne $profilePathProperty -and $profilePathProperty.Value -is [string]) {
+    $profileManifestPath = Join-Path $profilePathProperty.Value 'package.json'
+    if (Test-Path -LiteralPath $profileManifestPath -PathType Leaf) {
+      $profileManifest = Get-Content -Raw -LiteralPath $profileManifestPath | ConvertFrom-Json
+      $declaredDependencies = $profileManifest.PSObject.Properties['dependencies']
+      if ($null -ne $declaredDependencies) {
+        $dependencyNames += @($declaredDependencies.Value.PSObject.Properties | ForEach-Object { $_.Name })
+      }
+    }
+  }
+
+  $dependencyNames | Select-Object -Unique
+}
+
+function Get-ProfileConfig {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Executable,
+
+    [string[]] $PrefixArguments = @(),
+
+    [Parameter(Mandatory = $true)]
+    [string] $ProfileName
+  )
+
+  $outputLines = @(
+    & $Executable @PrefixArguments --profile $ProfileName --dump-config
+  )
+  $dumpExitCode = $LASTEXITCODE
+  if ($dumpExitCode -ne 0) {
+    throw "Cannot inspect the assembled DSH profile '$ProfileName'; --dump-config exited with code $dumpExitCode."
+  }
+  $outputLines -join [Environment]::NewLine
+}
+
+function Test-RetiredReferencedFileConfig {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Config
+  )
+
+  return $Config -match '(?m)^\s*-\s+id:\s*[''"]?referenced-file[''"]?\s*$' -or
+    $Config -match '(?m)^\s*name:\s*[''"]?(?:dsh-enhanced-plugins/referenced-file|dsh-enhanced-referenced-file|dsh-referenced-file)[''"]?\s*$'
+}
+
+function Get-RetiredFeatureCatalog {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object] $Manifest
+  )
+
+  $metadata = $Manifest.PSObject.Properties['dshEnhanced']
+  if ($null -eq $metadata) {
+    return
+  }
+  $retiredProperty = $metadata.Value.PSObject.Properties['retiredFeatures']
+  if ($null -eq $retiredProperty) {
     return
   }
 
-  $dependenciesProperty.Value.PSObject.Properties | ForEach-Object { $_.Name }
+  foreach ($retired in @($retiredProperty.Value)) {
+    if ($retired.feature -isnot [string] -or $retired.feature -notmatch '^[a-z0-9][a-z0-9-]*$') {
+      throw 'The aggregate manifest has an invalid dshEnhanced.retiredFeatures feature id.'
+    }
+    $packageNames = @($retired.packageNames)
+    if ($packageNames.Count -eq 0 -or @($packageNames | Where-Object { $_ -isnot [string] -or $_ -eq '' }).Count -gt 0) {
+      throw "Retired feature '$($retired.feature)' must declare packageNames."
+    }
+    if ($retired.notice -isnot [string] -or $retired.notice -eq '') {
+      throw "Retired feature '$($retired.feature)' must declare a notice."
+    }
+    [pscustomobject]@{
+      Feature = $retired.feature
+      PackageNames = $packageNames
+      Notice = $retired.notice
+    }
+  }
 }
 
 function Get-MissingRuntimeEntries {
@@ -155,6 +237,8 @@ function Resolve-RequestedFeatures {
     [Parameter(Mandatory = $true)]
     [object[]] $Catalog,
 
+    [object[]] $RetiredCatalog = @(),
+
     [string[]] $Requested = @('all')
   )
 
@@ -173,6 +257,14 @@ function Resolve-RequestedFeatures {
       throw "Feature 'all' cannot be combined with individual feature ids."
     }
     return @()
+  }
+
+  $retiredRequested = @($RetiredCatalog | Where-Object { $normalized -contains $_.Feature })
+  if ($retiredRequested.Count -gt 0) {
+    $retiredNames = $retiredRequested.Feature -join ', '
+    $retiredNotices = @($retiredRequested.Notice | Select-Object -Unique) -join ' '
+    $label = if ($retiredRequested.Count -eq 1) { 'Feature' } else { 'Features' }
+    throw "$label '$retiredNames' is retired and cannot be installed. $retiredNotices"
   }
 
   $known = @($Catalog | ForEach-Object { $_.Feature })
@@ -250,15 +342,18 @@ if ($pluginManifest.name -ne 'dsh-enhanced-plugins') {
 }
 
 $catalog = @(Get-FeatureCatalog -RepositoryRoot $pluginRoot)
+$retiredCatalog = @(Get-RetiredFeatureCatalog -Manifest $pluginManifest)
 if ($ListFeatures) {
-  Write-Output "all`tInstall the aggregate bundle with every feature."
+  Write-Output "all`tInstall the aggregate bundle with every available feature."
   foreach ($feature in $catalog) {
     Write-Output "$($feature.Feature)`t$($feature.Description)"
   }
   return
 }
 
-$selectedFeatures = @(Resolve-RequestedFeatures -Catalog $catalog -Requested $Features)
+$selectedFeatures = @(
+  Resolve-RequestedFeatures -Catalog $catalog -RetiredCatalog $retiredCatalog -Requested $Features
+)
 $installAggregate = $selectedFeatures.Count -eq 0
 $aggregatePackage = [pscustomobject]@{
   Feature = 'all'
@@ -271,7 +366,10 @@ $aggregatePackage = [pscustomobject]@{
 $selectedPackages = if ($installAggregate) { @($aggregatePackage) } else { @($selectedFeatures) }
 $selectedLabel = if ($installAggregate) { 'all' } else { ($selectedFeatures.Feature -join ',') }
 $allFeaturePackageNames = @($catalog | ForEach-Object { $_.PackageName })
-$allLegacyPackages = @($catalog | ForEach-Object { $_.LegacyPackages } | Select-Object -Unique)
+$retiredPackageNames = @($retiredCatalog | ForEach-Object { $_.PackageNames } | Select-Object -Unique)
+$allLegacyPackages = @(
+  @($catalog | ForEach-Object { $_.LegacyPackages }) + $retiredPackageNames | Select-Object -Unique
+)
 
 $target = "DSH profile '$Profile'"
 $action = "build and install enhanced feature set '$selectedLabel' from '$pluginRoot', remove conflicting enhanced/legacy bundles, then validate the profile"
@@ -327,6 +425,26 @@ try {
       -PrefixArguments $prefixArguments `
       -ProfileName $Profile
   )
+  $installedConfig = Get-ProfileConfig `
+    -Executable $executable `
+    -PrefixArguments $prefixArguments `
+    -ProfileName $Profile
+  $installedRetiredPackages = @(
+    $retiredPackageNames | Where-Object { $installedDependencies -contains $_ }
+  )
+  $installedAggregate = $installedDependencies -contains $pluginManifest.name
+  if ($installedRetiredPackages.Count -gt 0 -or (Test-RetiredReferencedFileConfig -Config $installedConfig)) {
+    Write-Warning (
+      "Detected the retired # workspace-file reference feature in profile '$Profile'. " +
+      'It will be uninstalled during this migration. Official DSH now supports @ workspace file references; ' +
+      'update DSH to the latest release before using the replacement.'
+    )
+  } elseif ($installedAggregate) {
+    Write-Host (
+      "Refreshing the installed aggregate bundle also guarantees removal of its former # file-reference contribution. " +
+      'Official DSH now supports @ workspace file references; keep DSH updated to the latest release.'
+    )
+  }
 
   $packageRoots = @($selectedPackages | ForEach-Object { $_.Root })
   Write-Host "Installing enhanced feature set '$selectedLabel' into profile '$Profile'..."
@@ -357,7 +475,7 @@ try {
     $selectedLegacyPackages = @(
       $selectedFeatures | ForEach-Object { $_.LegacyPackages } | Select-Object -Unique
     )
-    @($pluginManifest.name) + $unselectedFeaturePackages + $selectedLegacyPackages
+    @($pluginManifest.name) + $unselectedFeaturePackages + $selectedLegacyPackages + $retiredPackageNames
   }
   $packagesToRemove = @(
     $conflictingPackages |
@@ -397,12 +515,16 @@ try {
   }
 
   Write-Host 'Validating the assembled DSH profile...'
-  & $executable @prefixArguments --profile $Profile --dump-config | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    throw "Enhanced feature set '$selectedLabel' is installed, but DSH failed to load profile '$Profile' with exit code $LASTEXITCODE."
+  $finalConfig = Get-ProfileConfig `
+    -Executable $executable `
+    -PrefixArguments $prefixArguments `
+    -ProfileName $Profile
+  if (Test-RetiredReferencedFileConfig -Config $finalConfig) {
+    throw "Feature migration finished with the retired # file-reference Loader entry still active in profile '$Profile'."
   }
 
   Write-Host "Installed enhanced feature set '$selectedLabel' in profile '$Profile'."
+  Write-Host 'Use the latest official DSH and type @ in the conversation input for workspace file references.'
 } finally {
   if ($runnerWorkingDirectory -ne '') {
     Set-Location -LiteralPath $originalWorkingDirectory

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-`dsh-enhanced-plugins` is a collection of enhancements for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. Install all seven features in one bundle, or keep only the independent bundles you need.
+`dsh-enhanced-plugins` is a collection of enhancements for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. Install all six features in one bundle, or keep only the independent bundles you need.
 
 The project uses public DSH plugin extension points and does not modify DSH core. Each feature owns its Host, Client, Settings, and runtime lifecycle and can be built, installed, and removed independently.
 
@@ -18,16 +18,18 @@ The “install name” is the value accepted by the installer’s `-Features` pa
 | [Plugin Community](#plugin-community) | `plugin-market` | Settings → Plugin Community | Search, install, and remove community DSH plugins |
 | [MCP server manager](#mcp-server-manager) | `mcp-server-manager` | Settings → Plugins → Plugin configuration | Manage stdio / Streamable HTTP servers and import local configurations |
 | [pi-ai model request types](#pi-ai-model-request-types) | `model-input-types` | Settings → Plugins → Plugin configuration | Declare whether each model accepts text-only or image requests |
-| [Workspace file references](#workspace-file-references) | `referenced-file` | Type `#` in the conversation input | Search workspace files and attach safe text snapshots to the next request |
 | [Edit last message](#edit-last-message) | `edit-last-message` | Latest user-message bubble | Edit that turn and regenerate within the current session |
 | [Product subagents](#product-subagents) | `sub-agent` | Settings → Subagents | Enable or disable Claude Code / Codex tools live |
+
+> [!NOTE]
+> Workspace file references are no longer an enhanced-plugin feature. The latest official DSH provides [`@` file references](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference): type `@` (or `@"` for a quoted path) in the conversation input and choose a workspace path. The former `referenced-file` install name and its `#` snapshot syntax are retired. They are absent from the aggregate bundle, `-Features referenced-file` is rejected, and a normal installer run removes historical standalone packages or the contribution carried by an older aggregate install.
 
 ## Quick install
 
 ### Before you start
 
 - Node.js 22.19 or later.
-- A DSH Web profile. This repository is verified against the public ABI in DSH `0.1.0-rc.5`; its local baseline commit is `47f943859bef60e4160492346772ded9b24f765a`.
+- A current DSH Web profile. This repository is verified against DSH `0.1.0-rc.8`; its local baseline commit is `141eb6fef83422698aef7a981029e843e8161534`.
 - Native sounds and the desktop pet require Windows 10 or later and Windows PowerShell 5.1. The other features are cross-platform.
 
 DSH is still a developer preview and may introduce compatibility-breaking changes. If an upgrade breaks the plugin, compare its ABI with the baseline above first.
@@ -52,7 +54,7 @@ DSH is still a developer preview and may introduce compatibility-breaking change
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-Omitting `-Features` or passing `-Features all` installs the aggregate bundle.
+Omitting `-Features` or passing `-Features all` installs the aggregate bundle with all six available features. It does not install the retired file-reference plugin.
 
 ### Install selected features
 
@@ -62,13 +64,13 @@ List the features provided by the current checkout:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
 ```
 
-Then pass comma-separated install names from the feature overview. For example, keep only desktop alerts, MCP management, and file references:
+Then pass comma-separated install names from the feature overview. For example, keep only desktop alerts, MCP management, and editing the last message:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,edit-last-message
 ```
 
-`-Features` describes the enhanced feature set the target profile should **retain after the operation**. The installer first builds and installs every selected bundle, then removes the aggregate package, unselected sibling bundles, and declared conflicting legacy packages. A failed installation does not remove the previously working set early.
+`-Features` describes the enhanced feature set the target profile should **retain after the operation**. The installer first builds and installs every selected bundle, then removes the aggregate package, unselected sibling bundles, and declared conflicting legacy packages. It also detects and removes `dsh-enhanced-referenced-file`, `dsh-referenced-file`, or the retired `#` contribution from an older all-in-one `dsh-enhanced-plugins` installation, and prints a reminder to update DSH and use official `@` references. A failed installation does not remove the previously working set early.
 
 **Different-directory install:** if the DSH checkout is elsewhere, pass it explicitly:
 
@@ -136,18 +138,6 @@ Add pi-ai model overrides on the DSH Models page or in `settings.yaml`, then cho
 
 The card appears only while the official `llm-pi-ai` settings namespace is available. It stores a capability declaration and does not probe the endpoint; verify provider support before declaring Text and images.
 
-### Workspace file references
-
-Install name: `referenced-file` · Location: **the conversation input for any selected workspace**
-
-![Referencing workspace files from the input](assets/readme/referenced-files.png)
-
-1. Type `#`, then continue with a file name or path fragment to narrow the candidates.
-2. Use `↑` / `↓` and `Enter`, or click a candidate directly.
-3. When the message is submitted, the Host resolves the path again, enforces the workspace boundary, and adds a UTF-8 text snapshot to that model request.
-
-By default, one request may include up to 8 files, 128 KiB per file, and 512 KiB total. Binary files, invalid UTF-8, oversized files, non-regular files, and paths outside the workspace are rejected.
-
 ### Edit last message
 
 Install name: `edit-last-message` · Location: **the latest editable user-message bubble in the current conversation**
@@ -205,22 +195,6 @@ The six `*CustomSoundFile` / `*CustomSoundName` fields are Host-owned references
 | `cliPath` | empty | Optional absolute DSH executable path |
 
 The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is read-only. Synchronized cache data and installation records are stored in the marketplace data directory below DSH home.
-
-</details>
-
-<details>
-<summary>Default workspace-reference limits</summary>
-
-| Field | Default |
-| --- | ---: |
-| `maxCandidates` | 20 |
-| `maxScannedEntries` | 5000 |
-| `maxDepth` | 12 |
-| `maxReferences` | 8 |
-| `maxFileBytes` | 131072 |
-| `maxTotalBytes` | 524288 |
-| `indexTtlMs` | 30000 |
-| `maxCachedWorkspaces` | 8 |
 
 </details>
 

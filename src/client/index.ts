@@ -4,7 +4,6 @@ import * as mcpServerManager from '../mcp-server-manager/client/index.ts'
 import * as modelInputTypes from '../model-input-types/client/index.ts'
 import * as notification from '../notification/client/index.ts'
 import * as pluginMarket from '../plugin-market/client/index.ts'
-import * as referencedFile from '../referenced-file/client/index.ts'
 import * as subAgent from '../sub-agent/client/index.ts'
 
 export const name = 'enhanced-plugins-client'
@@ -17,6 +16,5 @@ export function apply(ctx: ClientContext): void {
   ctx.plugin(modelInputTypes)
   ctx.plugin(notification)
   ctx.plugin(pluginMarket)
-  ctx.plugin(referencedFile)
   ctx.plugin(subAgent)
 }

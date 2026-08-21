@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process'
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const packageDirectories = readdirSync(resolve(root, 'packages'), { withFileTypes: true })
-  .filter(entry => entry.isDirectory())
+  .filter(entry => entry.isDirectory() && existsSync(resolve(root, 'packages', entry.name, 'package.json')))
   .map(entry => resolve(root, 'packages', entry.name))
   .sort()
 const npmCli = process.env.npm_execpath

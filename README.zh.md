@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的增强插件集合。一次安装可获得全部 7 项功能，也可以只保留需要的独立 bundle。
+`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的增强插件集合。一次安装可获得全部 6 项功能，也可以只保留需要的独立 bundle。
 
 项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。各功能分别管理自己的 Host、Client、Settings 和运行时生命周期，可独立构建、安装和卸载。
 
@@ -18,16 +18,18 @@
 | [插件社区](#插件社区) | `plugin-market` | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
 | [MCP 服务器管理](#mcp-服务器管理) | `mcp-server-manager` | 设置 → 插件 → 插件配置 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
 | [pi-ai 模型请求类型](#pi-ai-模型请求类型) | `model-input-types` | 设置 → 插件 → 插件配置 | 声明模型接受纯文本还是图片请求 |
-| [工作区文件引用](#工作区文件引用) | `referenced-file` | 会话输入框中输入 `#` | 搜索工作区文件并把安全的文本快照加入下一次请求 |
 | [编辑上一条消息](#编辑上一条消息) | `edit-last-message` | 最后一条用户消息气泡 | 修改该轮内容并在当前会话重新生成 |
 | [产品子智能体](#产品子智能体) | `sub-agent` | 设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
+
+> [!NOTE]
+> 工作区文件引用不再作为本仓库的增强插件功能提供。最新版官方 DSH 已原生支持 [`@` 文件引用](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference)：在会话输入框输入 `@`（含空格路径可输入 `@"`）并选择工作区路径。原 `referenced-file` 安装名称及其 `#` 快照语法已经退役；全量 bundle 不再包含它，`-Features referenced-file` 会被拒绝，正常执行安装脚本还会清理历史独立包或旧版全量安装中携带的该功能。
 
 ## 快速安装
 
 ### 开始前
 
 - Node.js 22.19 或更高版本。
-- DSH Web profile。本仓库针对 DSH `0.1.0-rc.5` 的公开 ABI 验证，本地基准 commit 为 `47f943859bef60e4160492346772ded9b24f765a`。
+- 最新的 DSH Web profile。本仓库针对 DSH `0.1.0-rc.8` 验证，本地基准 commit 为 `141eb6fef83422698aef7a981029e843e8161534`。
 - 原生提示音和桌面宠物需要 Windows 10 或更高版本及 Windows PowerShell 5.1；其余功能可跨平台使用。
 
 DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH 后若遇到问题，请先核对上述 ABI 版本。
@@ -52,7 +54,7 @@ DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH �
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-省略 `-Features` 或传入 `-Features all` 都会安装聚合包。
+省略 `-Features` 或传入 `-Features all` 都会安装包含现有 6 项功能的聚合包，不会安装已经退役的文件引用插件。
 
 ### 按需安装
 
@@ -62,13 +64,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
 ```
 
-再用逗号分隔“功能一览”中的安装名称，例如只保留桌面提示、MCP 管理和文件引用：
+再用逗号分隔“功能一览”中的安装名称，例如只保留桌面提示、MCP 管理和编辑上一条消息：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,referenced-file
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,edit-last-message
 ```
 
-`-Features` 表示目标 profile **最终保留的增强功能集合**。脚本会先成功构建并安装全部所选 bundle，再移除聚合包、未选择的同仓库 bundle，以及与所选功能冲突的旧包；安装失败时不会提前破坏原有可用组合。
+`-Features` 表示目标 profile **最终保留的增强功能集合**。脚本会先成功构建并安装全部所选 bundle，再移除聚合包、未选择的同仓库 bundle，以及与所选功能冲突的旧包。脚本还会检测并卸载 `dsh-enhanced-referenced-file`、`dsh-referenced-file`，或旧版全量 `dsh-enhanced-plugins` 安装中的 `#` 文件引用贡献，并提示升级到最新版 DSH、改用官方 `@` 引用；安装失败时不会提前破坏原有可用组合。
 
 **非同目录安装**：如果 DSH checkout 不在同级目录，通过 `-DshCheckout` 指定位置：
 
@@ -136,18 +138,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 只有官方 `llm-pi-ai` settings namespace 可用时才显示此卡片。这里保存的是能力声明，不会探测实际端点；声明“文本与图片”前请确认提供方确实接受图片请求。
 
-### 工作区文件引用
-
-安装名称：`referenced-file` · 位置：**任意已选择工作区的会话输入框**
-
-![在输入框中引用工作区文件](assets/readme/referenced-files.png)
-
-1. 输入 `#`，继续输入文件名或路径片段缩小候选范围。
-2. 使用 `↑` / `↓` 选择并按 `Enter` 插入，也可以直接点击候选。
-3. 发送消息时，Host 会重新解析路径、检查工作区边界，并把文件的 UTF-8 文本快照加入本次模型请求。
-
-默认最多引用 8 个文件，单文件 128 KiB、总计 512 KiB。二进制文件、非法 UTF-8、超限文件、非常规文件和工作区外路径会被拒绝。
-
 ### 编辑上一条消息
 
 安装名称：`edit-last-message` · 位置：**当前会话最后一条可编辑的用户消息气泡**
@@ -205,22 +195,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 | `cliPath` | 空 | 可选 DSH 可执行文件绝对路径 |
 
 内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读快照；同步缓存和安装记录保存在 DSH home 的插件市场数据目录。
-
-</details>
-
-<details>
-<summary>工作区文件引用默认限制</summary>
-
-| 字段 | 默认值 |
-| --- | ---: |
-| `maxCandidates` | 20 |
-| `maxScannedEntries` | 5000 |
-| `maxDepth` | 12 |
-| `maxReferences` | 8 |
-| `maxFileBytes` | 131072 |
-| `maxTotalBytes` | 524288 |
-| `indexTtlMs` | 30000 |
-| `maxCachedWorkspaces` | 8 |
 
 </details>
 

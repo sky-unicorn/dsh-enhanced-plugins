@@ -72,8 +72,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.plugin.item', function* () {
     yield ctx.slots.register({
       name: 'settings.plugin.item',
-      id: 'mcp',
-      order: 30,
+      key: 'mcp',
       locale: NS,
       inject: () => controller.inject(),
     }, McpCard)

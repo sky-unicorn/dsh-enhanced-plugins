@@ -15,13 +15,6 @@ export type EditLastMessageLocaleKey =
   | 'error.failed'
   | 'content.extraBlock'
   | 'content.truncated'
-  | 'image.label'
-  | 'image.open'
-  | 'image.openNamed'
-  | 'image.loading'
-  | 'image.loadFailed'
-  | 'image.preview'
-  | 'image.closePreview'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -47,13 +40,6 @@ export const zh: Record<EditLastMessageLocaleKey, string> = {
   'error.failed': '编辑发送失败：{message}',
   'content.extraBlock': '额外消息内容',
   'content.truncated': '内容过长，已截断（共 {total} 项）',
-  'image.label': '图片',
-  'image.open': '查看原图',
-  'image.openNamed': '{label}，点击查看原图',
-  'image.loading': '图片加载中…',
-  'image.loadFailed': '图片加载失败，点击重试',
-  'image.preview': '原图预览',
-  'image.closePreview': '关闭原图预览',
 }
 
 /** English copy. */
@@ -73,11 +59,4 @@ export const en: Record<EditLastMessageLocaleKey, string> = {
   'error.failed': 'Edit and resend failed: {message}',
   'content.extraBlock': 'Additional message content',
   'content.truncated': 'Content truncated ({total} items total)',
-  'image.label': 'Image',
-  'image.open': 'View original',
-  'image.openNamed': '{label}, click to view original',
-  'image.loading': 'Loading image…',
-  'image.loadFailed': 'Image failed to load; click to retry',
-  'image.preview': 'Original image preview',
-  'image.closePreview': 'Close original image preview',
 }
