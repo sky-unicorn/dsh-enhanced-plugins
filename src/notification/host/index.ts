@@ -22,7 +22,7 @@ export {
 export { CustomSoundLibrary } from './sound-library.js'
 export { NotificationStateTracker, type NotificationTransition } from './state.js'
 export type {
-  NotificationSettings, NotificationSound, PetOutcome, PetPosition, PetSize, PetState,
+  NotificationSettings, NotificationSound, PetCharacter, PetOutcome, PetPosition, PetSize, PetState,
 } from '../shared.js'
 
 export const name = 'desktop-notifications'

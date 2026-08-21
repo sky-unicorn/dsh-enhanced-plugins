@@ -10,6 +10,7 @@ import type {
   NotificationSettings,
   NotificationSoundChoice,
   NotificationSoundEvent,
+  PetCharacter,
   PetPosition,
   PetSize,
 } from '../shared.ts'
@@ -71,6 +72,10 @@ function positionValue(value: string): PetPosition | undefined {
   return value === 'top-left' || value === 'top-right' || value === 'bottom-left' || value === 'bottom-right'
     ? value
     : undefined
+}
+
+function characterValue(value: string): PetCharacter | undefined {
+  return value === 'classic' || value === 'multiview' ? value : undefined
 }
 
 function sizeValue(value: string): PetSize | undefined {
@@ -415,6 +420,28 @@ export function NotificationSection(props: NotificationSectionProps) {
             </div>
 
             <div className={css.petControls}>
+              <FieldShell
+                label={t('petCharacter')}
+                overridden={overridden('petCharacter')}
+                resetLabel={t('reset')}
+                disabled={disabled}
+                onReset={() => { props.reset('petCharacter') }}
+              >
+                <select
+                  className={css.select}
+                  aria-label={t('petCharacter')}
+                  value={value.petCharacter}
+                  disabled={disabled || !value.petEnabled}
+                  onChange={(event) => {
+                    const next = characterValue(event.target.value)
+                    if (next !== undefined) props.set('petCharacter', next)
+                  }}
+                >
+                  <option value="classic">{t('petCharacterClassic')}</option>
+                  <option value="multiview">{t('petCharacterMultiview')}</option>
+                </select>
+              </FieldShell>
+
               <FieldShell
                 label={t('petSize')}
                 overridden={overridden('petSize')}

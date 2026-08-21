@@ -19,7 +19,7 @@ import { CustomSoundLibrary } from './sound-library.js'
 
 const FIELDS = new Set<keyof NotificationSettings>([
   'completionSound', 'confirmationSound', 'blockedSound', 'soundGain',
-  'petEnabled', 'petIdleTopmost', 'petSize', 'petPosition',
+  'petEnabled', 'petCharacter', 'petIdleTopmost', 'petSize', 'petPosition',
 ])
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -39,6 +39,8 @@ function validFieldValue(field: keyof NotificationSettings, value: unknown): boo
     case 'petEnabled':
     case 'petIdleTopmost':
       return typeof value === 'boolean'
+    case 'petCharacter':
+      return value === 'classic' || value === 'multiview'
     case 'soundGain':
       return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100
     case 'petSize':

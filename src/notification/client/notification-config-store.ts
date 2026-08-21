@@ -46,6 +46,7 @@ export function decodeNotificationSettings(value: unknown): NotificationSettings
     || value['soundGain'] < 0
     || value['soundGain'] > 100
     || typeof value['petEnabled'] !== 'boolean'
+    || (value['petCharacter'] !== 'classic' && value['petCharacter'] !== 'multiview')
     || typeof value['petIdleTopmost'] !== 'boolean'
     || (value['petSize'] !== 80 && value['petSize'] !== 112
       && value['petSize'] !== 144 && value['petSize'] !== 176)
@@ -71,6 +72,7 @@ function decodeLayer(value: unknown): Partial<NotificationSettings> | undefined 
     else if (field === 'blockedSound') decoded.blockedSound = single.blockedSound
     else if (field === 'soundGain') decoded.soundGain = single.soundGain
     else if (field === 'petEnabled') decoded.petEnabled = single.petEnabled
+    else if (field === 'petCharacter') decoded.petCharacter = single.petCharacter
     else if (field === 'petIdleTopmost') decoded.petIdleTopmost = single.petIdleTopmost
     else if (field === 'petSize') decoded.petSize = single.petSize
     else if (field === 'petPosition') decoded.petPosition = single.petPosition

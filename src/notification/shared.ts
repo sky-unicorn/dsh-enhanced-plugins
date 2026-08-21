@@ -6,6 +6,7 @@ export type NotificationSound = 'off' | 'subtle' | 'prominent' | 'custom'
 export type NotificationBuiltInSound = Exclude<NotificationSound, 'custom'>
 export type NotificationSoundChoice = NotificationBuiltInSound | `custom:${string}`
 export type NotificationSoundEvent = 'completion' | 'confirmation' | 'blocked'
+export type PetCharacter = 'classic' | 'multiview'
 export type PetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 export type PetSize = 80 | 112 | 144 | 176
 export type PetState = 'idle' | 'working' | 'confirmation'
@@ -35,6 +36,8 @@ export interface NotificationSettings {
   blockedCustomSoundName: string
   /** Show the native DeepSeek fish pet outside the browser. */
   petEnabled: boolean
+  /** Visual character used by the native desktop pet. */
+  petCharacter: PetCharacter
   /** Keep the pet above other windows while no task is active. */
   petIdleTopmost: boolean
   /** Width and height of the desktop pet window in device-independent pixels. */
@@ -108,6 +111,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   blockedCustomSoundFile: '',
   blockedCustomSoundName: '',
   petEnabled: false,
+  petCharacter: 'classic',
   petIdleTopmost: true,
   petSize: 112,
   petPosition: 'bottom-right',

@@ -90,15 +90,15 @@ Install name: `notification` · Location: **Settings → Desktop Pet**
 
 Sounds cover three event families: confirmation needed, task completed, and task blocked. Each can independently use off, one of two built-in sounds, or a WAV from the shared library. Changing a playable option previews it automatically, and the Preview button plays it again. A shared 0–100% gain reaches about +6 dB at 100% and softly limits near-peak PCM / IEEE Float WAV files. Each file may be up to 2 MiB; the profile-local library holds up to 64 files.
 
-Enabling the desktop pet shows a native DeepSeek fish outside the browser. It aggregates all sessions into these states:
+Enabling the desktop pet shows a native DeepSeek fish outside the browser. Pet Style switches live between the existing Flat Whale and the new 3D Whale; Flat Whale remains the default. It aggregates all sessions into these states:
 
 - **Idle:** sleeps in a continuous low-amplitude breathing loop with drifting `Zzz`; hovering or dragging switches it to a compact, eager-to-play anticipation loop, and leaving it restores sleep. Idle topmost behavior is configurable.
-- **Working:** loops a dedicated five-frame focused swim cycle with bubbles and a progress ring.
-- **Confirmation needed:** loops a five-frame surprised alert sequence with an exclamation accent and pulsing ring; this state has the highest priority.
-- **Completed:** briefly plays a five-frame joyful fin-wave and sparkle sequence for the top-level task only.
-- **Blocked:** briefly plays a five-frame tired/frustrated sequence for the top-level task only.
+- **Working:** Flat Whale uses its five-frame focused swim; 3D Whale uses twenty-four frames of forceful side swimming with a focused expression, bubbles, and a short wake, without an external progress ring.
+- **Confirmation needed:** Flat Whale uses its five-frame surprised alert and pulse ring; 3D Whale uses twenty-four front/side frames of head turns, fin-raising, and a question mark, with no outer ring. This state has the highest priority.
+- **Completed:** briefly plays a joyful fin-wave/spatial roll and sparkle sequence for the top-level task only.
+- **Blocked:** briefly plays a tired/frustrated sequence for the top-level task only.
 
-The five task states are separate rows in one transparent sprite sheet, while sleeping and eager idle interaction use a dedicated two-row transparent sheet. Motion comes from the fish's pose, fins, tail, eyes, breathing, and expression instead of moving one static image back and forth. The pet can be dragged freely across monitors and beyond desktop edges. On release, it snaps fully into the work area with the greatest overlap, or the nearest screen edge when released in a gap between displays. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select a representative static frame for each state and idle interaction phase when animations are reduced.
+Flat Whale keeps its existing five-frame task and idle-interaction sheets. 3D Whale has twenty-four transparent frames for each of six animations: sleep, pointer interaction, working, confirmation, completed, and blocked. Its viewpoints now stay on front, three-quarter, and side poses instead of making rear views the main motion. Pointer interaction is an in-place anticipation loop, while working uses faster side swimming and a wake, with separate poses and timing. Its motion comes from viewpoint, pose, fins, tail, eyes, breathing, and expression instead of static-image shaking or an external spinning ring. The pet can be dragged freely across monitors and beyond desktop edges. On release, it snaps fully into the work area with the greatest overlap, or the nearest screen edge when released in a gap between displays. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select a representative static frame for each state and idle interaction phase when animations are reduced.
 
 Settings apply live. The resident pet and short-lived sound processes are managed through the DSH subprocess service and exit cooperatively without leaving helper processes behind.
 
@@ -174,6 +174,7 @@ The default composition lives in [`cordis.patch.yml`](cordis.patch.yml). A later
 | `blockedSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` blocked-task sound |
 | `soundGain` | `0` | Shared 0–100% positive gain; 100 is about +6 dB |
 | `petEnabled` | `false` | Show the native global desktop pet |
+| `petCharacter` | `classic` | Pet style: `classic` (Flat Whale) or `multiview` (3D Whale) |
 | `petIdleTopmost` | `true` | Keep the pet above other windows while idle |
 | `petSize` | `112` | Pet size: `80`, `112`, `144`, or `176` device-independent pixels |
 | `petPosition` | `bottom-right` | Fallback/reset corner: `top-left`, `top-right`, `bottom-left`, or `bottom-right` |

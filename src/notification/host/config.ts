@@ -7,6 +7,7 @@ import {
   NOTIFICATION_SETTINGS_NAMESPACE,
   type NotificationSettings,
   type NotificationSound,
+  type PetCharacter,
   type PetPosition,
   type PetSize,
 } from '../shared.js'
@@ -24,6 +25,11 @@ const Position = z.union([
   z.const('bottom-left'),
   z.const('bottom-right'),
 ]) as unknown as z<PetPosition>
+
+const Character = z.union([
+  z.const('classic'),
+  z.const('multiview'),
+]) as unknown as z<PetCharacter>
 
 const Size = z.union([
   z.const(80),
@@ -57,6 +63,8 @@ export const Config: z<NotificationSettings> = z.object({
     .description('Display name paired with the selected blocked-task WAV.'),
   petEnabled: z.boolean().default(DEFAULT_NOTIFICATION_SETTINGS.petEnabled)
     .description('Show the native DeepSeek desktop pet outside the browser.'),
+  petCharacter: Character.default(DEFAULT_NOTIFICATION_SETTINGS.petCharacter)
+    .description('Visual character used by the native desktop pet.'),
   petIdleTopmost: z.boolean().default(DEFAULT_NOTIFICATION_SETTINGS.petIdleTopmost)
     .description('Keep the desktop pet above other windows while it is idle.'),
   petSize: Size.default(DEFAULT_NOTIFICATION_SETTINGS.petSize)

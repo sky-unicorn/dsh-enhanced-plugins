@@ -52,6 +52,19 @@ function renderSection(
 }
 
 describe('desktop notification sound controls', () => {
+  it('keeps the classic pet by default and writes the selected multiview pet', () => {
+    const set = vi.fn()
+    renderSection({ set }, [], { petEnabled: true })
+
+    const character = screen.getByLabelText(zh.petCharacter) as HTMLSelectElement
+    expect(character.value).toBe('classic')
+    expect(character.textContent).toContain(zh.petCharacterClassic)
+    expect(character.textContent).toContain(zh.petCharacterMultiview)
+
+    fireEvent.change(character, { target: { value: 'multiview' } })
+    expect(set).toHaveBeenCalledWith('petCharacter', 'multiview')
+  })
+
   it('previews a playable selection after its settings write and supports manual replay', async () => {
     const { selectSound, preview } = renderSection()
 

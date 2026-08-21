@@ -2,7 +2,9 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$SpritePath,
   [Parameter(Mandatory = $true)]
-  [string]$IdleSpritePath
+  [string]$IdleSpritePath,
+  [Parameter(Mandatory = $true)]
+  [string]$MultiviewSpritePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -586,60 +588,90 @@ function Read-SpriteBitmap([string]$path, [string]$description) {
   }
 }
 
-$spriteBitmap = Read-SpriteBitmap $SpritePath 'state'
-$idleSpriteBitmap = Read-SpriteBitmap $IdleSpritePath 'idle interaction'
-$script:spriteFrameCount = 5
-$script:spriteRows = [ordered]@{
+$classicSpriteBitmap = Read-SpriteBitmap $SpritePath 'classic state'
+$classicIdleSpriteBitmap = Read-SpriteBitmap $IdleSpritePath 'classic idle interaction'
+$multiviewSpriteBitmap = Read-SpriteBitmap $MultiviewSpritePath 'multiview state'
+$script:classicSpriteFrameCount = 5
+$classicSpriteRows = [ordered]@{
   idle = 0
   working = 1
   confirmation = 2
   ready = 3
   blocked = 4
 }
-if ($spriteBitmap.PixelWidth -ne 1536 -or $spriteBitmap.PixelHeight -ne 1024) {
+if ($classicSpriteBitmap.PixelWidth -ne 1536 -or $classicSpriteBitmap.PixelHeight -ne 1024) {
   throw 'Desktop pet state sprite sheet must be the bundled 1536 by 1024 frame grid.'
 }
-if ($idleSpriteBitmap.PixelWidth -ne 1536 -or $idleSpriteBitmap.PixelHeight -ne 1024) {
+if ($classicIdleSpriteBitmap.PixelWidth -ne 1536 -or $classicIdleSpriteBitmap.PixelHeight -ne 1024) {
   throw 'Desktop pet idle interaction sprite sheet must be the bundled 1536 by 1024 frame grid.'
 }
 # The generated sheet uses transparent gutters around each animation cell.
 # These audited edges keep fins and state accents out of adjacent crops.
-$script:spriteColumnEdges = @(0, 311, 609, 921, 1222, 1536)
-$script:spriteRowEdges = @(0, 204, 396, 605, 786, 1024)
-$script:spriteFrames = @{}
-foreach ($spriteEntry in $script:spriteRows.GetEnumerator()) {
+$classicSpriteColumnEdges = @(0, 311, 609, 921, 1222, 1536)
+$classicSpriteRowEdges = @(0, 204, 396, 605, 786, 1024)
+$script:classicSpriteFrames = @{}
+foreach ($spriteEntry in $classicSpriteRows.GetEnumerator()) {
   $frames = @()
-  for ($frameIndex = 0; $frameIndex -lt $script:spriteFrameCount; $frameIndex++) {
-    $left = $script:spriteColumnEdges[$frameIndex]
-    $right = $script:spriteColumnEdges[$frameIndex + 1]
-    $top = $script:spriteRowEdges[$spriteEntry.Value]
-    $bottom = $script:spriteRowEdges[$spriteEntry.Value + 1]
+  for ($frameIndex = 0; $frameIndex -lt $script:classicSpriteFrameCount; $frameIndex++) {
+    $left = $classicSpriteColumnEdges[$frameIndex]
+    $right = $classicSpriteColumnEdges[$frameIndex + 1]
+    $top = $classicSpriteRowEdges[$spriteEntry.Value]
+    $bottom = $classicSpriteRowEdges[$spriteEntry.Value + 1]
     $crop = [System.Windows.Int32Rect]::new($left, $top, $right - $left, $bottom - $top)
-    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($spriteBitmap, $crop)
+    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($classicSpriteBitmap, $crop)
     $frame.Freeze()
     $frames += $frame
   }
-  $script:spriteFrames[$spriteEntry.Key] = $frames
+  $script:classicSpriteFrames[$spriteEntry.Key] = $frames
 }
-$idleSpriteRows = [ordered]@{
+$classicIdleSpriteRows = [ordered]@{
   'idle-sleep' = 0
   'idle-eager' = 1
 }
-$idleSpriteColumnEdges = @(0, 307, 614, 921, 1228, 1536)
-$idleSpriteRowEdges = @(0, 512, 1024)
-foreach ($idleSpriteEntry in $idleSpriteRows.GetEnumerator()) {
+$classicIdleSpriteColumnEdges = @(0, 307, 614, 921, 1228, 1536)
+$classicIdleSpriteRowEdges = @(0, 512, 1024)
+foreach ($idleSpriteEntry in $classicIdleSpriteRows.GetEnumerator()) {
   $frames = @()
-  for ($frameIndex = 0; $frameIndex -lt $script:spriteFrameCount; $frameIndex++) {
-    $left = $idleSpriteColumnEdges[$frameIndex]
-    $right = $idleSpriteColumnEdges[$frameIndex + 1]
-    $top = $idleSpriteRowEdges[$idleSpriteEntry.Value]
-    $bottom = $idleSpriteRowEdges[$idleSpriteEntry.Value + 1]
+  for ($frameIndex = 0; $frameIndex -lt $script:classicSpriteFrameCount; $frameIndex++) {
+    $left = $classicIdleSpriteColumnEdges[$frameIndex]
+    $right = $classicIdleSpriteColumnEdges[$frameIndex + 1]
+    $top = $classicIdleSpriteRowEdges[$idleSpriteEntry.Value]
+    $bottom = $classicIdleSpriteRowEdges[$idleSpriteEntry.Value + 1]
     $crop = [System.Windows.Int32Rect]::new($left, $top, $right - $left, $bottom - $top)
-    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($idleSpriteBitmap, $crop)
+    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($classicIdleSpriteBitmap, $crop)
     $frame.Freeze()
     $frames += $frame
   }
-  $script:spriteFrames[$idleSpriteEntry.Key] = $frames
+  $script:classicSpriteFrames[$idleSpriteEntry.Key] = $frames
+}
+
+$script:multiviewSpriteFrameCount = 24
+$multiviewSpriteRows = [ordered]@{
+  'idle-sleep' = 0
+  'idle-eager' = 1
+  working = 2
+  confirmation = 3
+  ready = 4
+  blocked = 5
+}
+if ($multiviewSpriteBitmap.PixelWidth -ne 6144 -or $multiviewSpriteBitmap.PixelHeight -ne 1536) {
+  throw 'Desktop pet multiview sprite sheet must be the bundled 6144 by 1536 frame grid.'
+}
+$script:multiviewSpriteFrames = @{}
+foreach ($spriteEntry in $multiviewSpriteRows.GetEnumerator()) {
+  $frames = @()
+  for ($frameIndex = 0; $frameIndex -lt $script:multiviewSpriteFrameCount; $frameIndex++) {
+    $crop = [System.Windows.Int32Rect]::new(
+      $frameIndex * 256,
+      ([int]$spriteEntry.Value) * 256,
+      256,
+      256
+    )
+    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($multiviewSpriteBitmap, $crop)
+    $frame.Freeze()
+    $frames += $frame
+  }
+  $script:multiviewSpriteFrames[$spriteEntry.Key] = $frames
 }
 
 $script:settings = [pscustomobject]@{
@@ -651,6 +683,7 @@ $script:settings = [pscustomobject]@{
   confirmationCustomSoundPath = ''
   blockedCustomSoundPath = ''
   petEnabled = $false
+  petCharacter = 'classic'
   petIdleTopmost = $true
   petSize = 112
   petPosition = 'bottom-right'
@@ -659,10 +692,14 @@ $script:state = 'idle'
 $script:visualMode = 'state'
 $script:visualUntil = [DateTime]::MinValue
 $script:motionEnabled = [System.Windows.SystemParameters]::ClientAreaAnimation
+$script:petCharacter = 'classic'
+$script:spriteFrameCount = $script:classicSpriteFrameCount
+$script:spriteFrames = $script:classicSpriteFrames
 $script:spriteState = 'idle-sleep'
 $script:spriteFrameIndex = 0
+$script:spriteSequenceIndex = 0
 $script:nextSpriteFrame = [DateTime]::MinValue
-$script:spriteFrameDurations = @{
+$script:classicSpriteFrameDurations = @{
   'idle-sleep' = 650
   'idle-eager' = 110
   working = 100
@@ -670,7 +707,15 @@ $script:spriteFrameDurations = @{
   ready = 120
   blocked = 130
 }
-$script:staticSpriteFrames = @{
+$script:multiviewSpriteFrameDurations = @{
+  'idle-sleep' = 420
+  'idle-eager' = 105
+  working = 65
+  confirmation = 120
+  ready = 95
+  blocked = 125
+}
+$script:classicStaticSpriteFrames = @{
   'idle-sleep' = 2
   'idle-eager' = 2
   working = 2
@@ -678,6 +723,33 @@ $script:staticSpriteFrames = @{
   ready = 2
   blocked = 3
 }
+$script:multiviewStaticSpriteFrames = @{
+  'idle-sleep' = 5
+  'idle-eager' = 2
+  working = 3
+  confirmation = 2
+  ready = 10
+  blocked = 1
+}
+$script:classicFrameSequences = @{
+  'idle-sleep' = @(0, 1, 2, 3, 4)
+  'idle-eager' = @(0, 1, 2, 3, 4)
+  working = @(0, 1, 2, 3, 4)
+  confirmation = @(0, 1, 2, 3, 4)
+  ready = @(0, 1, 2, 3, 4)
+  blocked = @(0, 1, 2, 3, 4)
+}
+$script:multiviewFrameSequences = @{
+  'idle-sleep' = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+  'idle-eager' = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+  working = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+  confirmation = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+  ready = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+  blocked = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+}
+$script:spriteFrameDurations = $script:classicSpriteFrameDurations
+$script:staticSpriteFrames = $script:classicStaticSpriteFrames
+$script:spriteFrameSequences = $script:classicFrameSequences
 $script:isDragging = $false
 $script:isPointerOver = $false
 $script:placementPending = $false
@@ -691,6 +763,36 @@ $script:mediaPlayer = [System.Windows.Media.MediaPlayer]::new()
 
 function Brush([string]$color) {
   return [System.Windows.Media.BrushConverter]::new().ConvertFromString($color)
+}
+
+function Select-PetSpriteSet {
+  $character = 'classic'
+  $hasCharacter = $null -ne $script:settings.PSObject.Properties['petCharacter']
+  if ($hasCharacter -and [string]$script:settings.petCharacter -eq 'multiview') {
+    $character = 'multiview'
+  }
+  if ($script:petCharacter -eq $character) { return $false }
+
+  $script:petCharacter = $character
+  if ($character -eq 'multiview') {
+    $script:spriteFrameCount = $script:multiviewSpriteFrameCount
+    $script:spriteFrames = $script:multiviewSpriteFrames
+    $script:spriteFrameDurations = $script:multiviewSpriteFrameDurations
+    $script:staticSpriteFrames = $script:multiviewStaticSpriteFrames
+    $script:spriteFrameSequences = $script:multiviewFrameSequences
+  } else {
+    $script:spriteFrameCount = $script:classicSpriteFrameCount
+    $script:spriteFrames = $script:classicSpriteFrames
+    $script:spriteFrameDurations = $script:classicSpriteFrameDurations
+    $script:staticSpriteFrames = $script:classicStaticSpriteFrames
+    $script:spriteFrameSequences = $script:classicFrameSequences
+  }
+  $script:spriteState = ''
+  $script:spriteFrameIndex = 0
+  $script:spriteSequenceIndex = 0
+  $script:nextSpriteFrame = [DateTime]::MinValue
+  $spriteFrame.Source = $null
+  return $true
 }
 
 function Show-SpriteFrame([int]$index) {
@@ -707,6 +809,7 @@ function Set-SpriteState([string]$stateName) {
   if (-not $script:spriteFrames.ContainsKey($stateName)) { $stateName = 'idle-sleep' }
   if ($script:spriteState -eq $stateName -and $null -ne $spriteFrame.Source) { return }
   $script:spriteState = $stateName
+  $script:spriteSequenceIndex = 0
   $script:nextSpriteFrame = [DateTime]::MinValue
 
   if (-not $script:motionEnabled) {
@@ -714,7 +817,11 @@ function Set-SpriteState([string]$stateName) {
     return
   }
 
-  Show-SpriteFrame 0
+  $sequence = $script:spriteFrameSequences[$stateName]
+  if ($null -eq $sequence -or $sequence.Count -eq 0) {
+    throw "Desktop pet sprite sequence is unavailable: $stateName"
+  }
+  Show-SpriteFrame ([int]$sequence[0])
   $script:nextSpriteFrame = [DateTime]::UtcNow.AddMilliseconds(
     [double]$script:spriteFrameDurations[$stateName]
   )
@@ -724,9 +831,12 @@ function Advance-SpriteAnimation([DateTime]$now) {
   if (-not $script:motionEnabled -or $window.Visibility -ne [System.Windows.Visibility]::Visible) { return }
   if ($now -lt $script:nextSpriteFrame) { return }
 
-  $nextFrame = $script:spriteFrameIndex + 1
-  if ($nextFrame -ge $script:spriteFrameCount) { $nextFrame = 0 }
-  Show-SpriteFrame $nextFrame
+  $sequence = $script:spriteFrameSequences[$script:spriteState]
+  if ($null -eq $sequence -or $sequence.Count -eq 0) { return }
+  $nextSequenceIndex = $script:spriteSequenceIndex + 1
+  if ($nextSequenceIndex -ge $sequence.Count) { $nextSequenceIndex = 0 }
+  $script:spriteSequenceIndex = $nextSequenceIndex
+  Show-SpriteFrame ([int]$sequence[$nextSequenceIndex])
   $script:nextSpriteFrame = $now.AddMilliseconds(
     [double]$script:spriteFrameDurations[$script:spriteState]
   )
@@ -938,6 +1048,10 @@ function Set-StateVisual {
   switch ($script:state) {
     'working' {
       $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#4D6BFE')
+      if ($script:petCharacter -eq 'multiview') {
+        $ring.Opacity = 0
+        return
+      }
       $ring.Stroke = Brush '#4D6BFE'
       $ring.Opacity = 0.72
       if (-not $script:motionEnabled) { return }
@@ -948,6 +1062,10 @@ function Set-StateVisual {
     }
     'confirmation' {
       $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#F59E0B')
+      if ($script:petCharacter -eq 'multiview') {
+        $ring.Opacity = 0
+        return
+      }
       $ring.Stroke = Brush '#F59E0B'
       $ring.Opacity = 1
       if (-not $script:motionEnabled) { return }
@@ -1127,10 +1245,14 @@ function Apply-Message($message) {
     'config' {
       $wasVisible = $window.Visibility -eq [System.Windows.Visibility]::Visible
       $script:settings = $message.config
+      $petCharacterChanged = Select-PetSpriteSet
       Set-Placement
       if ([bool]$script:settings.petEnabled) {
         $window.Visibility = 'Visible'
-        if (-not $wasVisible) { Set-StateVisual }
+        if (-not $wasVisible -or $petCharacterChanged) {
+          if ($script:visualMode -eq 'state') { Set-StateVisual }
+          else { Set-SpriteState $script:visualMode }
+        }
         elseif ($script:visualMode -eq 'state') { Set-TopmostForState }
       } else {
         $window.Visibility = 'Hidden'

@@ -143,13 +143,14 @@ describe('desktop notification assets and defaults', () => {
   it('resolves the complete schema defaults', () => {
     expect(Config({})).toEqual(DEFAULT_NOTIFICATION_SETTINGS)
     expect(() => Config({ petSize: 20 })).toThrow()
+    expect(() => Config({ petCharacter: 'unknown' })).toThrow()
     expect(() => Config({ completionSound: 'unknown' })).toThrow()
     expect(() => Config({ soundGain: -1 })).toThrow()
     expect(() => Config({ soundGain: 101 })).toThrow()
     expect(() => Config({ soundGain: 50.5 })).toThrow()
   })
 
-  it('ships a movable WPF companion with state and idle-interaction RGBA sprite sheets', async () => {
+  it('ships selectable classic and multiview WPF pets with RGBA sprite sheets', async () => {
     const script = await readFile(resolve(import.meta.dirname, '../../assets/notification/desktop-pet.ps1'), 'utf8')
     const sprites = await readFile(resolve(
       import.meta.dirname,
@@ -158,6 +159,10 @@ describe('desktop notification assets and defaults', () => {
     const idleSprites = await readFile(resolve(
       import.meta.dirname,
       '../../assets/notification/deepseek-pet-idle-sprites.png',
+    ))
+    const multiviewSprites = await readFile(resolve(
+      import.meta.dirname,
+      '../../assets/notification/deepseek-multiview-pet-sprites.png',
     ))
     expect(script).toContain('Topmost="True"')
     expect(script).toContain('DeepSeekPetInputReader')
@@ -178,11 +183,16 @@ describe('desktop notification assets and defaults', () => {
     expect(script).toContain('CroppedBitmap')
     expect(script).toContain('Set-SpriteState')
     expect(script).toContain('Advance-SpriteAnimation')
-    expect(script).toContain('$script:spriteFrameCount = 5')
-    expect(script).toContain('$script:spriteColumnEdges = @(0, 311, 609, 921, 1222, 1536)')
-    expect(script).toContain('$script:spriteRowEdges = @(0, 204, 396, 605, 786, 1024)')
-    expect(script).toContain('$idleSpriteColumnEdges = @(0, 307, 614, 921, 1228, 1536)')
-    expect(script).toContain('$idleSpriteRowEdges = @(0, 512, 1024)')
+    expect(script).toContain('[string]$MultiviewSpritePath')
+    expect(script).toContain('$script:classicSpriteFrameCount = 5')
+    expect(script).toContain('$script:multiviewSpriteFrameCount = 24')
+    expect(script).toContain('$classicSpriteColumnEdges = @(0, 311, 609, 921, 1222, 1536)')
+    expect(script).toContain('$classicSpriteRowEdges = @(0, 204, 396, 605, 786, 1024)')
+    expect(script).toContain('$classicIdleSpriteColumnEdges = @(0, 307, 614, 921, 1228, 1536)')
+    expect(script).toContain('$classicIdleSpriteRowEdges = @(0, 512, 1024)')
+    expect(script).toContain('Select-PetSpriteSet')
+    expect(script).toContain("$script:petCharacter -eq 'multiview'")
+    expect(script).toContain('$script:multiviewFrameSequences')
     expect(script).toContain('idle = 0')
     expect(script).toContain('working = 1')
     expect(script).toContain('confirmation = 2')
@@ -228,6 +238,11 @@ describe('desktop notification assets and defaults', () => {
     expect(idleSprites.readUInt32BE(20)).toBe(1024)
     expect(idleSprites[24]).toBe(8)
     expect(idleSprites[25]).toBe(6)
+    expect(multiviewSprites.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+    expect(multiviewSprites.readUInt32BE(16)).toBe(6144)
+    expect(multiviewSprites.readUInt32BE(20)).toBe(1536)
+    expect(multiviewSprites[24]).toBe(8)
+    expect(multiviewSprites[25]).toBe(6)
   })
 
   it.runIf(process.platform === 'win32')('keeps 0% at source level and applies real 100% PCM gain', async () => {
