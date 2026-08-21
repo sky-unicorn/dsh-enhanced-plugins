@@ -454,14 +454,9 @@ public sealed class DeepSeekPetInputReader {
   <Grid x:Name="Motion" Background="Transparent" Cursor="Arrow" ForceCursor="True">
     <Viewbox Stretch="Uniform" IsHitTestVisible="True">
       <Grid Width="112" Height="112">
-    <Ellipse x:Name="HatchGlow" Margin="5" Fill="#4D6BFE" Opacity="0"
-             IsHitTestVisible="False" />
     <Ellipse x:Name="GroundShadow" Width="55" Height="11" Margin="0,0,0,5"
              HorizontalAlignment="Center" VerticalAlignment="Bottom"
-             Fill="#172554" Opacity="0.2" RenderTransformOrigin="0.5,0.5"
-             IsHitTestVisible="False">
-      <Ellipse.RenderTransform><ScaleTransform x:Name="GroundShadowScale" /></Ellipse.RenderTransform>
-    </Ellipse>
+             Fill="#172554" Opacity="0.2" IsHitTestVisible="False" />
 
     <Ellipse x:Name="Ring" Margin="3" StrokeThickness="3" StrokeDashArray="2 3"
              Stroke="#4D6BFE" Opacity="0" RenderTransformOrigin="0.5,0.5"
@@ -504,12 +499,10 @@ public sealed class DeepSeekPetInputReader {
           <ScaleTransform x:Name="PetScale" ScaleX="1" ScaleY="1" />
           <ScaleTransform x:Name="PetTrickScale" ScaleX="1" ScaleY="1" />
           <ScaleTransform x:Name="PetHoverScale" ScaleX="1" ScaleY="1" />
-          <ScaleTransform x:Name="PetEntranceScale" ScaleX="1" ScaleY="1" />
           <RotateTransform x:Name="PetRotation" />
           <RotateTransform x:Name="PetTrickRotation" />
           <TranslateTransform x:Name="PetMotion" />
           <TranslateTransform x:Name="PetTrickMotion" />
-          <TranslateTransform x:Name="PetEntranceMotion" />
         </TransformGroup>
       </Grid.RenderTransform>
       <Border x:Name="PetBubble" CornerRadius="999" Background="Transparent">
@@ -519,22 +512,6 @@ public sealed class DeepSeekPetInputReader {
         <Image x:Name="SpriteFrame" Stretch="Uniform" IsHitTestVisible="False"
                RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" />
       </Border>
-    </Grid>
-
-    <Grid x:Name="HatchShell" Width="82" Height="82" HorizontalAlignment="Center"
-          VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
-      <Path x:Name="HatchTop"
-            Data="M 6,42 A 35,35 0 0 1 76,42 L 67,49 58,41 49,50 40,41 30,50 20,41 6,49 Z"
-            Fill="#E8EDFF" Stroke="#4D6BFE" StrokeThickness="2"
-            RenderTransformOrigin="0.5,0.5">
-        <Path.RenderTransform><TranslateTransform x:Name="HatchTopMotion" /></Path.RenderTransform>
-      </Path>
-      <Path x:Name="HatchBottom"
-            Data="M 6,49 L 20,41 30,50 40,41 49,50 58,41 67,49 76,42 A 35,35 0 0 1 6,49 Z"
-            Fill="#D6DFFF" Stroke="#4D6BFE" StrokeThickness="2"
-            RenderTransformOrigin="0.5,0.5">
-        <Path.RenderTransform><TranslateTransform x:Name="HatchBottomMotion" /></Path.RenderTransform>
-      </Path>
     </Grid>
 
     <Border x:Name="Badge" Width="29" Height="29" CornerRadius="999"
@@ -558,9 +535,7 @@ $application = [System.Windows.Application]::new()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $script:windowHandle = [System.Windows.Interop.WindowInteropHelper]::new($window).EnsureHandle()
 $motion = $window.FindName('Motion')
-$hatchGlow = $window.FindName('HatchGlow')
 $groundShadow = $window.FindName('GroundShadow')
-$groundShadowScale = $window.FindName('GroundShadowScale')
 $ring = $window.FindName('Ring')
 $ringRotation = $window.FindName('RingRotation')
 $bubbles = $window.FindName('Bubbles')
@@ -579,16 +554,9 @@ $petTrickMotion = $window.FindName('PetTrickMotion')
 $petTrickRotation = $window.FindName('PetTrickRotation')
 $petTrickScale = $window.FindName('PetTrickScale')
 $petHoverScale = $window.FindName('PetHoverScale')
-$petEntranceMotion = $window.FindName('PetEntranceMotion')
-$petEntranceScale = $window.FindName('PetEntranceScale')
 $petBubble = $window.FindName('PetBubble')
 $shadow = $window.FindName('Shadow')
 $spriteFrame = $window.FindName('SpriteFrame')
-$hatchShell = $window.FindName('HatchShell')
-$hatchTop = $window.FindName('HatchTop')
-$hatchBottom = $window.FindName('HatchBottom')
-$hatchTopMotion = $window.FindName('HatchTopMotion')
-$hatchBottomMotion = $window.FindName('HatchBottomMotion')
 $badge = $window.FindName('Badge')
 $badgeScale = $window.FindName('BadgeScale')
 $badgeText = $window.FindName('BadgeText')
@@ -821,13 +789,9 @@ function Clear-Animations {
   $petTrickScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $null)
   $petHoverScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, $null)
   $petHoverScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $null)
-  $petEntranceMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $null)
-  $petEntranceScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, $null)
-  $petEntranceScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $null)
   $petVisual.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
   $ringRotation.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, $null)
   $ring.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
-  $hatchGlow.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
   $sparks.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
   $badgeScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, $null)
   $badgeScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $null)
@@ -837,12 +801,6 @@ function Clear-Animations {
   $sparkTwoMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $null)
   $sparkThreeMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $null)
   $sparkFourMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $null)
-  $hatchTopMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $null)
-  $hatchBottomMotion.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $null)
-  $hatchTop.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
-  $hatchBottom.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
-  $groundShadowScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, $null)
-  $groundShadowScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $null)
   $petMotion.X = 0
   $petMotion.Y = 0
   $petRotation.Angle = 0
@@ -854,22 +812,11 @@ function Clear-Animations {
   $petTrickScale.ScaleY = 1
   $petHoverScale.ScaleX = 1
   $petHoverScale.ScaleY = 1
-  $petEntranceMotion.Y = 0
-  $petEntranceScale.ScaleX = 1
-  $petEntranceScale.ScaleY = 1
   $petVisual.Opacity = 1
   $ringRotation.Angle = 0
   $badgeScale.ScaleX = 1
   $badgeScale.ScaleY = 1
-  $hatchGlow.Opacity = 0
   $sparks.Opacity = 0
-  $hatchTopMotion.Y = 0
-  $hatchBottomMotion.Y = 0
-  $hatchTop.Opacity = 1
-  $hatchBottom.Opacity = 1
-  $groundShadowScale.ScaleX = 1
-  $groundShadowScale.ScaleY = 1
-  $hatchShell.Visibility = 'Collapsed'
 }
 
 function Animate-Scale([double]$from, [double]$to, [double]$seconds) {
@@ -1015,54 +962,6 @@ function Set-StateVisual {
       $ring.Opacity = 0
     }
   }
-}
-
-function Show-Hatch {
-  if (-not $script:motionEnabled) {
-    Set-StateVisual
-    return
-  }
-  $script:visualMode = 'hatch'
-  $script:visualUntil = [DateTime]::UtcNow.AddSeconds(1.55)
-  $window.Topmost = $true
-  Clear-Animations
-  Set-SpriteState (Get-StateSpriteState)
-  $petBubble.Background = [System.Windows.Media.Brushes]::Transparent
-  $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#4D6BFE')
-  $ring.Opacity = 0
-  $bubbles.Opacity = 0
-  $sparks.Opacity = 0
-  $badge.Visibility = 'Collapsed'
-  $hatchShell.Visibility = 'Visible'
-  $hatchGlow.Opacity = 0.08
-  $groundShadow.Opacity = 0.16
-
-  $hatchGlow.BeginAnimation(
-    [System.Windows.UIElement]::OpacityProperty,
-    (New-OneShotAnimation 0.08 0.48 0.42 $true 0.28)
-  )
-  $hatchTopMotion.BeginAnimation(
-    [System.Windows.Media.TranslateTransform]::YProperty,
-    (New-OneShotAnimation 0 -27 0.48 $false 0.32)
-  )
-  $hatchBottomMotion.BeginAnimation(
-    [System.Windows.Media.TranslateTransform]::YProperty,
-    (New-OneShotAnimation 0 28 0.48 $false 0.32)
-  )
-  $hatchTop.BeginAnimation(
-    [System.Windows.UIElement]::OpacityProperty,
-    (New-OneShotAnimation 1 0 0.4 $false 0.52)
-  )
-  $hatchBottom.BeginAnimation(
-    [System.Windows.UIElement]::OpacityProperty,
-    (New-OneShotAnimation 1 0 0.4 $false 0.52)
-  )
-  Animate-OneShotScale $petEntranceScale 0.08 1 0.55 $false 0.38
-  $petEntranceMotion.BeginAnimation(
-    [System.Windows.Media.TranslateTransform]::YProperty,
-    (New-OneShotAnimation 18 0 0.55 $false 0.38)
-  )
-  Animate-OneShotScale $groundShadowScale 0.35 1 0.55 $false 0.38
 }
 
 function Show-Outcome([string]$outcome) {
@@ -1231,7 +1130,7 @@ function Apply-Message($message) {
       Set-Placement
       if ([bool]$script:settings.petEnabled) {
         $window.Visibility = 'Visible'
-        if (-not $wasVisible) { Show-Hatch }
+        if (-not $wasVisible) { Set-StateVisual }
         elseif ($script:visualMode -eq 'state') { Set-TopmostForState }
       } else {
         $window.Visibility = 'Hidden'
@@ -1317,7 +1216,7 @@ $script:windowSource.AddHook($script:windowHook)
 # may block before ReadLineAsync returns, so starting it on the Dispatcher would
 # make the window look hung and turn the mouse cursor into a busy spinner.
 # This timer drains queued messages and advances cached sprite frames; WPF
-# still owns the ring, hover, and hatch animations natively.
+# still owns the ring and hover animations natively.
 $inputTimer = [System.Windows.Threading.DispatcherTimer]::new()
 $inputTimer.Interval = [TimeSpan]::FromMilliseconds(50)
 $inputTimer.Add_Tick({
