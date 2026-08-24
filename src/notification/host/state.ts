@@ -45,6 +45,25 @@ function resultCallId(data: unknown): string | undefined {
   return stringField((message as Record<string, unknown>)['source'], 'callId')
 }
 
+function pendingInteractionCallIds(data: unknown): string[] {
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return []
+  const message = (data as Record<string, unknown>)['message']
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) return []
+  const content = (message as Record<string, unknown>)['content']
+  if (!Array.isArray(content)) return []
+
+  const callIds: string[] = []
+  for (const block of content) {
+    if (block === null || typeof block !== 'object' || Array.isArray(block)) continue
+    const name = stringField(block, 'name')
+    const callId = stringField(block, 'id')
+    if (name !== undefined && HUMAN_INTERACTION_TOOLS.has(name) && callId !== undefined) {
+      callIds.push(callId)
+    }
+  }
+  return callIds
+}
+
 /** Tracks all live sessions so concurrent tasks project one global pet state. */
 export class NotificationStateTracker {
   private readonly sessions = new Map<string, SessionActivity>()
@@ -135,6 +154,15 @@ export class NotificationStateTracker {
         if (id !== undefined) activity.approvals.delete(id)
         break
       }
+      case 'assistant/message':
+        // Human-interaction tools are exclusive. Pre-register every sibling
+        // call from the committed assistant message so settling the first
+        // question cannot expose a false working state before the scheduler
+        // starts the next question.
+        for (const callId of pendingInteractionCallIds(event.data)) {
+          activity.questions.add(callId)
+        }
+        break
       case 'tool/call': {
         const name = stringField(event.data, 'name')
         const callId = stringField(event.data, 'callId')

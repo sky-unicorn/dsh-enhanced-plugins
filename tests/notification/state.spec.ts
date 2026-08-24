@@ -107,6 +107,61 @@ describe('desktop notification state', () => {
     }))).toEqual({ state: 'working', confirmation: false, completion: false, outcome: undefined })
   })
 
+  it('stays in confirmation until every question in one assistant step settles', () => {
+    const tracker = new NotificationStateTracker()
+    const root = session('question-batch')
+    tracker.initialize([root])
+    tracker.consume(root, event('turn/start', { turn: 1 }))
+
+    expect(tracker.consume(root, event('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: {
+        id: 'assistant-1',
+        role: 'assistant',
+        source: { kind: 'model', provider: 'mock', model: 'mock' },
+        content: [
+          { type: 'tool-call', id: 'question-1', name: 'ask_user_question', arguments: '{}' },
+          { type: 'tool-call', id: 'question-2', name: 'ask_user_question', arguments: '{}' },
+        ],
+      },
+    }, 1))).toEqual({
+      state: 'confirmation', confirmation: false, completion: false, outcome: undefined,
+    })
+    tracker.consume(root, event('tool/call', {
+      turn: 1, step: 1, callId: 'question-1', name: 'ask_user_question', arguments: '{}',
+    }, 2))
+
+    expect(tracker.consume(root, event('tool/result', {
+      turn: 1,
+      step: 1,
+      message: {
+        id: 'answer-1',
+        role: 'user',
+        source: { kind: 'tool', callId: 'question-1' },
+        content: [{ type: 'tool-result', toolCallId: 'question-1', content: [], isError: false }],
+      },
+    }, 3))).toEqual({
+      state: 'confirmation', confirmation: false, completion: false, outcome: undefined,
+    })
+    tracker.consume(root, event('tool/call', {
+      turn: 1, step: 1, callId: 'question-2', name: 'ask_user_question', arguments: '{}',
+    }, 4))
+
+    expect(tracker.consume(root, event('tool/result', {
+      turn: 1,
+      step: 1,
+      message: {
+        id: 'answer-2',
+        role: 'user',
+        source: { kind: 'tool', callId: 'question-2' },
+        content: [{ type: 'tool-result', toolCallId: 'question-2', content: [], isError: false }],
+      },
+    }, 5))).toEqual({
+      state: 'working', confirmation: false, completion: false, outcome: undefined,
+    })
+  })
+
   it('reconstructs an answered question as working from canonical DSH events', () => {
     const answered = session('answered', undefined, [
       event('turn/start', { turn: 1 }),
