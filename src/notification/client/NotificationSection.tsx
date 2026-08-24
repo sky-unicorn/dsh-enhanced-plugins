@@ -75,7 +75,7 @@ function positionValue(value: string): PetPosition | undefined {
 }
 
 function characterValue(value: string): PetCharacter | undefined {
-  return value === 'classic' || value === 'multiview' ? value : undefined
+  return value === 'classic' || value === 'multiview' || value === 'whale-girl' ? value : undefined
 }
 
 function sizeValue(value: string): PetSize | undefined {
@@ -439,6 +439,7 @@ export function NotificationSection(props: NotificationSectionProps) {
                 >
                   <option value="classic">{t('petCharacterClassic')}</option>
                   <option value="multiview">{t('petCharacterMultiview')}</option>
+                  <option value="whale-girl">{t('petCharacterWhaleGirl')}</option>
                 </select>
               </FieldShell>
 

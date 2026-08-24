@@ -52,7 +52,7 @@ function renderSection(
 }
 
 describe('desktop notification sound controls', () => {
-  it('keeps the classic pet by default and writes the selected multiview pet', () => {
+  it('keeps the classic pet by default and writes either additional pet style', () => {
     const set = vi.fn()
     renderSection({ set }, [], { petEnabled: true })
 
@@ -60,9 +60,12 @@ describe('desktop notification sound controls', () => {
     expect(character.value).toBe('classic')
     expect(character.textContent).toContain(zh.petCharacterClassic)
     expect(character.textContent).toContain(zh.petCharacterMultiview)
+    expect(character.textContent).toContain(zh.petCharacterWhaleGirl)
 
     fireEvent.change(character, { target: { value: 'multiview' } })
     expect(set).toHaveBeenCalledWith('petCharacter', 'multiview')
+    fireEvent.change(character, { target: { value: 'whale-girl' } })
+    expect(set).toHaveBeenCalledWith('petCharacter', 'whale-girl')
   })
 
   it('previews a playable selection after its settings write and supports manual replay', async () => {

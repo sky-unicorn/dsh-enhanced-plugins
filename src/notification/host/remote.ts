@@ -40,7 +40,7 @@ function validFieldValue(field: keyof NotificationSettings, value: unknown): boo
     case 'petIdleTopmost':
       return typeof value === 'boolean'
     case 'petCharacter':
-      return value === 'classic' || value === 'multiview'
+      return value === 'classic' || value === 'multiview' || value === 'whale-girl'
     case 'soundGain':
       return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100
     case 'petSize':

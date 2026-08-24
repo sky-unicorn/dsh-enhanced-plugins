@@ -4,7 +4,9 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$IdleSpritePath,
   [Parameter(Mandatory = $true)]
-  [string]$MultiviewSpritePath
+  [string]$MultiviewSpritePath,
+  [Parameter(Mandatory = $true)]
+  [string]$WhaleGirlSpritePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -591,6 +593,7 @@ function Read-SpriteBitmap([string]$path, [string]$description) {
 $classicSpriteBitmap = Read-SpriteBitmap $SpritePath 'classic state'
 $classicIdleSpriteBitmap = Read-SpriteBitmap $IdleSpritePath 'classic idle interaction'
 $multiviewSpriteBitmap = Read-SpriteBitmap $MultiviewSpritePath 'multiview state'
+$whaleGirlSpriteBitmap = Read-SpriteBitmap $WhaleGirlSpritePath 'whale girl state'
 $script:classicSpriteFrameCount = 5
 $classicSpriteRows = [ordered]@{
   idle = 0
@@ -674,6 +677,35 @@ foreach ($spriteEntry in $multiviewSpriteRows.GetEnumerator()) {
   $script:multiviewSpriteFrames[$spriteEntry.Key] = $frames
 }
 
+$script:whaleGirlSpriteFrameCount = 32
+$whaleGirlSpriteRows = [ordered]@{
+  'idle-sleep' = 0
+  'idle-eager' = 1
+  working = 2
+  confirmation = 3
+  ready = 4
+  blocked = 5
+}
+if ($whaleGirlSpriteBitmap.PixelWidth -ne 8192 -or $whaleGirlSpriteBitmap.PixelHeight -ne 1536) {
+  throw 'Desktop pet whale girl sprite sheet must be the bundled 8192 by 1536 frame grid.'
+}
+$script:whaleGirlSpriteFrames = @{}
+foreach ($spriteEntry in $whaleGirlSpriteRows.GetEnumerator()) {
+  $frames = @()
+  for ($frameIndex = 0; $frameIndex -lt $script:whaleGirlSpriteFrameCount; $frameIndex++) {
+    $crop = [System.Windows.Int32Rect]::new(
+      $frameIndex * 256,
+      ([int]$spriteEntry.Value) * 256,
+      256,
+      256
+    )
+    $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new($whaleGirlSpriteBitmap, $crop)
+    $frame.Freeze()
+    $frames += $frame
+  }
+  $script:whaleGirlSpriteFrames[$spriteEntry.Key] = $frames
+}
+
 $script:settings = [pscustomobject]@{
   completionSound = 'subtle'
   confirmationSound = 'prominent'
@@ -715,6 +747,14 @@ $script:multiviewSpriteFrameDurations = @{
   ready = 95
   blocked = 125
 }
+$script:whaleGirlSpriteFrameDurations = @{
+  'idle-sleep' = 100
+  'idle-eager' = 100
+  working = 50
+  confirmation = 100
+  ready = 50
+  blocked = 100
+}
 $script:classicStaticSpriteFrames = @{
   'idle-sleep' = 2
   'idle-eager' = 2
@@ -731,6 +771,14 @@ $script:multiviewStaticSpriteFrames = @{
   ready = 10
   blocked = 1
 }
+$script:whaleGirlStaticSpriteFrames = @{
+  'idle-sleep' = 5
+  'idle-eager' = 12
+  working = 10
+  confirmation = 18
+  ready = 10
+  blocked = 16
+}
 $script:classicFrameSequences = @{
   'idle-sleep' = @(0, 1, 2, 3, 4)
   'idle-eager' = @(0, 1, 2, 3, 4)
@@ -746,6 +794,14 @@ $script:multiviewFrameSequences = @{
   confirmation = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
   ready = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
   blocked = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+}
+$script:whaleGirlFrameSequences = @{
+  'idle-sleep' = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+  'idle-eager' = @(8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5, 6, 7)
+  working = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+  confirmation = @(6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5)
+  ready = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+  blocked = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
 }
 $script:spriteFrameDurations = $script:classicSpriteFrameDurations
 $script:staticSpriteFrames = $script:classicStaticSpriteFrames
@@ -770,11 +826,19 @@ function Select-PetSpriteSet {
   $hasCharacter = $null -ne $script:settings.PSObject.Properties['petCharacter']
   if ($hasCharacter -and [string]$script:settings.petCharacter -eq 'multiview') {
     $character = 'multiview'
+  } elseif ($hasCharacter -and [string]$script:settings.petCharacter -eq 'whale-girl') {
+    $character = 'whale-girl'
   }
   if ($script:petCharacter -eq $character) { return $false }
 
   $script:petCharacter = $character
-  if ($character -eq 'multiview') {
+  if ($character -eq 'whale-girl') {
+    $script:spriteFrameCount = $script:whaleGirlSpriteFrameCount
+    $script:spriteFrames = $script:whaleGirlSpriteFrames
+    $script:spriteFrameDurations = $script:whaleGirlSpriteFrameDurations
+    $script:staticSpriteFrames = $script:whaleGirlStaticSpriteFrames
+    $script:spriteFrameSequences = $script:whaleGirlFrameSequences
+  } elseif ($character -eq 'multiview') {
     $script:spriteFrameCount = $script:multiviewSpriteFrameCount
     $script:spriteFrames = $script:multiviewSpriteFrames
     $script:spriteFrameDurations = $script:multiviewSpriteFrameDurations
@@ -1048,7 +1112,7 @@ function Set-StateVisual {
   switch ($script:state) {
     'working' {
       $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#4D6BFE')
-      if ($script:petCharacter -eq 'multiview') {
+      if ($script:petCharacter -ne 'classic') {
         $ring.Opacity = 0
         return
       }
@@ -1062,7 +1126,7 @@ function Set-StateVisual {
     }
     'confirmation' {
       $shadow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#F59E0B')
-      if ($script:petCharacter -eq 'multiview') {
+      if ($script:petCharacter -ne 'classic') {
         $ring.Opacity = 0
         return
       }

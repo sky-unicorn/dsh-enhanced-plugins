@@ -46,7 +46,9 @@ export function decodeNotificationSettings(value: unknown): NotificationSettings
     || value['soundGain'] < 0
     || value['soundGain'] > 100
     || typeof value['petEnabled'] !== 'boolean'
-    || (value['petCharacter'] !== 'classic' && value['petCharacter'] !== 'multiview')
+    || (value['petCharacter'] !== 'classic'
+      && value['petCharacter'] !== 'multiview'
+      && value['petCharacter'] !== 'whale-girl')
     || typeof value['petIdleTopmost'] !== 'boolean'
     || (value['petSize'] !== 80 && value['petSize'] !== 112
       && value['petSize'] !== 144 && value['petSize'] !== 176)

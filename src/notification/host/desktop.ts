@@ -33,6 +33,9 @@ const IDLE_SPRITE_PATH = fileURLToPath(new URL('../../../assets/notification/dee
 const MULTIVIEW_SPRITE_PATH = fileURLToPath(
   new URL('../../../assets/notification/deepseek-multiview-pet-sprites.png', import.meta.url),
 )
+const WHALE_GIRL_SPRITE_PATH = fileURLToPath(
+  new URL('../../../assets/notification/deepseek-whale-girl-pet-sprites.png', import.meta.url),
+)
 
 /** Owns exactly one companion process and serializes its stdin protocol. */
 export class DesktopCompanion {
@@ -170,6 +173,8 @@ export class DesktopCompanion {
           IDLE_SPRITE_PATH,
           '-MultiviewSpritePath',
           MULTIVIEW_SPRITE_PATH,
+          '-WhaleGirlSpritePath',
+          WHALE_GIRL_SPRITE_PATH,
         ],
         cwd: dirname(SCRIPT_PATH),
         stdio: {

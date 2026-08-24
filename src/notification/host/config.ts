@@ -29,6 +29,7 @@ const Position = z.union([
 const Character = z.union([
   z.const('classic'),
   z.const('multiview'),
+  z.const('whale-girl'),
 ]) as unknown as z<PetCharacter>
 
 const Size = z.union([

@@ -142,6 +142,7 @@ describe('desktop notification state', () => {
 describe('desktop notification assets and defaults', () => {
   it('resolves the complete schema defaults', () => {
     expect(Config({})).toEqual(DEFAULT_NOTIFICATION_SETTINGS)
+    expect(Config({ petCharacter: 'whale-girl' }).petCharacter).toBe('whale-girl')
     expect(() => Config({ petSize: 20 })).toThrow()
     expect(() => Config({ petCharacter: 'unknown' })).toThrow()
     expect(() => Config({ completionSound: 'unknown' })).toThrow()
@@ -150,7 +151,7 @@ describe('desktop notification assets and defaults', () => {
     expect(() => Config({ soundGain: 50.5 })).toThrow()
   })
 
-  it('ships selectable classic and multiview WPF pets with RGBA sprite sheets', async () => {
+  it('ships three selectable WPF pets with RGBA sprite sheets', async () => {
     const script = await readFile(resolve(import.meta.dirname, '../../assets/notification/desktop-pet.ps1'), 'utf8')
     const sprites = await readFile(resolve(
       import.meta.dirname,
@@ -163,6 +164,10 @@ describe('desktop notification assets and defaults', () => {
     const multiviewSprites = await readFile(resolve(
       import.meta.dirname,
       '../../assets/notification/deepseek-multiview-pet-sprites.png',
+    ))
+    const whaleGirlSprites = await readFile(resolve(
+      import.meta.dirname,
+      '../../assets/notification/deepseek-whale-girl-pet-sprites.png',
     ))
     expect(script).toContain('Topmost="True"')
     expect(script).toContain('DeepSeekPetInputReader')
@@ -184,15 +189,19 @@ describe('desktop notification assets and defaults', () => {
     expect(script).toContain('Set-SpriteState')
     expect(script).toContain('Advance-SpriteAnimation')
     expect(script).toContain('[string]$MultiviewSpritePath')
+    expect(script).toContain('[string]$WhaleGirlSpritePath')
     expect(script).toContain('$script:classicSpriteFrameCount = 5')
     expect(script).toContain('$script:multiviewSpriteFrameCount = 24')
+    expect(script).toContain('$script:whaleGirlSpriteFrameCount = 32')
     expect(script).toContain('$classicSpriteColumnEdges = @(0, 311, 609, 921, 1222, 1536)')
     expect(script).toContain('$classicSpriteRowEdges = @(0, 204, 396, 605, 786, 1024)')
     expect(script).toContain('$classicIdleSpriteColumnEdges = @(0, 307, 614, 921, 1228, 1536)')
     expect(script).toContain('$classicIdleSpriteRowEdges = @(0, 512, 1024)')
     expect(script).toContain('Select-PetSpriteSet')
-    expect(script).toContain("$script:petCharacter -eq 'multiview'")
+    expect(script).toContain("$character -eq 'multiview'")
+    expect(script).toContain("$character -eq 'whale-girl'")
     expect(script).toContain('$script:multiviewFrameSequences')
+    expect(script).toContain('$script:whaleGirlFrameSequences')
     expect(script).toContain('idle = 0')
     expect(script).toContain('working = 1')
     expect(script).toContain('confirmation = 2')
@@ -243,6 +252,11 @@ describe('desktop notification assets and defaults', () => {
     expect(multiviewSprites.readUInt32BE(20)).toBe(1536)
     expect(multiviewSprites[24]).toBe(8)
     expect(multiviewSprites[25]).toBe(6)
+    expect(whaleGirlSprites.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+    expect(whaleGirlSprites.readUInt32BE(16)).toBe(8192)
+    expect(whaleGirlSprites.readUInt32BE(20)).toBe(1536)
+    expect(whaleGirlSprites[24]).toBe(8)
+    expect(whaleGirlSprites[25]).toBe(6)
   })
 
   it.runIf(process.platform === 'win32')('keeps 0% at source level and applies real 100% PCM gain', async () => {
@@ -420,6 +434,19 @@ describe('desktop notification configuration Remote', () => {
     })).resolves.toMatchObject({
       kind: 'ok',
       view: { registered: true, revision: 5, value: { soundGain: 65 }, user: { soundGain: 65 } },
+    })
+
+    await expect(remote.mutate({
+      op: { op: 'set', path: ['petCharacter'], value: 'whale-girl' },
+      expectedRevision: 5,
+    })).resolves.toMatchObject({
+      kind: 'ok',
+      view: {
+        registered: true,
+        revision: 6,
+        value: { petCharacter: 'whale-girl' },
+        user: { petCharacter: 'whale-girl' },
+      },
     })
   })
 
