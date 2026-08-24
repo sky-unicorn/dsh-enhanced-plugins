@@ -15,6 +15,7 @@ import type {
 } from '../shared.js'
 import { SETTINGS_NAMESPACE } from './config.js'
 import type { DesktopCompanion } from './desktop.js'
+import { normalizeNotificationUserLayer } from './migration.js'
 import { CustomSoundLibrary } from './sound-library.js'
 
 const FIELDS = new Set<keyof NotificationSettings>([
@@ -156,6 +157,7 @@ export class NotificationConfigRemote extends TypertRemoteService {
       .find(entry => entry.ns === SETTINGS_NAMESPACE)
     if (descriptor === undefined) return { registered: false }
     const value = descriptor.value as NotificationSettings
+    const user = normalizeNotificationUserLayer(descriptor.user)
     return {
       registered: true,
       writable: this.ctx.settings.writable,
@@ -163,9 +165,7 @@ export class NotificationConfigRemote extends TypertRemoteService {
       ...(descriptor.base === undefined ? {} : {
         base: descriptor.base as Partial<NotificationSettings>,
       }),
-      ...(descriptor.user === undefined ? {} : {
-        user: descriptor.user as Partial<NotificationSettings>,
-      }),
+      ...(user === undefined ? {} : { user }),
       customSounds: await this.soundLibrary.list(value),
       revision: descriptor.revision,
     }

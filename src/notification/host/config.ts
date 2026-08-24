@@ -26,11 +26,29 @@ const Position = z.union([
   z.const('bottom-right'),
 ]) as unknown as z<PetPosition>
 
-const Character = z.union([
+const RETIRED_PET_CHARACTERS = {
+  'beijing-shark': 'classic',
+} as const satisfies Record<string, PetCharacter>
+
+type RetiredPetCharacter = keyof typeof RETIRED_PET_CHARACTERS
+
+/** Resolve a known retired character id without accepting arbitrary unknown values. */
+export function replacementForRetiredPetCharacter(value: unknown): PetCharacter | undefined {
+  if (typeof value !== 'string' || !Object.hasOwn(RETIRED_PET_CHARACTERS, value)) return undefined
+  return RETIRED_PET_CHARACTERS[value as RetiredPetCharacter]
+}
+
+const CharacterInput = z.union([
   z.const('classic'),
   z.const('multiview'),
   z.const('whale-girl'),
-]) as unknown as z<PetCharacter>
+  z.const('beijing-shark'),
+])
+
+const Character = z.transform(CharacterInput, (value): PetCharacter => {
+  const replacement = replacementForRetiredPetCharacter(value)
+  return replacement ?? value as PetCharacter
+})
 
 const Size = z.union([
   z.const(80),

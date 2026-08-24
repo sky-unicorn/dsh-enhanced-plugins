@@ -102,6 +102,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 设置实时生效。常驻宠物及短生命周期提示音进程均由 DSH subprocess service 管理；关闭功能时会协作式退出，不遗留 helper 进程。
 
+如果先前安装的版本保存了后来退役的桌宠样式，通知插件会在下次启动时把已知的退役 ID 迁移为“平面小鲸”。其他未知值仍会校验失败，不会被静默接受。
+
 ### 插件社区
 
 安装名称：`plugin-market` · 位置：**设置 → 插件社区**

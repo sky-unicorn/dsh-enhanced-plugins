@@ -6,11 +6,13 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import type { NotificationSettings } from '../shared.js'
 import { Config, SETTINGS_NAMESPACE } from './config.js'
 import { DesktopCompanion } from './desktop.js'
+import { migrateRetiredPetCharacter } from './migration.js'
 import { NotificationConfigRemote } from './remote.js'
 import { NotificationStateTracker } from './state.js'
 
 export { Config, SETTINGS_NAMESPACE } from './config.js'
 export { DesktopCompanion } from './desktop.js'
+export { migrateRetiredPetCharacter } from './migration.js'
 export { NotificationConfigRemote } from './remote.js'
 export {
   PetPositionStore,
@@ -31,12 +33,31 @@ export const inject = ['sessions', 'subprocess']
 /** Mount the session observer, optional settings owner, and managed desktop companion. */
 export function apply(ctx: Context, config: NotificationSettings): void {
   let current = (): NotificationSettings => config
+  let migrationTail = Promise.resolve()
   const tracker = new NotificationStateTracker()
   const companion = new DesktopCompanion(ctx, config)
 
+  const scheduleSettingsMigration = (): void => {
+    const settings = ctx.get('settings')
+    if (settings === undefined) return
+    migrationTail = migrationTail
+      .then(async () => { await migrateRetiredPetCharacter(settings) })
+      .catch((error: unknown) => {
+        ctx.logger.warn(
+          'desktop notifications: unable to migrate a retired pet character: %s',
+          error instanceof Error ? error.message : String(error),
+        )
+      })
+  }
+
+  ctx.effect(() => async () => { await migrationTail }, 'desktop notification settings migration')
+
   installSettingsSection(ctx, SETTINGS_NAMESPACE, Config, config, {
     setSource: (source) => { current = source },
-    onChange: () => { companion.configure(current()) },
+    onChange: () => {
+      companion.configure(current())
+      scheduleSettingsMigration()
+    },
   })
 
   // The standard Host settings RPC deliberately hides third-party namespaces.

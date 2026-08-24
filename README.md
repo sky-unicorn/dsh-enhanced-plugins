@@ -102,6 +102,8 @@ Flat Whale keeps its existing five-frame task and idle-interaction sheets. 3D Wh
 
 Settings apply live. The resident pet and short-lived sound processes are managed through the DSH subprocess service and exit cooperatively without leaving helper processes behind.
 
+When a previously installed build stored a pet style that was later retired, the notification plugin migrates that known retired id to Flat Whale during its next startup. Unknown values still fail validation instead of being silently accepted.
+
 ### Plugin Community
 
 Install name: `plugin-market` · Location: **Settings → Plugin Community**
