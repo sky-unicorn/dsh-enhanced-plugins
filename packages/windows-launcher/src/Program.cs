@@ -59,6 +59,7 @@ namespace DshEnhanced.WindowsLauncher
                 WebStatusSnapshot status;
                 if (action == "start") result = runtime.StartWeb();
                 else if (action == "stop") result = runtime.StopWeb();
+                else if (action == "stop-and-wait") result = runtime.StopWebAndWait();
                 else if (action == "restart") result = runtime.RestartWeb();
                 else if (action == "build") result = runtime.BuildDshSource(out operationOutput);
                 else if (action == "status") result = OperationResult.Ok("状态读取完成。");
@@ -90,7 +91,7 @@ namespace DshEnhanced.WindowsLauncher
             if (args.Length >= 2 && String.Equals(args[0], "--screenshot", StringComparison.OrdinalIgnoreCase))
             {
                 using (Icon icon = LauncherIcon.Create())
-                using (MainForm form = new MainForm(new LauncherRuntime(), icon, delegate { }))
+                using (MainForm form = new MainForm(new LauncherRuntime(), icon))
                 {
                     form.CaptureTo(args[1], args.Length >= 3 ? args[2] : "overview",
                         args.Length >= 4 ? args[3] : "normal");
@@ -101,7 +102,7 @@ namespace DshEnhanced.WindowsLauncher
             if (args.Length >= 1 && String.Equals(args[0], "--ui-preview", StringComparison.OrdinalIgnoreCase))
             {
                 using (Icon icon = LauncherIcon.Create())
-                using (MainForm form = new MainForm(new LauncherRuntime(), icon, Application.Exit))
+                using (MainForm form = new MainForm(new LauncherRuntime(), icon))
                     Application.Run(form);
                 return 0;
             }
@@ -157,12 +158,13 @@ namespace DshEnhanced.WindowsLauncher
         private readonly System.Windows.Forms.Timer signalTimer;
         private readonly System.Windows.Forms.Timer delayedDshTimer;
         private bool exiting;
+        private int stopAndExitInProgress;
 
         internal LauncherApplicationContext(bool startHidden, bool startDshAfterLogin)
         {
             runtime = new LauncherRuntime();
             icon = LauncherIcon.Create();
-            form = new MainForm(runtime, icon, ExitLauncher);
+            form = new MainForm(runtime, icon);
             form.FormClosing += OnFormClosing;
             // A login-started instance may stay hidden for its entire lifetime. Force a
             // native handle now so background Web completion can safely use BeginInvoke.
@@ -209,10 +211,10 @@ namespace DshEnhanced.WindowsLauncher
             menu.Font = UiTheme.Font(9.5f, FontStyle.Regular);
             menu.Items.Add("打开控制中心", null, delegate { ShowWindow(); });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("启动 Web", null, delegate { RunTrayOperation(runtime.StartWeb); });
-            menu.Items.Add("打开 Web 页面", null, delegate { RunTrayOperation(runtime.OpenWeb); });
-            menu.Items.Add("重启 Web", null, delegate { RunTrayOperation(runtime.RestartWeb); });
-            menu.Items.Add("停止 Web", null, delegate { RunTrayOperation(runtime.StopWeb); });
+            ToolStripItem startWeb = menu.Items.Add("启动 Web", null, delegate { RunTrayOperation(runtime.StartWeb); });
+            ToolStripItem openWeb = menu.Items.Add("打开 Web 页面", null, delegate { RunTrayOperation(runtime.OpenWeb); });
+            ToolStripItem restartWeb = menu.Items.Add("重启 Web", null, delegate { RunTrayOperation(runtime.RestartWeb); });
+            ToolStripItem stopWeb = menu.Items.Add("停止 Web", null, delegate { RunTrayOperation(runtime.StopWeb); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("打开日志目录", null, delegate { runtime.OpenLogFolder(); });
             ToolStripMenuItem launcherAutostart = new ToolStripMenuItem("登录后仅启动 Launcher");
@@ -221,19 +223,24 @@ namespace DshEnhanced.WindowsLauncher
             ToolStripMenuItem dshAutostart = new ToolStripMenuItem("登录后自动启动 DSH（延迟 30 秒）");
             dshAutostart.Click += delegate { SetStartupModeFromTray(LoginStartupMode.LauncherAndDsh); };
             menu.Items.Add(dshAutostart);
+            menu.Items.Add(new ToolStripSeparator());
+            ToolStripItem launcherOnlyExit = menu.Items.Add("仅退出 Launcher", null, delegate { ExitLauncher(); });
+            ToolStripItem exitLauncher = menu.Items.Add("退出 Launcher", null, delegate { StopDshAndExit(); });
             menu.Opening += delegate
             {
                 LoginStartupMode mode = runtime.GetAutostartMode();
                 launcherAutostart.Checked = mode == LoginStartupMode.LauncherOnly;
                 dshAutostart.Checked = mode == LoginStartupMode.LauncherAndDsh;
                 WebStatusSnapshot status = runtime.Snapshot();
-                menu.Items[2].Enabled = status.Ownership == WebOwnership.Stopped;
-                menu.Items[3].Enabled = status.Ownership == WebOwnership.Owned || status.Ownership == WebOwnership.External;
-                menu.Items[4].Enabled = status.Ownership != WebOwnership.External;
-                menu.Items[5].Enabled = status.CanStop;
+                bool stoppingAndExiting = Volatile.Read(ref stopAndExitInProgress) != 0;
+                startWeb.Enabled = !stoppingAndExiting && status.Ownership == WebOwnership.Stopped;
+                openWeb.Enabled = !stoppingAndExiting
+                    && (status.Ownership == WebOwnership.Owned || status.Ownership == WebOwnership.External);
+                restartWeb.Enabled = !stoppingAndExiting && status.Ownership != WebOwnership.External;
+                stopWeb.Enabled = !stoppingAndExiting && status.CanStop;
+                exitLauncher.Enabled = !stoppingAndExiting;
+                launcherOnlyExit.Enabled = !stoppingAndExiting;
             };
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("退出 Launcher", null, delegate { ExitLauncher(); });
             return menu;
         }
 
@@ -305,18 +312,45 @@ namespace DshEnhanced.WindowsLauncher
             icon.Dispose();
             ExitThread();
         }
+
+        private void StopDshAndExit()
+        {
+            if (exiting || Interlocked.CompareExchange(ref stopAndExitInProgress, 1, 0) != 0) return;
+            delayedDshTimer.Stop();
+            form.SetStopAndExitState(true, OperationResult.Ok("正在停止 DSH，完成后将退出 Launcher…"));
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                OperationResult result;
+                try { result = runtime.StopWebAndWait(); }
+                catch (Exception error) { result = OperationResult.Fail("停止 DSH 失败：" + error.Message); }
+                if (exiting || form.IsDisposed || !form.IsHandleCreated) return;
+                try
+                {
+                    form.BeginInvoke(new Action(delegate
+                    {
+                        if (result.Success)
+                        {
+                            ExitLauncher();
+                            return;
+                        }
+                        Interlocked.Exchange(ref stopAndExitInProgress, 0);
+                        form.SetStopAndExitState(false, result);
+                        tray.ShowBalloonTip(2400, "未能退出 Launcher", result.Message, ToolTipIcon.Warning);
+                    }));
+                }
+                catch (InvalidOperationException) { }
+            });
+        }
     }
 
     internal sealed class MainForm : Form
     {
         private readonly LauncherRuntime runtime;
-        private readonly Action exitLauncher;
         private Panel sidebar;
         private BrandMark brandMark;
         private Label brandName;
         private Label brandEdition;
         private Label sidebarVersion;
-        private ModernButton exitButton;
         private readonly Panel pageHost;
         private readonly Panel header;
         private readonly Panel overviewPage;
@@ -378,10 +412,9 @@ namespace DshEnhanced.WindowsLauncher
         private bool captureMode;
         private float layoutScaleOverride;
 
-        internal MainForm(LauncherRuntime runtime, Icon icon, Action exitLauncher)
+        internal MainForm(LauncherRuntime runtime, Icon icon)
         {
             this.runtime = runtime;
-            this.exitLauncher = exitLauncher;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                 | ControlStyles.ResizeRedraw, true);
             UpdateStyles();
@@ -643,20 +676,21 @@ namespace DshEnhanced.WindowsLauncher
             sidebarVersion.Font = UiTheme.Font(7.4f, FontStyle.Regular);
             sidebarVersion.AutoSize = true;
             sidebar.Controls.Add(sidebarVersion);
-            exitButton = NewButton("退出 Launcher", ModernButtonKind.Quiet, 176);
-            exitButton.Click += delegate { exitLauncher(); };
-            sidebar.Controls.Add(exitButton);
             EventHandler layoutFooter = delegate
             {
-                int inset = Dip(24);
-                exitButton.Visible = sidebar.ClientSize.Height >= Dip(470);
-                exitButton.Location = new Point(inset, Math.Max(Dip(320), sidebar.ClientSize.Height - Dip(128)));
-                sidebarVersion.Visible = sidebar.ClientSize.Height >= Dip(470);
-                sidebarVersion.Location = new Point(inset, Math.Max(Dip(378), sidebar.ClientSize.Height - Dip(65)));
+                LayoutSidebarFooter(sidebar, false);
             };
             sidebar.SizeChanged += layoutFooter;
             layoutFooter(sidebar, EventArgs.Empty);
             return sidebar;
+        }
+
+        private void LayoutSidebarFooter(Panel owner, bool compact)
+        {
+            int inset = compact ? Dip(12) : Dip(24);
+            sidebarVersion.Visible = !compact && owner.ClientSize.Height >= Dip(350);
+            sidebarVersion.Location = new Point(inset,
+                Math.Max(Dip(300), owner.ClientSize.Height - Dip(65)));
         }
 
         private void BuildOverviewPage()
@@ -855,21 +889,13 @@ namespace DshEnhanced.WindowsLauncher
 
             brandName.Visible = !compact;
             brandEdition.Visible = !compact;
-            bool showFooter = sidebar.ClientSize.Height >= Dip(470);
-            exitButton.Visible = showFooter;
-            sidebarVersion.Visible = !compact && showFooter;
             brandMark.Location = compact
                 ? new Point(Math.Max(0, (sidebarWidth - brandMark.Width) / 2), Dip(26))
                 : new Point(Dip(24), Dip(26));
 
             NavButton[] navigation = { overviewNav, tasksNav, diagnosticsNav };
             foreach (NavButton button in navigation) button.Width = sidebarWidth;
-            int footerInset = compact ? Dip(12) : Dip(24);
-            exitButton.Width = Math.Max(Dip(120), sidebarWidth - (footerInset * 2));
-            exitButton.Left = footerInset;
-            exitButton.Top = Math.Max(Dip(320), sidebar.ClientSize.Height - Dip(128));
-            sidebarVersion.Location = new Point(footerInset,
-                Math.Max(Dip(378), sidebar.ClientSize.Height - Dip(65)));
+            LayoutSidebarFooter(sidebar, compact);
         }
 
         private void LayoutOverview()
@@ -1417,6 +1443,12 @@ namespace DshEnhanced.WindowsLauncher
                 stopButton.Enabled = false;
             }
             else RefreshNow();
+        }
+
+        internal void SetStopAndExitState(bool inProgress, OperationResult result)
+        {
+            SetActionsEnabled(!inProgress);
+            ShowToast(result);
         }
 
         private void ShowToast(OperationResult result)

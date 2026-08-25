@@ -169,7 +169,7 @@ try {
   }, 'launcher-owned Web readiness')
 
   const stopOutput = resolve(temporary, 'stop.json')
-  const stop = run(executable, ['--automation', 'stop', stopOutput], { env: environment })
+  const stop = run(executable, ['--automation', 'stop-and-wait', stopOutput], { env: environment })
   if (stop.status !== 0) throw new Error(`launcher stop failed: ${stop.stderr}`)
   await waitFor(async () => {
     const statusOutput = resolve(temporary, `stopped-${Date.now()}.json`)

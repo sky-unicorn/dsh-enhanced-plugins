@@ -505,7 +505,11 @@ namespace DshEnhanced.WindowsLauncher
 
         internal OperationResult StopWeb()
         {
-            WebStatusSnapshot status = Snapshot();
+            return RequestWebStop(Snapshot());
+        }
+
+        private OperationResult RequestWebStop(WebStatusSnapshot status)
+        {
             if (!status.CanStop || String.IsNullOrEmpty(status.RequestId))
             {
                 if (status.Ownership == WebOwnership.External)
@@ -517,6 +521,19 @@ namespace DshEnhanced.WindowsLauncher
             return OperationResult.Ok("正在安全停止 Web。");
         }
 
+        internal OperationResult StopWebAndWait()
+        {
+            WebStatusSnapshot status = Snapshot();
+            OperationResult stop = RequestWebStop(status);
+            if (!stop.Success) return stop;
+            if (!status.CanStop)
+                return OperationResult.Ok("DSH 当前未运行，正在退出 Launcher。");
+
+            OperationResult wait = WaitForWebStop();
+            if (!wait.Success) return wait;
+            return OperationResult.Ok("DSH 已停止，正在退出 Launcher。");
+        }
+
         internal OperationResult RestartWeb()
         {
             WebStatusSnapshot status = Snapshot();
@@ -526,16 +543,23 @@ namespace DshEnhanced.WindowsLauncher
             {
                 OperationResult stop = StopWeb();
                 if (!stop.Success) return stop;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(15);
-                while (DateTime.UtcNow < deadline)
-                {
-                    Thread.Sleep(250);
-                    if (Snapshot().Ownership == WebOwnership.Stopped) break;
-                }
-                if (Snapshot().Ownership != WebOwnership.Stopped)
+                OperationResult wait = WaitForWebStop();
+                if (!wait.Success)
                     return OperationResult.Fail("等待 Web 停止超时；没有启动第二个实例。");
             }
             return StartWeb();
+        }
+
+        private OperationResult WaitForWebStop()
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(250);
+                if (Snapshot().Ownership == WebOwnership.Stopped)
+                    return OperationResult.Ok("Web 已停止。");
+            }
+            return OperationResult.Fail("等待 DSH 停止超时；Launcher 保持运行。");
         }
 
         internal OperationResult OpenWeb()
