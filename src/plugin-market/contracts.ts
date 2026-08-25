@@ -64,7 +64,10 @@ export type MarketCatalogFilter = 'all' | 'installed'
 /** Marketplace snapshot returned to the browser. */
 export interface MarketCatalog {
   readonly plugins: readonly MarketPlugin[]
+  /** Time at which the remote indexer generated the active snapshot. */
   readonly fetchedAt: string
+  /** True when the indexer has not published a new validated snapshot for 24 hours; optional for older Hosts. */
+  readonly indexStale?: boolean
   readonly rateLimitRemaining: number | null
   readonly profile: string
   readonly page: number

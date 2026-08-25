@@ -1,0 +1,60 @@
+name: Update plugin market index
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/update-plugin-index.yml'
+      - 'scripts/update-plugin-index.mjs'
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: plugin-market-index
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out indexer source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+
+      - name: Generate validated index
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          node scripts/update-plugin-index.mjs
+          --output "$RUNNER_TEMP/plugins-cache.json"
+          --previous assets/plugins-cache.json
+          --previous-url "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/market-index/plugins-cache.json"
+
+      - name: Publish market-index branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_root="$(mktemp -d)"
+          publish_dir="$publish_root/index"
+          if git fetch origin market-index; then
+            git worktree add --detach "$publish_dir" FETCH_HEAD
+          else
+            git worktree add --detach "$publish_dir" "$GITHUB_SHA"
+            git -C "$publish_dir" switch --orphan market-index
+            git -C "$publish_dir" rm -rf --ignore-unmatch .
+          fi
+          install -m 0644 "$RUNNER_TEMP/plugins-cache.json" "$publish_dir/plugins-cache.json"
+          git -C "$publish_dir" config user.name "github-actions[bot]"
+          git -C "$publish_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$publish_dir" add --all
+          git -C "$publish_dir" commit -m "chore: update plugin market index"
+          git -C "$publish_dir" push origin HEAD:market-index

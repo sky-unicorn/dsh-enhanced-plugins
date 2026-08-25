@@ -39,6 +39,7 @@ describe('capability-aware install actions', () => {
         return json({
           plugins: [plugin('owner/npm-plugin', 'npm-plugin'), plugin('owner/manual-plugin', 'manual-plugin')],
           fetchedAt: '2026-08-25T00:00:00.000Z',
+          indexStale: false,
           rateLimitRemaining: null,
           profile: 'web',
           page: 1,
@@ -105,6 +106,7 @@ describe('capability-aware install actions', () => {
         return json({
           plugins: [installed],
           fetchedAt: '2026-08-25T00:00:00.000Z',
+          indexStale: false,
           rateLimitRemaining: null,
           profile: 'web',
           page: 1,
@@ -126,5 +128,32 @@ describe('capability-aware install actions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: '已安装' }))
     await waitFor(() => expect(screen.getByText('sky-unicorn/dsh-enhanced-plugins')).toBeTruthy())
+  })
+
+  it('shows the generation time and warns when the automated index is stale', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/catalog?')) {
+        return json({
+          plugins: [],
+          fetchedAt: '2026-08-20T00:00:00.000Z',
+          indexStale: true,
+          rateLimitRemaining: null,
+          profile: 'web',
+          page: 1,
+          pageSize: 12,
+          total: 0,
+          totalPages: 1,
+        })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+
+    render(<PluginMarket t={t} />)
+
+    expect(await screen.findByText((_content, element) =>
+      element?.tagName === 'SPAN' && element.textContent?.startsWith('索引生成时间:') === true)).toBeTruthy()
+    expect(screen.getByText(zh.indexStale)).toBeTruthy()
+    expect(screen.getByRole('button', { name: '同步最新索引' })).toBeTruthy()
   })
 })

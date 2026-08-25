@@ -48,7 +48,7 @@ export const Config: Schema<Config> = Schema.object({
   profile: Schema.string().default('web'),
   topic: Schema.string().default('dsh-plugin'),
   channelUrl: Schema.string().pattern(/^https:\/\//).default(
-    'https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/master/assets/plugins-cache.json',
+    'https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/market-index/plugins-cache.json',
   ),
   pageSize: Schema.number().min(1).max(30).default(12),
   operationTimeoutMs: Schema.number().min(1000).default(120000),
@@ -66,6 +66,7 @@ interface GitHubRepository {
   readonly html_url: string
   readonly stargazers_count: number
   readonly updated_at: string
+  readonly pushed_at?: string
   readonly topics: readonly string[]
   readonly default_branch: string
   readonly owner: { readonly avatar_url: string }
@@ -112,6 +113,7 @@ type SyncProgressEvent = { readonly kind: 'channel'; readonly total: number }
 const CHANNEL_VALIDATION = 'root-dsh-bundle-v1' as const
 const MAX_CHANNEL_BYTES = 16 * 1024 * 1024
 const MAX_UPSTREAM_RESPONSE_BYTES = 20 * 1024 * 1024
+const INDEX_STALE_AFTER_MS = 24 * 60 * 60 * 1000
 const RETRYABLE_HTTP_STATUS = new Set([429, 502, 503, 504])
 const MARKET_SELF_PACKAGES = new Set(['dsh-enhanced-plugins', 'dsh-enhanced-plugin-market', 'dsh-plugin-market'])
 const MARKET_REPOSITORY: GitHubRepository = {
@@ -414,7 +416,10 @@ function parseChannel(raw: string, config: Config): ChannelDocument {
   if (parsed.schemaVersion !== 2 || parsed.validation !== CHANNEL_VALIDATION) {
     throw new HttpError(500, 'UNVERIFIED_CHANNEL', '插件渠道尚未经过 dsh.bundle 校验，请重新同步。')
   }
-  if (parsed.topic !== config.topic || typeof parsed.syncedAt !== 'string' || !Array.isArray(parsed.repositories)) {
+  if (parsed.topic !== config.topic
+    || typeof parsed.syncedAt !== 'string'
+    || !Number.isFinite(Date.parse(parsed.syncedAt))
+    || !Array.isArray(parsed.repositories)) {
     throw new HttpError(500, 'INVALID_CHANNEL', '本地插件渠道 JSON 无效，请重新同步。')
   }
   if (parsed.repositories.some(repo => dshBundleEvidence({
@@ -590,6 +595,7 @@ async function discover(
   return {
     plugins,
     fetchedAt: channel.syncedAt,
+    indexStale: Date.now() - Date.parse(channel.syncedAt) > INDEX_STALE_AFTER_MS,
     rateLimitRemaining: null,
     profile: config.profile,
     page,

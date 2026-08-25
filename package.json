@@ -78,6 +78,7 @@
     "test:packages": "vitest run --config vitest.packages.config.ts",
     "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:model-input-types && npm run test:notification && npm run test:market && npm run test:sub-agent && npm run test:packages",
     "check": "npm run typecheck && npm test && npm run build",
+    "market:index": "node scripts/update-plugin-index.mjs",
     "pack:dry-run": "node scripts/pack-dry-run.mjs",
     "verify:launcher": "node scripts/verify-windows-launcher.mjs",
     "prepare": "npm run build"

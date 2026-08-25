@@ -133,7 +133,9 @@
 }
 
 .notice,
-.actionError {
+.actionError,
+.indexWarning {
+  margin: 0;
   border-radius: 8px;
   padding: 9px 11px;
   font-size: 12px;
@@ -158,6 +160,12 @@
 .actionError {
   background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-state-error-primary);
+}
+
+.indexWarning {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .failure {

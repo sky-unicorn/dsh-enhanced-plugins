@@ -50,6 +50,14 @@ type ViewState =
   | { readonly status: 'error'; readonly message: string }
   | { readonly status: 'ready'; readonly catalog: MarketCatalog }
 
+const INDEX_STALE_AFTER_MS = 24 * 60 * 60 * 1000
+
+function indexIsStale(catalog: MarketCatalog): boolean {
+  if (catalog.indexStale !== undefined) return catalog.indexStale
+  const generatedAt = Date.parse(catalog.fetchedAt)
+  return !Number.isFinite(generatedAt) || Date.now() - generatedAt > INDEX_STALE_AFTER_MS
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/plugin-market/${path}`, init)
   const value: unknown = await response.json()
@@ -297,6 +305,9 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
           {state.status === 'ready' ? (
             <div className={css.meta}>
             <span>{t('profile')}: <strong>{state.catalog.profile}</strong></span>
+            <span>{t('indexUpdated')}: <strong><time dateTime={state.catalog.fetchedAt}>
+              {new Date(state.catalog.fetchedAt).toLocaleString()}
+            </time></strong></span>
             {state.catalog.rateLimitRemaining === null ? null : (
               <span>{t('rateLimit')}: <strong>{state.catalog.rateLimitRemaining}</strong></span>
             )}
@@ -386,6 +397,7 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
             />
           </label>
           {state.catalog.fetchedAt === new Date(0).toISOString() ? <p className={css.status}>{t('neverSynced')}</p> : null}
+          {indexIsStale(state.catalog) ? <p className={css.indexWarning} role="status">{t('indexStale')}</p> : null}
           {state.catalog.total === 0 && query.trim().length === 0 ? (
             <p className={css.status}>{t(filter === 'installed' ? 'emptyInstalled' : 'empty')}</p>
           ) : null}

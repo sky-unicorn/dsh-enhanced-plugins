@@ -121,7 +121,7 @@ Launcher 只停止自己启动的 DSH 进程树。控制中心不显示退出按
 
 ![插件社区页面](assets/readme/plugin-community.png)
 
-1. 首次打开使用内置插件快照；点击“同步渠道”会下载维护方提供并经过 schema 校验的镜像快照，同时使用 ETag 缓存。短暂的 429/502/503/504 会自动重试，失败时不会覆盖上次可用快照。
+1. 首次打开使用内置插件快照；点击“同步最新索引”会下载 GitHub Actions 每 6 小时自动生成、经过 schema 校验并发布到 `market-index` 分支的快照，同时使用 ETag 缓存。短暂的 429/502/503/504 会自动重试，失败时不会覆盖上次可用快照。
 2. 按仓库名、包名、描述或 topic 搜索。点击“检查安装方式”会实时预检；只有仓库身份匹配、且不包含安装生命周期脚本的 npm bundle 才显示“一键安装”。
 3. 仓库根目录是 DSH bundle 且无需构建脚本时，只能通过“确认并安装源码”安装，并固定到预检过的 commit。需要 build approval、monorepo 子目录、自定义依赖或其他无法验证路径的插件只显示“查看安装说明”。
 4. 安装与卸载以可取消的后台任务运行，HTTP 请求不会长时间挂在代理后面。安装完成后会检查目标 profile、bundle patch 和 profile 组合；验证失败会自动回滚。
@@ -129,7 +129,9 @@ Launcher 只停止自己启动的 DSH 进程树。控制中心不显示退出按
 
 插件市场自身的 `sky-unicorn/dsh-enhanced-plugins` 是内置的已验证渠道贡献；即使远程镜像生成时间早于本仓库，它仍会出现在搜索结果中，远程镜像后续收录时也不会重复。
 
-内置快照与镜像同步都不需要 GitHub Token。安装预检需要读取 GitHub 仓库和 commit 元数据；若该 API 触发限流，可在“配置”中保存只读、短有效期的 Fine-grained Token。Token 只发送到本机 DSH Host，并由 credentials 服务保存。
+索引生产由 [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) 负责：索引器先完整枚举 topic，再复用未变化仓库的既有验证结果，只读取新增或已变化仓库的根 `package.json`。首次推送工作流或索引脚本时会自动建立 `market-index` 分支，此后定时更新，也可从 Actions 页面手动执行；不需要部署常驻服务或配置个人 Token。异常缩水或生成失败不会发布并覆盖上次索引。
+
+内置快照与自动索引同步都不需要用户的 GitHub Token。安装预检需要读取 GitHub 仓库和 commit 元数据；若该 API 触发限流，可在“配置”中保存只读、短有效期的 Fine-grained Token。Token 只发送到本机 DSH Host，并由 credentials 服务保存。页面会显示索引生成时间；超过 24 小时没有新索引时会明确提示，但仍保留上次可用快照。
 
 ### MCP 服务器管理
 
@@ -206,13 +208,13 @@ Launcher 只停止自己启动的 DSH 进程树。控制中心不显示退出按
 | --- | --- | --- |
 | `profile` | `web` | 安装和卸载的目标 profile |
 | `topic` | `dsh-plugin` | 已校验渠道文档必须匹配的 topic 标识 |
-| `channelUrl` | 项目维护的 HTTPS 快照 | “同步渠道”使用的精选镜像地址 |
+| `channelUrl` | `market-index` 分支中的 HTTPS 快照 | “同步最新索引”使用的 Actions 自动发布地址 |
 | `pageSize` | `12` | 每页插件数 |
 | `operationTimeoutMs` | `120000` | 安装和卸载超时 |
 | `githubTokenEnv` | `GITHUB_TOKEN` | credentials 引用名 |
 | `cliPath` | 空 | 可选 DSH 可执行文件绝对路径 |
 
-内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读快照。同步缓存、ETag、后台任务状态和安装记录由 Host 管理；需要持久化的缓存与记录保存在 DSH home 的插件市场数据目录。插件市场不会解析 README 中的 shell 命令，也不会启用 `dangerouslyAllowAllBuilds`。
+内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读引导快照，也作为自动索引首次运行时的增量校验种子。同步缓存、ETag、后台任务状态和安装记录由 Host 管理；需要持久化的缓存与记录保存在 DSH home 的插件市场数据目录。插件市场不会解析 README 中的 shell 命令，也不会启用 `dangerouslyAllowAllBuilds`。
 
 </details>
 
