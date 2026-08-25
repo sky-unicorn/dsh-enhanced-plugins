@@ -144,4 +144,21 @@ describe('mirrored channel synchronization', () => {
     expect(await waitForSync(handler)).toMatchObject({ state: 'completed', result: { total: 1 } })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('uses the standard proxy environment for Host downloads', async () => {
+    const previousHttpsProxy = process.env.HTTPS_PROXY
+    process.env.HTTPS_PROXY = 'http://127.0.0.1:7897'
+    try {
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify(channel()), { status: 200 }))
+      vi.stubGlobal('fetch', fetchMock)
+      const handler = createHandler()
+
+      expect(await request(handler, 'POST', 'sync')).toMatchObject({ status: 202 })
+      expect(await waitForSync(handler)).toMatchObject({ state: 'completed' })
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ dispatcher: expect.anything() })
+    } finally {
+      if (previousHttpsProxy === undefined) delete process.env.HTTPS_PROXY
+      else process.env.HTTPS_PROXY = previousHttpsProxy
+    }
+  })
 })

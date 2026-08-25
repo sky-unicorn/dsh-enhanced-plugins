@@ -27,6 +27,7 @@
   "scripts": { "build": "node ../../build.mjs --feature plugin-market", "prepare": "npm run build" },
   "license": "MIT",
   "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "dependencies": { "undici": "^7.29.0" },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.1",
     "@deepseek-ai/dsh-client-locale": ">=0.1.0-rc.5 <0.2.0",

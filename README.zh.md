@@ -131,7 +131,7 @@ Launcher 只停止自己启动的 DSH 进程树。控制中心不显示退出按
 
 索引生产由 [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) 负责：索引器先完整枚举 topic，再复用未变化仓库的既有验证结果，只读取新增或已变化仓库的根 `package.json`。首次推送工作流或索引脚本时会自动建立 `market-index` 分支，此后定时更新，也可从 Actions 页面手动执行；不需要部署常驻服务或配置个人 Token。异常缩水或生成失败不会发布并覆盖上次索引。
 
-内置快照与自动索引同步都不需要用户的 GitHub Token。安装预检需要读取 GitHub 仓库和 commit 元数据；若该 API 触发限流，可在“配置”中保存只读、短有效期的 Fine-grained Token。Token 只发送到本机 DSH Host，并由 credentials 服务保存。页面会显示索引生成时间；超过 24 小时没有新索引时会明确提示，但仍保留上次可用快照。
+内置快照与自动索引同步都不需要用户的 GitHub Token。Host 下载会识别 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 与 `NO_PROXY`（也支持对应的小写变量），让插件市场沿用命令行下载工具的网络路径，而不是静默尝试直连 GitHub。安装预检需要读取 GitHub 仓库和 commit 元数据；若该 API 触发限流，可在“配置”中保存只读、短有效期的 Fine-grained Token。Token 只发送到本机 DSH Host，并由 credentials 服务保存。页面会显示索引生成时间；超过 24 小时没有新索引时会明确提示，但仍保留上次可用快照。
 
 ### MCP 服务器管理
 
