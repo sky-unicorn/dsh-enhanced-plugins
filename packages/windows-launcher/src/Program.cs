@@ -81,6 +81,7 @@ namespace DshEnhanced.WindowsLauncher
                 string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 bool complete = File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Command.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Supervisor.ps1"))
+                    && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.exe.config"))
                     && StartupRegistration.SelfTest();
                 File.WriteAllText(args[1], complete ? "SELF_TEST_OK" : "SELF_TEST_INCOMPLETE", new UTF8Encoding(false));
                 return complete ? 0 : 1;
@@ -310,6 +311,12 @@ namespace DshEnhanced.WindowsLauncher
     {
         private readonly LauncherRuntime runtime;
         private readonly Action exitLauncher;
+        private Panel sidebar;
+        private BrandMark brandMark;
+        private Label brandName;
+        private Label brandEdition;
+        private Label sidebarVersion;
+        private ModernButton exitButton;
         private readonly Panel pageHost;
         private readonly Panel header;
         private readonly Panel overviewPage;
@@ -368,6 +375,8 @@ namespace DshEnhanced.WindowsLauncher
         private int refreshInFlight;
         private int refreshAgain;
         private int buildInProgress;
+        private bool captureMode;
+        private float layoutScaleOverride;
 
         internal MainForm(LauncherRuntime runtime, Icon icon, Action exitLauncher)
         {
@@ -380,12 +389,13 @@ namespace DshEnhanced.WindowsLauncher
             Icon = (Icon)icon.Clone();
             BackColor = UiTheme.Background;
             Font = UiTheme.Font(9.5f, FontStyle.Regular);
+            AutoScaleDimensions = new SizeF(96f, 96f);
             AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterScreen;
             Size = new Size(1120, 740);
-            MinimumSize = new Size(960, 660);
+            MinimumSize = Size.Empty;
 
-            Panel sidebar = BuildSidebar();
+            sidebar = BuildSidebar();
             Controls.Add(sidebar);
 
             Panel workspace = new Panel();
@@ -442,6 +452,7 @@ namespace DshEnhanced.WindowsLauncher
             diagnosticsPage = new Panel();
             diagnosticsPage.Dock = DockStyle.Fill;
             diagnosticsPage.BackColor = UiTheme.Background;
+            diagnosticsPage.AutoScroll = true;
             pageHost.Controls.Add(overviewPage);
             pageHost.Controls.Add(tasksPage);
             pageHost.Controls.Add(diagnosticsPage);
@@ -522,6 +533,7 @@ namespace DshEnhanced.WindowsLauncher
             pageHost.Resize += delegate { QueueResponsiveLayout(); };
             Shown += delegate
             {
+                ApplyDisplayConstraints();
                 // The first visible layout runs after WinForms has applied DPI scaling and docking.
                 // Keep it synchronous so the initial paint never exposes overlapping default bounds.
                 PerformLayout();
@@ -533,6 +545,63 @@ namespace DshEnhanced.WindowsLauncher
             LayoutResponsivePages();
         }
 
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            ApplyDisplayConstraints();
+            PerformLayout();
+            LayoutResponsivePages();
+        }
+
+        protected override void WndProc(ref Message message)
+        {
+            const int WmDpiChanged = 0x02E0;
+            base.WndProc(ref message);
+            if (message.Msg != WmDpiChanged || captureMode || IsDisposed || !IsHandleCreated) return;
+            try
+            {
+                BeginInvoke(new Action(delegate
+                {
+                    if (IsDisposed) return;
+                    ApplyDisplayConstraints();
+                    PerformLayout();
+                    pageHost.PerformLayout();
+                    LayoutResponsivePages();
+                }));
+            }
+            catch (InvalidOperationException) { }
+        }
+
+        private int Dip(int value)
+        {
+            float scale = layoutScaleOverride > 0f ? layoutScaleOverride : Math.Max(1f, DeviceDpi / 96f);
+            return Math.Max(value == 0 ? 0 : 1, (int)Math.Round(value * scale));
+        }
+
+        private void ApplyDisplayConstraints()
+        {
+            if (captureMode || WindowState != FormWindowState.Normal) return;
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            int margin = Dip(8);
+            int maximumWidth = Math.Max(1, workingArea.Width - (margin * 2));
+            int maximumHeight = Math.Max(1, workingArea.Height - (margin * 2));
+            int responsiveMinimumWidth = Math.Min(maximumWidth,
+                Math.Min(Dip(820), Math.Max(640, (maximumWidth * 3) / 4)));
+            int responsiveMinimumHeight = Math.Min(maximumHeight,
+                Math.Min(Dip(560), Math.Max(480, (maximumHeight * 3) / 4)));
+
+            MinimumSize = Size.Empty;
+            Size = new Size(Math.Min(Width, maximumWidth), Math.Min(Height, maximumHeight));
+            MinimumSize = new Size(responsiveMinimumWidth, responsiveMinimumHeight);
+
+            int left = Math.Max(workingArea.Left + margin,
+                Math.Min(Left, workingArea.Right - margin - Width));
+            int top = Math.Max(workingArea.Top + margin,
+                Math.Min(Top, workingArea.Bottom - margin - Height));
+            Location = new Point(left, top);
+            MaximizedBounds = workingArea;
+        }
+
         private Panel BuildSidebar()
         {
             Panel sidebar = new Panel();
@@ -540,23 +609,23 @@ namespace DshEnhanced.WindowsLauncher
             sidebar.Width = 224;
             sidebar.BackColor = UiTheme.Sidebar;
 
-            BrandMark mark = new BrandMark();
-            mark.Location = new Point(24, 26);
-            sidebar.Controls.Add(mark);
-            Label name = new Label();
-            name.AutoSize = true;
-            name.Text = "DeepSeek Harness";
-            name.Font = UiTheme.Font(10.2f, FontStyle.Bold);
-            name.ForeColor = Color.White;
-            name.Location = new Point(82, 30);
-            sidebar.Controls.Add(name);
-            Label edition = new Label();
-            edition.AutoSize = true;
-            edition.Text = "WINDOWS LAUNCHER";
-            edition.Font = UiTheme.Font(7.2f, FontStyle.Bold);
-            edition.ForeColor = Color.FromArgb(126, 148, 185);
-            edition.Location = new Point(82, 55);
-            sidebar.Controls.Add(edition);
+            brandMark = new BrandMark();
+            brandMark.Location = new Point(24, 26);
+            sidebar.Controls.Add(brandMark);
+            brandName = new Label();
+            brandName.AutoSize = true;
+            brandName.Text = "DeepSeek Harness";
+            brandName.Font = UiTheme.Font(10.2f, FontStyle.Bold);
+            brandName.ForeColor = Color.White;
+            brandName.Location = new Point(82, 30);
+            sidebar.Controls.Add(brandName);
+            brandEdition = new Label();
+            brandEdition.AutoSize = true;
+            brandEdition.Text = "WINDOWS LAUNCHER";
+            brandEdition.Font = UiTheme.Font(7.2f, FontStyle.Bold);
+            brandEdition.ForeColor = Color.FromArgb(126, 148, 185);
+            brandEdition.Location = new Point(82, 55);
+            sidebar.Controls.Add(brandEdition);
 
             overviewNav = NewNav("概览", 122, NavGlyph.Overview);
             tasksNav = NewNav("任务与 Profile", 172, NavGlyph.Tasks);
@@ -568,19 +637,22 @@ namespace DshEnhanced.WindowsLauncher
             tasksNav.Click += delegate { ShowPage(tasksPage, tasksNav, "任务与 Profile"); };
             diagnosticsNav.Click += delegate { ShowPage(diagnosticsPage, diagnosticsNav, "日志与诊断"); };
 
-            Label version = new Label();
-            version.Text = "LOCAL COMPANION  ·  v0.1.0";
-            version.ForeColor = Color.FromArgb(115, 134, 165);
-            version.Font = UiTheme.Font(7.4f, FontStyle.Regular);
-            version.AutoSize = true;
-            sidebar.Controls.Add(version);
-            ModernButton exit = NewButton("退出 Launcher", ModernButtonKind.Quiet, 176);
-            exit.Click += delegate { exitLauncher(); };
-            sidebar.Controls.Add(exit);
+            sidebarVersion = new Label();
+            sidebarVersion.Text = "LOCAL COMPANION  ·  v0.1.0";
+            sidebarVersion.ForeColor = Color.FromArgb(115, 134, 165);
+            sidebarVersion.Font = UiTheme.Font(7.4f, FontStyle.Regular);
+            sidebarVersion.AutoSize = true;
+            sidebar.Controls.Add(sidebarVersion);
+            exitButton = NewButton("退出 Launcher", ModernButtonKind.Quiet, 176);
+            exitButton.Click += delegate { exitLauncher(); };
+            sidebar.Controls.Add(exitButton);
             EventHandler layoutFooter = delegate
             {
-                exit.Location = new Point(24, Math.Max(320, sidebar.ClientSize.Height - 128));
-                version.Location = new Point(24, Math.Max(378, sidebar.ClientSize.Height - 65));
+                int inset = Dip(24);
+                exitButton.Visible = sidebar.ClientSize.Height >= Dip(470);
+                exitButton.Location = new Point(inset, Math.Max(Dip(320), sidebar.ClientSize.Height - Dip(128)));
+                sidebarVersion.Visible = sidebar.ClientSize.Height >= Dip(470);
+                sidebarVersion.Location = new Point(inset, Math.Max(Dip(378), sidebar.ClientSize.Height - Dip(65)));
             };
             sidebar.SizeChanged += layoutFooter;
             layoutFooter(sidebar, EventArgs.Empty);
@@ -740,6 +812,7 @@ namespace DshEnhanced.WindowsLauncher
         private void LayoutResponsivePages()
         {
             if (overviewPage == null || overviewActions == null) return;
+            LayoutSidebar();
             LayoutHeader();
             // Control.Visible is false while an ancestor form is hidden, even when this is the
             // selected page. Track the selection explicitly so the first layout can run before Show().
@@ -773,6 +846,32 @@ namespace DshEnhanced.WindowsLauncher
             pageSubtitle.Left = left + 2;
         }
 
+        private void LayoutSidebar()
+        {
+            if (sidebar == null) return;
+            bool compact = ClientSize.Width < Dip(760);
+            int sidebarWidth = Dip(compact ? 176 : 224);
+            if (sidebar.Width != sidebarWidth) sidebar.Width = sidebarWidth;
+
+            brandName.Visible = !compact;
+            brandEdition.Visible = !compact;
+            bool showFooter = sidebar.ClientSize.Height >= Dip(470);
+            exitButton.Visible = showFooter;
+            sidebarVersion.Visible = !compact && showFooter;
+            brandMark.Location = compact
+                ? new Point(Math.Max(0, (sidebarWidth - brandMark.Width) / 2), Dip(26))
+                : new Point(Dip(24), Dip(26));
+
+            NavButton[] navigation = { overviewNav, tasksNav, diagnosticsNav };
+            foreach (NavButton button in navigation) button.Width = sidebarWidth;
+            int footerInset = compact ? Dip(12) : Dip(24);
+            exitButton.Width = Math.Max(Dip(120), sidebarWidth - (footerInset * 2));
+            exitButton.Left = footerInset;
+            exitButton.Top = Math.Max(Dip(320), sidebar.ClientSize.Height - Dip(128));
+            sidebarVersion.Location = new Point(footerInset,
+                Math.Max(Dip(378), sidebar.ClientSize.Height - Dip(65)));
+        }
+
         private void LayoutOverview()
         {
             int left;
@@ -780,44 +879,81 @@ namespace DshEnhanced.WindowsLauncher
             GetContentBounds(overviewPage, out left, out width);
             if (width < 1) return;
 
-            SetBoundsIfChanged(hero, left, 0, width, 154);
-            privacyLabel.Location = new Point(Math.Max(31, width - privacyLabel.PreferredSize.Width - 31), 28);
-            shieldLabel.Location = new Point(Math.Max(31, width - shieldLabel.PreferredSize.Width - 31), 109);
+            int heroHeight = Dip(154);
+            SetBoundsIfChanged(hero, left, 0, width, heroHeight);
+            bool compactHero = width < Dip(560);
+            privacyLabel.Visible = !compactHero;
+            shieldLabel.Visible = !compactHero;
+            statusDot.Location = new Point(Dip(30), Dip(33));
+            SetBoundsIfChanged(statusTitle, Dip(54), Dip(22),
+                Math.Max(Dip(140), width - Dip(compactHero ? 86 : 250)), Dip(34));
+            SetBoundsIfChanged(statusDetail, Dip(31), Dip(62), Math.Max(Dip(120), width - Dip(62)), Dip(25));
+            SetBoundsIfChanged(statusPort, Dip(31), Dip(101), Math.Max(Dip(120), width - Dip(62)), Dip(25));
+            if (!compactHero)
+            {
+                privacyLabel.Location = new Point(Math.Max(Dip(31), width - privacyLabel.PreferredSize.Width - Dip(31)), Dip(28));
+                shieldLabel.Location = new Point(Math.Max(Dip(31), width - shieldLabel.PreferredSize.Width - Dip(31)), Dip(109));
+            }
 
-            SetBoundsIfChanged(overviewActions, left, 170, width, 48);
-            int cardsTop = 230;
-            bool sideBySide = width >= 1020;
+            overviewActions.WrapContents = true;
+            int actionsTop = heroHeight + Dip(16);
+            int actionsHeight = FlowLayoutHeight(overviewActions, width, Dip(48));
+            SetBoundsIfChanged(overviewActions, left, actionsTop, width, actionsHeight);
+            int cardsTop = actionsTop + actionsHeight + Dip(12);
+
+            int availableForSettings = Math.Max(Dip(120), width - Dip(56));
+            int settingsColumns = Math.Max(1, Math.Min(4, availableForSettings / Dip(165)));
+            int settingsRows = (4 + settingsColumns - 1) / settingsColumns;
+            int settingsHeight = Dip(92) + (settingsRows * Dip(70)) + Dip(10);
+            bool sideBySide = width >= Dip(1020);
             int bottom;
             if (sideBySide)
             {
-                int settingsWidth = Math.Max(680, (int)Math.Round(width * 0.64));
-                SetBoundsIfChanged(settingsCard, left, cardsTop, settingsWidth, 168);
-                SetBoundsIfChanged(pathCard, left + settingsWidth + 18, cardsTop, width - settingsWidth - 18, 168);
-                bottom = cardsTop + 168;
+                int gap = Dip(18);
+                int settingsWidth = Math.Max(Dip(680), (int)Math.Round(width * 0.64));
+                availableForSettings = Math.Max(Dip(120), settingsWidth - Dip(56));
+                settingsColumns = Math.Max(1, Math.Min(4, availableForSettings / Dip(165)));
+                settingsRows = (4 + settingsColumns - 1) / settingsColumns;
+                settingsHeight = Dip(92) + (settingsRows * Dip(70)) + Dip(10);
+                SetBoundsIfChanged(settingsCard, left, cardsTop, settingsWidth, settingsHeight);
+                SetBoundsIfChanged(pathCard, left + settingsWidth + gap, cardsTop,
+                    width - settingsWidth - gap, settingsHeight);
+                bottom = cardsTop + settingsHeight;
             }
             else
             {
-                SetBoundsIfChanged(settingsCard, left, cardsTop, width, 168);
-                SetBoundsIfChanged(pathCard, left, cardsTop + 186, width, 112);
-                bottom = cardsTop + 298;
+                int pathHeight = Dip(112);
+                int gap = Dip(18);
+                SetBoundsIfChanged(settingsCard, left, cardsTop, width, settingsHeight);
+                SetBoundsIfChanged(pathCard, left, cardsTop + settingsHeight + gap, width, pathHeight);
+                bottom = cardsTop + settingsHeight + gap + pathHeight;
             }
 
-            int available = Math.Max(360, settingsCard.Width - 56);
-            int column = available / 4;
-            LayoutSetting(portLabel, portInput, 28, column, 78);
-            LayoutSetting(browserLabel, noOpenToggle, 28 + column, column, 78);
-            LayoutSetting(launcherAutoLabel, launcherAutostartToggle, 28 + (column * 2), column, 78);
-            LayoutSetting(dshAutoLabel, dshAutostartToggle, 28 + (column * 3), column, 78);
+            LayoutCardHeader(settingsCard);
+            LayoutCardHeader(pathCard);
+            int available = Math.Max(Dip(120), settingsCard.Width - Dip(56));
+            int column = available / settingsColumns;
+            Label[] labels = { portLabel, browserLabel, launcherAutoLabel, dshAutoLabel };
+            Control[] controls = { portInput, noOpenToggle, launcherAutostartToggle, dshAutostartToggle };
+            for (int index = 0; index < labels.Length; index++)
+            {
+                int row = index / settingsColumns;
+                int columnIndex = index % settingsColumns;
+                LayoutSetting(labels[index], controls[index], Dip(28) + (column * columnIndex),
+                    column, Dip(78) + (row * Dip(70)));
+            }
 
-            SetBoundsIfChanged(dshPath, 28, 86, Math.Max(80, pathCard.Width - 56), 24);
-            overviewPage.AutoScrollMinSize = new Size(0, bottom + 8);
+            SetBoundsIfChanged(dshPath, Dip(28), Dip(82), Math.Max(Dip(80), pathCard.Width - Dip(56)), Dip(24));
+            overviewPage.AutoScrollMinSize = new Size(0, bottom + Dip(8));
         }
 
-        private static void LayoutSetting(Label label, Control control, int left, int columnWidth, int top)
+        private void LayoutSetting(Label label, Control control, int left, int columnWidth, int top)
         {
-            label.Location = new Point(left, top);
-            control.Location = new Point(left, top + 29);
-            if (control is PortField) control.Width = Math.Min(118, Math.Max(92, columnWidth - 18));
+            label.AutoSize = false;
+            label.AutoEllipsis = true;
+            SetBoundsIfChanged(label, left, top, Math.Max(Dip(72), columnWidth - Dip(12)), Dip(21));
+            control.Location = new Point(left, top + Dip(27));
+            if (control is PortField) control.Width = Math.Min(Dip(118), Math.Max(Dip(92), columnWidth - Dip(18)));
         }
 
         private void LayoutTasks()
@@ -827,42 +963,68 @@ namespace DshEnhanced.WindowsLauncher
             GetContentBounds(tasksPage, out left, out width);
             if (width < 1) return;
 
-            bool sideBySide = width >= 1000;
+            bool sideBySide = width >= Dip(1080);
+            int gap = Dip(18);
             int bottom;
             if (sideBySide)
             {
-                int taskWidth = (int)Math.Round((width - 18) * 0.66);
-                int cardHeight = Math.Min(450, Math.Max(390, tasksPage.ClientSize.Height - 80));
+                int taskWidth = (int)Math.Round((width - gap) * 0.66);
+                int cardHeight = Math.Min(Dip(450), Math.Max(Dip(390), tasksPage.ClientSize.Height - Dip(80)));
                 SetBoundsIfChanged(taskCard, left, 0, taskWidth, cardHeight);
-                SetBoundsIfChanged(profileCard, left + taskWidth + 18, 0, width - taskWidth - 18, 212);
+                SetBoundsIfChanged(profileCard, left + taskWidth + gap, 0, width - taskWidth - gap, Dip(212));
                 bottom = cardHeight;
             }
             else
             {
-                SetBoundsIfChanged(taskCard, left, 0, width, 344);
-                SetBoundsIfChanged(profileCard, left, 362, width, 154);
-                bottom = 516;
+                bool stackEditors = width < Dip(680);
+                int taskHeight = Dip(stackEditors ? 600 : 344);
+                int profileHeight = width < Dip(480) ? Dip(204) : Dip(154);
+                SetBoundsIfChanged(taskCard, left, 0, width, taskHeight);
+                SetBoundsIfChanged(profileCard, left, taskHeight + gap, width, profileHeight);
+                bottom = taskHeight + gap + profileHeight;
             }
 
-            int editorWidth = Math.Max(170, (taskCard.Width - 84) / 2);
-            int outputLeft = 56 + editorWidth;
-            int editorHeight = Math.Max(112, taskCard.Height - 178);
-            taskInputLabel.Location = new Point(28, 78);
-            SetBoundsIfChanged(taskInputShell, 28, 106, editorWidth, editorHeight);
-            taskOutputLabel.Location = new Point(outputLeft, 78);
-            SetBoundsIfChanged(taskOutputShell, outputLeft, 106, editorWidth, editorHeight);
-            taskRunButton.Location = new Point(28, taskCard.Height - 58);
-
-            if (sideBySide)
+            LayoutCardHeader(taskCard);
+            LayoutCardHeader(profileCard);
+            bool editorsStacked = taskCard.Width < Dip(680);
+            if (editorsStacked)
             {
-                SetBoundsIfChanged(profileInput, 28, 82, Math.Max(120, profileCard.Width - 56), 30);
-                runProfileButton.Location = new Point(28, 134);
+                int editorWidth = Math.Max(Dip(140), taskCard.Width - Dip(56));
+                int editorHeight = Dip(150);
+                taskInputLabel.Location = new Point(Dip(28), Dip(78));
+                SetBoundsIfChanged(taskInputShell, Dip(28), Dip(106), editorWidth, editorHeight);
+                taskRunButton.Location = new Point(Dip(28), Dip(274));
+                taskOutputLabel.Location = new Point(Dip(28), Dip(334));
+                SetBoundsIfChanged(taskOutputShell, Dip(28), Dip(362), editorWidth,
+                    Math.Max(Dip(150), taskCard.Height - Dip(390)));
             }
             else
             {
-                int inputWidth = Math.Min(320, Math.Max(180, profileCard.Width - 220));
-                SetBoundsIfChanged(profileInput, 28, 82, inputWidth, 30);
-                runProfileButton.Location = new Point(44 + inputWidth, 77);
+                int editorWidth = Math.Max(Dip(170), (taskCard.Width - Dip(84)) / 2);
+                int outputLeft = Dip(56) + editorWidth;
+                int editorHeight = Math.Max(Dip(112), taskCard.Height - Dip(178));
+                taskInputLabel.Location = new Point(Dip(28), Dip(78));
+                SetBoundsIfChanged(taskInputShell, Dip(28), Dip(106), editorWidth, editorHeight);
+                taskOutputLabel.Location = new Point(outputLeft, Dip(78));
+                SetBoundsIfChanged(taskOutputShell, outputLeft, Dip(106), editorWidth, editorHeight);
+                taskRunButton.Location = new Point(Dip(28), taskCard.Height - Dip(58));
+            }
+
+            if (sideBySide)
+            {
+                SetBoundsIfChanged(profileInput, Dip(28), Dip(82), Math.Max(Dip(120), profileCard.Width - Dip(56)), Dip(30));
+                runProfileButton.Location = new Point(Dip(28), Dip(134));
+            }
+            else
+            {
+                bool stackProfile = profileCard.Width < Dip(480);
+                int inputWidth = stackProfile
+                    ? Math.Max(Dip(120), profileCard.Width - Dip(56))
+                    : Math.Min(Dip(320), Math.Max(Dip(180), profileCard.Width - Dip(220)));
+                SetBoundsIfChanged(profileInput, Dip(28), Dip(82), inputWidth, Dip(30));
+                runProfileButton.Location = stackProfile
+                    ? new Point(Dip(28), Dip(136))
+                    : new Point(Dip(44) + inputWidth, Dip(77));
             }
             tasksPage.AutoScrollMinSize = new Size(0, bottom);
         }
@@ -873,16 +1035,61 @@ namespace DshEnhanced.WindowsLauncher
             int width;
             GetContentBounds(diagnosticsPage, out left, out width);
             if (width < 1) return;
-            int height = Math.Max(360, diagnosticsPage.ClientSize.Height - 2);
+            diagnosticsActions.WrapContents = true;
+            int actionsHeight = FlowLayoutHeight(diagnosticsActions, width - Dip(56), Dip(46));
+            int outputTop = Dip(72) + actionsHeight + Dip(14);
+            int height = Math.Max(outputTop + Dip(188), diagnosticsPage.ClientSize.Height - Dip(2));
             SetBoundsIfChanged(diagnosticsCard, left, 0, width, height);
-            SetBoundsIfChanged(diagnosticsActions, 28, 72, Math.Max(180, width - 56), 46);
-            SetBoundsIfChanged(diagnosticsOutput, 28, 132, Math.Max(180, width - 56), Math.Max(160, height - 160));
+            LayoutCardHeader(diagnosticsCard);
+            SetBoundsIfChanged(diagnosticsActions, Dip(28), Dip(72), Math.Max(Dip(120), width - Dip(56)), actionsHeight);
+            SetBoundsIfChanged(diagnosticsOutput, Dip(28), outputTop, Math.Max(Dip(120), width - Dip(56)),
+                Math.Max(Dip(160), height - outputTop - Dip(28)));
+            diagnosticsPage.AutoScrollMinSize = new Size(0, height);
         }
 
-        private static void GetContentBounds(Control page, out int left, out int width)
+        private void GetContentBounds(Control page, out int left, out int width)
         {
-            width = Math.Min(1180, Math.Max(1, page.ClientSize.Width));
+            width = Math.Min(Dip(1180), Math.Max(1, page.ClientSize.Width));
             left = Math.Max(0, (page.ClientSize.Width - width) / 2);
+        }
+
+        private int FlowLayoutHeight(FlowLayoutPanel panel, int availableWidth, int minimumHeight)
+        {
+            int rowWidth = 0;
+            int rowHeight = 0;
+            int totalHeight = 0;
+            foreach (Control control in panel.Controls)
+            {
+                if (!control.Visible) continue;
+                int itemWidth = control.Width + control.Margin.Horizontal;
+                int itemHeight = control.Height + control.Margin.Vertical;
+                if (rowWidth > 0 && rowWidth + itemWidth > availableWidth)
+                {
+                    totalHeight += rowHeight;
+                    rowWidth = 0;
+                    rowHeight = 0;
+                }
+                rowWidth += itemWidth;
+                rowHeight = Math.Max(rowHeight, itemHeight);
+            }
+            totalHeight += rowHeight;
+            return Math.Max(minimumHeight, totalHeight);
+        }
+
+        private void LayoutCardHeader(Control card)
+        {
+            foreach (Control control in card.Controls)
+            {
+                Label label = control as Label;
+                if (label == null || !(label.Tag is string)) continue;
+                string role = (string)label.Tag;
+                label.AutoSize = false;
+                label.AutoEllipsis = true;
+                if (role == "card-title")
+                    SetBoundsIfChanged(label, Dip(28), Dip(18), Math.Max(Dip(80), card.Width - Dip(56)), Dip(26));
+                else if (role == "card-subtitle")
+                    SetBoundsIfChanged(label, Dip(28), Dip(45), Math.Max(Dip(80), card.Width - Dip(56)), Dip(24));
+            }
         }
 
         private static void SetBoundsIfChanged(Control control, int left, int top, int width, int height)
@@ -1005,11 +1212,22 @@ namespace DshEnhanced.WindowsLauncher
 
         internal void CaptureTo(string path, string page, string layout)
         {
+            captureMode = true;
             StartPosition = FormStartPosition.Manual;
             Location = new Point(-20000, -20000);
             bool stressResize = String.Equals(layout, "stress", StringComparison.OrdinalIgnoreCase);
             bool firstShow = String.Equals(layout, "first", StringComparison.OrdinalIgnoreCase);
-            if (String.Equals(layout, "wide", StringComparison.OrdinalIgnoreCase)) Size = new Size(1600, 900);
+            bool simulated150 = String.Equals(layout, "scale150", StringComparison.OrdinalIgnoreCase);
+            bool simulated200 = String.Equals(layout, "scale200", StringComparison.OrdinalIgnoreCase);
+            if (simulated150 || simulated200)
+            {
+                layoutScaleOverride = simulated200 ? 2f : 1.5f;
+                AutoScaleMode = AutoScaleMode.None;
+                Scale(new SizeF(layoutScaleOverride, layoutScaleOverride));
+                Size = new Size(1366, 720);
+            }
+            else if (String.Equals(layout, "compact", StringComparison.OrdinalIgnoreCase)) Size = new Size(820, 600);
+            else if (String.Equals(layout, "wide", StringComparison.OrdinalIgnoreCase)) Size = new Size(1600, 900);
             Show();
             Application.DoEvents();
             if (firstShow)
@@ -1048,6 +1266,11 @@ namespace DshEnhanced.WindowsLauncher
                 if (!firstShow) ShowPage(overviewPage, overviewNav, "概览");
                 overviewNav.Focus();
             }
+            PerformLayout();
+            pageHost.PerformLayout();
+            LayoutResponsivePages();
+            activePage.PerformLayout();
+            ValidateResponsiveLayout();
             Refresh();
             Application.DoEvents();
             Thread.Sleep(160);
@@ -1060,6 +1283,44 @@ namespace DshEnhanced.WindowsLauncher
             }
             refreshTimer.Stop();
             Hide();
+        }
+
+        private void ValidateResponsiveLayout()
+        {
+            if (activePage == overviewPage)
+            {
+                EnsureContained(overviewActions, startButton, "overview start action");
+                EnsureContained(overviewActions, openButton, "overview open action");
+                EnsureContained(overviewActions, restartButton, "overview restart action");
+                EnsureContained(overviewActions, stopButton, "overview stop action");
+                EnsureContained(settingsCard, portInput, "port setting");
+                EnsureContained(settingsCard, noOpenToggle, "browser setting");
+                EnsureContained(settingsCard, launcherAutostartToggle, "Launcher startup setting");
+                EnsureContained(settingsCard, dshAutostartToggle, "DSH startup setting");
+                EnsureContained(pathCard, dshPath, "DSH path");
+            }
+            else if (activePage == tasksPage)
+            {
+                EnsureContained(taskCard, taskInputShell, "task input");
+                EnsureContained(taskCard, taskOutputShell, "task output");
+                EnsureContained(taskCard, taskRunButton, "task action");
+                EnsureContained(profileCard, profileInput, "profile input");
+                EnsureContained(profileCard, runProfileButton, "profile action");
+            }
+            else if (activePage == diagnosticsPage)
+            {
+                foreach (Control action in diagnosticsActions.Controls)
+                    EnsureContained(diagnosticsActions, action, "diagnostics action");
+                EnsureContained(diagnosticsCard, diagnosticsOutput, "diagnostics output");
+            }
+        }
+
+        private static void EnsureContained(Control parent, Control child, string description)
+        {
+            if (!child.Visible) return;
+            if (child.Left < 0 || child.Top < 0 || child.Right > parent.ClientSize.Width + 1
+                || child.Bottom > parent.ClientSize.Height + 1)
+                throw new InvalidOperationException("Responsive layout overflow: " + description + ".");
         }
 
         private void RunOperation(Func<OperationResult> operation)
@@ -1185,9 +1446,11 @@ namespace DshEnhanced.WindowsLauncher
         private static void AddCardTitle(Control parent, string title, string subtitle)
         {
             Label heading = NewLabel(title, 11f, FontStyle.Bold, UiTheme.Text);
+            heading.Tag = "card-title";
             heading.Location = new Point(28, 20);
             parent.Controls.Add(heading);
             Label detail = NewLabel(subtitle, 8.8f, FontStyle.Regular, UiTheme.Muted);
+            detail.Tag = "card-subtitle";
             detail.Location = new Point(28, 47);
             parent.Controls.Add(detail);
         }
@@ -1219,7 +1482,7 @@ namespace DshEnhanced.WindowsLauncher
             button.Text = text;
             button.Kind = kind;
             button.Width = width;
-            button.Margin = new Padding(0, 0, 12, 0);
+            button.Margin = new Padding(0, 0, 12, 8);
             return button;
         }
 

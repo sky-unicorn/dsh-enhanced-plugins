@@ -10,6 +10,7 @@
     "legacyPackages": [],
     "runtimeEntries": [
       "./lib/DSH-Launcher.exe",
+      "./lib/DSH-Launcher.exe.config",
       "./lib/DSH-Launcher.Supervisor.ps1",
       "./lib/DSH-Launcher.Command.ps1"
     ]

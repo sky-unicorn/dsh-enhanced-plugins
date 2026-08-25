@@ -31,6 +31,18 @@ namespace DshEnhanced.WindowsLauncher
             return new Font("Microsoft YaHei UI", size, style, GraphicsUnit.Point);
         }
 
+        internal static int Dip(Control control, int value)
+        {
+            float scale = control == null ? 1f : Math.Max(1f, control.DeviceDpi / 96f);
+            return Math.Max(value == 0 ? 0 : 1, (int)Math.Round(value * scale));
+        }
+
+        internal static float Dip(Control control, float value)
+        {
+            float scale = control == null ? 1f : Math.Max(1f, control.DeviceDpi / 96f);
+            return value * scale;
+        }
+
         internal static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
         {
             return RoundedRectangle(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height), radius);
@@ -68,7 +80,10 @@ namespace DshEnhanced.WindowsLauncher
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Parent == null ? UiTheme.Background : Parent.BackColor);
-            using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), radius))
+            int edge = UiTheme.Dip(this, 1);
+            int scaledRadius = UiTheme.Dip(this, radius);
+            using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(0, 0,
+                Math.Max(1, Width - edge), Math.Max(1, Height - edge)), scaledRadius))
             using (SolidBrush brush = new SolidBrush(BackColor)) e.Graphics.FillPath(brush, path);
         }
 
@@ -76,8 +91,12 @@ namespace DshEnhanced.WindowsLauncher
         {
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(1, 1, Width - 3, Height - 3), Math.Max(3, radius - 1)))
-            using (Pen pen = new Pen(borderColor)) e.Graphics.DrawPath(pen, path);
+            int inset = UiTheme.Dip(this, 1);
+            int reduction = UiTheme.Dip(this, 3);
+            int scaledRadius = UiTheme.Dip(this, Math.Max(3, radius - 1));
+            using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(inset, inset,
+                Math.Max(1, Width - reduction), Math.Max(1, Height - reduction)), scaledRadius))
+            using (Pen pen = new Pen(borderColor, UiTheme.Dip(this, 1f))) e.Graphics.DrawPath(pen, path);
         }
     }
 
@@ -89,8 +108,9 @@ namespace DshEnhanced.WindowsLauncher
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Parent == null ? UiTheme.Background : Parent.BackColor);
-            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
-            using (GraphicsPath path = UiTheme.RoundedRectangle(bounds, Radius))
+            int edge = UiTheme.Dip(this, 1);
+            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - edge), Math.Max(1, Height - edge));
+            using (GraphicsPath path = UiTheme.RoundedRectangle(bounds, UiTheme.Dip(this, Radius)))
             using (LinearGradientBrush brush = new LinearGradientBrush(bounds,
                 Color.FromArgb(13, 28, 58), Color.FromArgb(30, 47, 91), 15f))
             {
@@ -98,11 +118,14 @@ namespace DshEnhanced.WindowsLauncher
                 e.Graphics.SetClip(path);
                 using (SolidBrush glow = new SolidBrush(Color.FromArgb(28, 100, 131, 255)))
                 {
-                    e.Graphics.FillEllipse(glow, Width - 245, -115, 310, 310);
-                    e.Graphics.FillEllipse(glow, Width - 430, 70, 260, 260);
+                    e.Graphics.FillEllipse(glow, Width - UiTheme.Dip(this, 245), -UiTheme.Dip(this, 115),
+                        UiTheme.Dip(this, 310), UiTheme.Dip(this, 310));
+                    e.Graphics.FillEllipse(glow, Width - UiTheme.Dip(this, 430), UiTheme.Dip(this, 70),
+                        UiTheme.Dip(this, 260), UiTheme.Dip(this, 260));
                 }
-                WhaleGlyph.Draw(e.Graphics, new RectangleF(Width - 210, 4, 170, 170),
-                    Color.FromArgb(24, 255, 255, 255), 18f);
+                WhaleGlyph.Draw(e.Graphics, new RectangleF(Width - UiTheme.Dip(this, 210), UiTheme.Dip(this, 4),
+                    UiTheme.Dip(this, 170), UiTheme.Dip(this, 170)),
+                    Color.FromArgb(24, 255, 255, 255), UiTheme.Dip(this, 18f));
                 e.Graphics.ResetClip();
             }
         }
@@ -186,10 +209,12 @@ namespace DshEnhanced.WindowsLauncher
                 border = hovering ? Color.FromArgb(180, 192, 226) : UiTheme.BorderStrong; text = UiTheme.Text;
             }
             if (pressed && Enabled) fill = ControlPaint.Dark(fill, 0.03f);
-            Rectangle bounds = new Rectangle(1, 1, Width - 3, Height - 3);
-            using (GraphicsPath path = UiTheme.RoundedRectangle(bounds, 11))
+            int inset = UiTheme.Dip(this, 1);
+            int reduction = UiTheme.Dip(this, 3);
+            Rectangle bounds = new Rectangle(inset, inset, Math.Max(1, Width - reduction), Math.Max(1, Height - reduction));
+            using (GraphicsPath path = UiTheme.RoundedRectangle(bounds, UiTheme.Dip(this, 11)))
             using (SolidBrush brush = new SolidBrush(fill))
-            using (Pen pen = new Pen(border))
+            using (Pen pen = new Pen(border, UiTheme.Dip(this, 1f)))
             {
                 e.Graphics.FillPath(brush, path);
                 e.Graphics.DrawPath(pen, path);
@@ -198,9 +223,9 @@ namespace DshEnhanced.WindowsLauncher
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             if (Focused && ShowFocusCues)
             {
-                Rectangle focus = Rectangle.Inflate(bounds, -3, -3);
-                using (GraphicsPath path = UiTheme.RoundedRectangle(focus, 8))
-                using (Pen pen = new Pen(Color.FromArgb(150, UiTheme.Primary), 2f)) e.Graphics.DrawPath(pen, path);
+                Rectangle focus = Rectangle.Inflate(bounds, -UiTheme.Dip(this, 3), -UiTheme.Dip(this, 3));
+                using (GraphicsPath path = UiTheme.RoundedRectangle(focus, UiTheme.Dip(this, 8)))
+                using (Pen pen = new Pen(Color.FromArgb(150, UiTheme.Primary), UiTheme.Dip(this, 2f))) e.Graphics.DrawPath(pen, path);
             }
         }
 
@@ -245,26 +270,31 @@ namespace DshEnhanced.WindowsLauncher
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle item = new Rectangle(12, 3, Width - 24, Height - 6);
+            Rectangle item = new Rectangle(UiTheme.Dip(this, 12), UiTheme.Dip(this, 3),
+                Math.Max(1, Width - UiTheme.Dip(this, 24)), Math.Max(1, Height - UiTheme.Dip(this, 6)));
             if (selected || hovering)
             {
-                using (GraphicsPath path = UiTheme.RoundedRectangle(item, 11))
+                using (GraphicsPath path = UiTheme.RoundedRectangle(item, UiTheme.Dip(this, 11)))
                 using (SolidBrush brush = new SolidBrush(selected ? UiTheme.SidebarSelected : UiTheme.SidebarHover))
                     e.Graphics.FillPath(brush, path);
             }
             if (selected)
             {
                 using (SolidBrush brush = new SolidBrush(Color.FromArgb(111, 137, 255)))
-                    e.Graphics.FillRectangle(brush, 12, 14, 3, 20);
+                    e.Graphics.FillRectangle(brush, UiTheme.Dip(this, 12), UiTheme.Dip(this, 14),
+                        UiTheme.Dip(this, 3), UiTheme.Dip(this, 20));
             }
             Color color = selected ? Color.White : Color.FromArgb(183, 195, 215);
-            DrawGlyph(e.Graphics, new Rectangle(29, 15, 18, 18), color);
-            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(58, 0, Width - 72, Height), color,
+            DrawGlyph(e.Graphics, new Rectangle(UiTheme.Dip(this, 29), UiTheme.Dip(this, 15),
+                UiTheme.Dip(this, 18), UiTheme.Dip(this, 18)), color);
+            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(UiTheme.Dip(this, 58), 0,
+                Math.Max(1, Width - UiTheme.Dip(this, 72)), Height), color,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             if (Focused && ShowFocusCues)
             {
-                using (GraphicsPath path = UiTheme.RoundedRectangle(Rectangle.Inflate(item, -2, -2), 9))
-                using (Pen pen = new Pen(Color.FromArgb(130, UiTheme.Primary), 1.5f)) e.Graphics.DrawPath(pen, path);
+                using (GraphicsPath path = UiTheme.RoundedRectangle(Rectangle.Inflate(item,
+                    -UiTheme.Dip(this, 2), -UiTheme.Dip(this, 2)), UiTheme.Dip(this, 9)))
+                using (Pen pen = new Pen(Color.FromArgb(130, UiTheme.Primary), UiTheme.Dip(this, 1.5f))) e.Graphics.DrawPath(pen, path);
             }
         }
 
@@ -275,28 +305,29 @@ namespace DshEnhanced.WindowsLauncher
 
         private void DrawGlyph(Graphics graphics, Rectangle box, Color color)
         {
-            using (Pen pen = new Pen(color, 1.7f))
+            float u = Math.Max(1f, box.Width / 18f);
+            using (Pen pen = new Pen(color, UiTheme.Dip(this, 1.7f)))
             {
                 pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round;
                 if (Glyph == NavGlyph.Overview)
                 {
-                    graphics.DrawRectangle(pen, box.X + 1, box.Y + 1, 6, 6); graphics.DrawRectangle(pen, box.X + 11, box.Y + 1, 6, 6);
-                    graphics.DrawRectangle(pen, box.X + 1, box.Y + 11, 6, 6); graphics.DrawRectangle(pen, box.X + 11, box.Y + 11, 6, 6);
+                    graphics.DrawRectangle(pen, box.X + u, box.Y + u, 6 * u, 6 * u); graphics.DrawRectangle(pen, box.X + (11 * u), box.Y + u, 6 * u, 6 * u);
+                    graphics.DrawRectangle(pen, box.X + u, box.Y + (11 * u), 6 * u, 6 * u); graphics.DrawRectangle(pen, box.X + (11 * u), box.Y + (11 * u), 6 * u, 6 * u);
                 }
                 else if (Glyph == NavGlyph.Tasks)
                 {
-                    graphics.DrawLine(pen, box.X + 3, box.Y + 5, box.X + 15, box.Y + 5);
-                    graphics.DrawLine(pen, box.X + 3, box.Y + 9, box.X + 12, box.Y + 9);
-                    graphics.DrawLine(pen, box.X + 3, box.Y + 13, box.X + 9, box.Y + 13);
-                    graphics.DrawLine(pen, box.X + 13, box.Y + 11, box.X + 16, box.Y + 14);
-                    graphics.DrawLine(pen, box.X + 16, box.Y + 14, box.X + 13, box.Y + 17);
+                    graphics.DrawLine(pen, box.X + (3 * u), box.Y + (5 * u), box.X + (15 * u), box.Y + (5 * u));
+                    graphics.DrawLine(pen, box.X + (3 * u), box.Y + (9 * u), box.X + (12 * u), box.Y + (9 * u));
+                    graphics.DrawLine(pen, box.X + (3 * u), box.Y + (13 * u), box.X + (9 * u), box.Y + (13 * u));
+                    graphics.DrawLine(pen, box.X + (13 * u), box.Y + (11 * u), box.X + (16 * u), box.Y + (14 * u));
+                    graphics.DrawLine(pen, box.X + (16 * u), box.Y + (14 * u), box.X + (13 * u), box.Y + (17 * u));
                 }
                 else
                 {
-                    graphics.DrawEllipse(pen, box.X + 2, box.Y + 2, 11, 11);
-                    graphics.DrawLine(pen, box.X + 12, box.Y + 12, box.X + 17, box.Y + 17);
-                    graphics.DrawLine(pen, box.X + 7, box.Y + 5, box.X + 7, box.Y + 10);
-                    graphics.DrawLine(pen, box.X + 5, box.Y + 8, box.X + 10, box.Y + 8);
+                    graphics.DrawEllipse(pen, box.X + (2 * u), box.Y + (2 * u), 11 * u, 11 * u);
+                    graphics.DrawLine(pen, box.X + (12 * u), box.Y + (12 * u), box.X + (17 * u), box.Y + (17 * u));
+                    graphics.DrawLine(pen, box.X + (7 * u), box.Y + (5 * u), box.X + (7 * u), box.Y + (10 * u));
+                    graphics.DrawLine(pen, box.X + (5 * u), box.Y + (8 * u), box.X + (10 * u), box.Y + (8 * u));
                 }
             }
         }
@@ -342,20 +373,24 @@ namespace DshEnhanced.WindowsLauncher
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle track = new Rectangle(2, 4, Width - 4, Height - 8);
+            Rectangle track = new Rectangle(UiTheme.Dip(this, 2), UiTheme.Dip(this, 4),
+                Math.Max(1, Width - UiTheme.Dip(this, 4)), Math.Max(1, Height - UiTheme.Dip(this, 8)));
             Color trackColor = Checked ? UiTheme.Primary : Color.FromArgb(196, 205, 219);
             if (hovering) trackColor = Checked ? UiTheme.PrimaryHover : Color.FromArgb(178, 189, 207);
             if (!Enabled) trackColor = Color.FromArgb(220, 225, 234);
             using (GraphicsPath path = UiTheme.RoundedRectangle(track, track.Height / 2))
             using (SolidBrush brush = new SolidBrush(trackColor)) e.Graphics.FillPath(brush, path);
-            int thumb = Height - 12;
-            int left = Checked ? Width - thumb - 6 : 6;
-            using (SolidBrush shadow = new SolidBrush(Color.FromArgb(35, 17, 24, 39))) e.Graphics.FillEllipse(shadow, left, 7, thumb, thumb);
-            using (SolidBrush brush = new SolidBrush(Color.White)) e.Graphics.FillEllipse(brush, left, 6, thumb, thumb);
+            int thumb = Math.Max(UiTheme.Dip(this, 8), Height - UiTheme.Dip(this, 12));
+            int left = Checked ? Width - thumb - UiTheme.Dip(this, 6) : UiTheme.Dip(this, 6);
+            using (SolidBrush shadow = new SolidBrush(Color.FromArgb(35, 17, 24, 39)))
+                e.Graphics.FillEllipse(shadow, left, UiTheme.Dip(this, 7), thumb, thumb);
+            using (SolidBrush brush = new SolidBrush(Color.White))
+                e.Graphics.FillEllipse(brush, left, UiTheme.Dip(this, 6), thumb, thumb);
             if (Focused && ShowFocusCues)
             {
-                using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(0, 2, Width - 1, Height - 4), Height / 2))
-                using (Pen pen = new Pen(Color.FromArgb(135, UiTheme.Primary), 2f)) e.Graphics.DrawPath(pen, path);
+                using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(0, UiTheme.Dip(this, 2),
+                    Math.Max(1, Width - UiTheme.Dip(this, 1)), Math.Max(1, Height - UiTheme.Dip(this, 4))), Height / 2))
+                using (Pen pen = new Pen(Color.FromArgb(135, UiTheme.Primary), UiTheme.Dip(this, 2f))) e.Graphics.DrawPath(pen, path);
             }
         }
 
@@ -418,7 +453,8 @@ namespace DshEnhanced.WindowsLauncher
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
-            editor.SetBounds(12, Math.Max(7, (Height - editor.PreferredHeight) / 2), Width - 24, editor.PreferredHeight);
+            editor.SetBounds(UiTheme.Dip(this, 12), Math.Max(UiTheme.Dip(this, 7),
+                (Height - editor.PreferredHeight) / 2), Math.Max(1, Width - UiTheme.Dip(this, 24)), editor.PreferredHeight);
         }
 
         protected override void OnEnabledChanged(EventArgs e)
@@ -434,9 +470,10 @@ namespace DshEnhanced.WindowsLauncher
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             Color fill = Enabled ? UiTheme.Surface : UiTheme.SurfaceSoft;
             Color border = editor.Focused ? UiTheme.Primary : UiTheme.BorderStrong;
-            using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(1, 1, Width - 3, Height - 3), 10))
+            using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(UiTheme.Dip(this, 1), UiTheme.Dip(this, 1),
+                Math.Max(1, Width - UiTheme.Dip(this, 3)), Math.Max(1, Height - UiTheme.Dip(this, 3))), UiTheme.Dip(this, 10)))
             using (SolidBrush brush = new SolidBrush(fill))
-            using (Pen pen = new Pen(border, editor.Focused ? 1.7f : 1f))
+            using (Pen pen = new Pen(border, UiTheme.Dip(this, editor.Focused ? 1.7f : 1f)))
             {
                 e.Graphics.FillPath(brush, path); e.Graphics.DrawPath(pen, path);
             }
@@ -461,7 +498,9 @@ namespace DshEnhanced.WindowsLauncher
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using (SolidBrush glow = new SolidBrush(Color.FromArgb(45, indicatorColor))) e.Graphics.FillEllipse(glow, 0, 0, Width, Height);
-            using (SolidBrush brush = new SolidBrush(indicatorColor)) e.Graphics.FillEllipse(brush, 3, 3, Width - 6, Height - 6);
+            int inset = UiTheme.Dip(this, 3);
+            using (SolidBrush brush = new SolidBrush(indicatorColor)) e.Graphics.FillEllipse(brush, inset, inset,
+                Math.Max(1, Width - (inset * 2)), Math.Max(1, Height - (inset * 2)));
         }
     }
 

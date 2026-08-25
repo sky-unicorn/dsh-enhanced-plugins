@@ -221,6 +221,27 @@ try {
     throw new Error(`launcher resize stress validation failed after ${stressElapsedMs}ms`)
   }
 
+  for (const [name, page, layout, expectedWidth, expectedHeight] of [
+    ['compact-overview', 'overview', 'compact', 820, 600],
+    ['compact-tasks', 'tasks', 'compact', 820, 600],
+    ['compact-diagnostics', 'diagnostics', 'compact', 820, 600],
+    ['scale-150-overview', 'overview', 'scale150', 1366, 720],
+    ['scale-200-overview', 'overview', 'scale200', 1366, 720],
+    ['scale-200-tasks', 'tasks', 'scale200', 1366, 720],
+    ['scale-200-diagnostics', 'diagnostics', 'scale200', 1366, 720],
+  ]) {
+    const responsiveScreenshot = resolve(temporary, `launcher-${name}.png`)
+    const responsiveCapture = run(executable, [
+      '--screenshot', responsiveScreenshot, page, layout,
+    ], { env: environment })
+    const responsiveBytes = await readFile(responsiveScreenshot)
+    if (responsiveCapture.status !== 0 || responsiveBytes.length < 20_000
+        || responsiveBytes.readUInt32BE(16) !== expectedWidth
+        || responsiveBytes.readUInt32BE(20) !== expectedHeight) {
+      throw new Error(`launcher ${name} layout validation failed: ${responsiveCapture.stderr}`)
+    }
+  }
+
   process.stdout.write(`windows-launcher verification passed on port ${port}\n`)
 } finally {
   if (started) {

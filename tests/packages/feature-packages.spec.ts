@@ -79,6 +79,7 @@ describe('selective feature packages', () => {
     expect(launcher?.dshEnhanced.platforms).toEqual(['win32'])
     expect(launcher?.dshEnhanced.runtimeEntries).toEqual([
       './lib/DSH-Launcher.exe',
+      './lib/DSH-Launcher.exe.config',
       './lib/DSH-Launcher.Supervisor.ps1',
       './lib/DSH-Launcher.Command.ps1',
     ])
@@ -117,6 +118,8 @@ describe('selective feature packages', () => {
     const theme = readFileSync(resolve(launcherRoot, 'src', 'Theme.cs'), 'utf8')
     const whale = readFileSync(resolve(launcherRoot, 'src', 'WhaleGlyph.cs'), 'utf8')
     const build = readFileSync(resolve(launcherRoot, 'build.mjs'), 'utf8')
+    const appConfig = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.exe.config'), 'utf8')
+    const appManifest = readFileSync(resolve(launcherRoot, 'src', 'app.manifest'), 'utf8')
     const command = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.Command.ps1'), 'utf8')
     const supervisor = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.Supervisor.ps1'), 'utf8')
     const installer = readFileSync(resolve(root, 'scripts', 'migrate-to-enhanced-plugin.ps1'), 'utf8')
@@ -135,7 +138,10 @@ describe('selective feature packages', () => {
     expect(program).toContain('if (activePage == overviewPage) LayoutOverview();')
     expect(program).not.toContain('if (overviewPage.Visible) LayoutOverview();')
     expect(program).toContain('The overview page did not complete its first-show layout.')
-    expect(program).toContain('width >= 1020')
+    expect(program).toContain('width >= Dip(1020)')
+    expect(program).toContain('ClientSize.Width < Dip(760)')
+    expect(program).toContain('ApplyDisplayConstraints')
+    expect(program).toContain('DeviceDpi / 96f')
     expect(program).toContain('SetProcessDpiAwarenessContext')
     expect(program).toContain('Interlocked.CompareExchange(ref refreshInFlight')
     expect(program).toContain('delayedDshTimer.Interval = 30000')
@@ -149,6 +155,9 @@ describe('selective feature packages', () => {
     expect(program).not.toContain('TextRenderer.DrawText(graphics, "DS"')
     expect(whale).toContain('official DeepSeek whale silhouette')
     expect(build).toContain('/win32icon:')
+    expect(build).toContain('/win32manifest:')
+    expect(appConfig).toContain('DpiAwareness" value="PerMonitorV2')
+    expect(appManifest).toContain('PerMonitorV2,PerMonitor')
     expect(command).toContain('& $Command @Arguments')
     expect(command).toContain('[Console]::OutputEncoding = $Utf8NoBom')
     expect(command).toContain('Invoke-LoggedDsh')

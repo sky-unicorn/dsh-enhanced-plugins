@@ -91,6 +91,7 @@ export async function buildWindowsLauncher() {
       '/r:System.Windows.Forms.dll',
       '/r:System.Web.Extensions.dll',
       `/win32icon:${iconPath}`,
+      `/win32manifest:${resolve(source, 'app.manifest')}`,
       `/out:${executable}`,
       ...sourceFiles,
     ], { cwd: root, encoding: 'utf8' })
@@ -101,7 +102,7 @@ export async function buildWindowsLauncher() {
     await rm(temporary, { recursive: true, force: true })
   }
 
-  for (const file of ['DSH-Launcher.Supervisor.ps1', 'DSH-Launcher.Command.ps1']) {
+  for (const file of ['DSH-Launcher.Supervisor.ps1', 'DSH-Launcher.Command.ps1', 'DSH-Launcher.exe.config']) {
     await copyFile(resolve(source, file), resolve(output, basename(file)))
   }
 }
