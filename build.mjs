@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
+import { buildWindowsLauncher } from './packages/windows-launcher/build.mjs'
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url))
 const CLIENT_EXTERNALS = [
@@ -226,6 +227,10 @@ async function main() {
   const featureFlag = process.argv.indexOf('--feature')
   if (featureFlag !== -1) {
     const id = process.argv[featureFlag + 1]
+    if (id === 'windows-launcher') {
+      await buildWindowsLauncher()
+      return
+    }
     const target = id === 'all' ? aggregate : FEATURE_TARGETS.find(feature => feature.id === id)
     if (target === undefined) throw new Error(`unknown feature ${JSON.stringify(id)}`)
     await buildTarget(target)
@@ -233,6 +238,7 @@ async function main() {
   }
   await buildTarget(aggregate)
   for (const target of FEATURE_TARGETS) await buildTarget(target)
+  await buildWindowsLauncher()
 }
 
 main().catch((error) => {

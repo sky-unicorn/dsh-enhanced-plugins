@@ -2,9 +2,9 @@
 
 [English](README.md) | 中文
 
-`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) Web profile 的增强插件集合。一次安装可获得全部 6 项功能，也可以只保留需要的独立 bundle。
+`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能集合。一次安装可获得全部 7 项功能，也可以只保留需要的独立 bundle 或 Windows Companion。
 
-项目只使用 DSH 的公开插件扩展点，不修改 DSH 核心。各功能分别管理自己的 Host、Client、Settings 和运行时生命周期，可独立构建、安装和卸载。
+项目不修改 DSH 核心。Web 功能只使用公开插件扩展点；Windows Launcher 是由本项目安装器管理的独立桌面 Companion，不进入 Cordis 插件树。每项功能均可独立构建、安装和卸载。
 
 [功能一览](#功能一览) · [快速安装](#快速安装) · [功能指南](#功能指南) · [配置参考](#配置参考) · [开发与验证](#开发与验证)
 
@@ -14,6 +14,7 @@
 
 | 功能 | 安装名称 | 使用位置 | 主要用途 |
 | --- | --- | --- | --- |
+| [Windows Launcher](#windows-launcher) | `windows-launcher` | 开始菜单 → DeepSeek Harness Launcher | 托盘、Web 生命周期、Headless、Profile 与日志诊断控制中心 |
 | [桌面提示与宠物](#桌面提示与宠物) | `notification` | 设置 → 桌面宠物 | 任务提示音、自定义 WAV 音效库与原生动态 DeepSeek 鱼宠物 |
 | [插件社区](#插件社区) | `plugin-market` | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
 | [MCP 服务器管理](#mcp-服务器管理) | `mcp-server-manager` | 设置 → 插件 → 插件配置 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
@@ -29,8 +30,8 @@
 ### 开始前
 
 - Node.js 22.19 或更高版本。
-- 最新的 DSH Web profile。本仓库针对 DSH `0.1.0-rc.8` 验证，本地基准 commit 为 `141eb6fef83422698aef7a981029e843e8161534`。
-- 原生提示音和桌面宠物需要 Windows 10 或更高版本及 Windows PowerShell 5.1；其余功能可跨平台使用。
+- 最新的 DSH Web profile。本仓库针对 DSH `0.1.1-rc.2` 验证，本地基准 commit 为 `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`。
+- Windows Launcher、原生提示音和桌面宠物需要 Windows 10 或更高版本及 Windows PowerShell 5.1；其余功能可跨平台使用。
 
 DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH 后若遇到问题，请先核对上述 ABI 版本。
 
@@ -54,7 +55,7 @@ DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH �
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-省略 `-Features` 或传入 `-Features all` 都会安装包含现有 6 项功能的聚合包，不会安装已经退役的文件引用插件。
+省略 `-Features` 或传入 `-Features all` 会安装 6 项 Cordis 增强和独立的 Windows Launcher Companion，不会安装已经退役的文件引用插件。Launcher 文件安装到 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，并创建开始菜单快捷方式；只有传入 `-CreateLauncherDesktopShortcut` 才会额外创建桌面快捷方式。
 
 ### 按需安装
 
@@ -70,7 +71,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,edit-last-message
 ```
 
-`-Features` 表示目标 profile **最终保留的增强功能集合**。脚本会先成功构建并安装全部所选 bundle，再移除聚合包、未选择的同仓库 bundle，以及与所选功能冲突的旧包。脚本还会检测并卸载 `dsh-enhanced-referenced-file`、`dsh-referenced-file`，或旧版全量 `dsh-enhanced-plugins` 安装中的 `#` 文件引用贡献，并提示升级到最新版 DSH、改用官方 `@` 引用；安装失败时不会提前破坏原有可用组合。
+`-Features` 表示目标 profile 和本机 **最终保留的增强功能集合**。脚本会先成功构建并安装全部所选 bundle/Companion，再移除聚合包、未选择的同仓库功能及冲突旧包。取消选择 `windows-launcher` 会停止托盘、移除程序文件、自启项和快捷方式，但保留 Launcher 日志与用户设置。脚本还会检测并卸载历史文件引用功能；安装失败时不会提前破坏原有可用组合。
 
 **非同目录安装**：如果 DSH checkout 不在同级目录，通过 `-DshCheckout` 指定位置：
 
@@ -81,6 +82,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 安装脚本会完成依赖安装、构建、`web` profile 安装与加载验证。成功后若 DSH 正在运行，重启一次即可使用。
 
 ## 功能指南
+
+### Windows Launcher
+
+安装名称：`windows-launcher` · 位置：**开始菜单 → DeepSeek Harness Launcher**
+
+Launcher 是完全独立于 Cordis 的 Windows Companion。现代化控制面板包含 Web 状态卡、启动/打开/重启/停止快捷操作、端口与浏览器选项、Headless 单次任务、后台 Profile、合并日志和环境诊断。窗口最大化时，卡片会自动重排为宽屏分栏；EXE、窗口、托盘和侧栏统一使用 DeepSeek 官方鲸鱼标识。针对 Windows 10/11，程序使用逐显示器 DPI 感知、完全自绘控件、合并缩放布局和后台服务采样，保证缩放清晰并降低交互卡顿；窗口隐藏后停止前台轮询，同时继续驻留系统托盘。
+
+Launcher 只停止自己启动的 DSH 进程树。端口上出现外部服务时会显示“外部 Web 服务”，允许打开页面但拒绝接管、重启或终止。任务与 Profile 都通过无控制台窗口的子进程运行；任意任务内容通过 UTF-8 请求文件交给 PowerShell 命令引擎，Headless 结果和 Profile/Web 日志也统一按 UTF-8 传递与保存。运行时优先选择 npm 生成的 `dsh.ps1`，不把用户文本拼入 `cmd.exe`。登录自启默认关闭，可在概览页显式开启。
+
+程序使用版本化目录部署，开始菜单和已有自启项在升级后指向新版本，因此不会依赖 profile 的 `node_modules`。安装器会保留用户显式配置的 DSH 命令；使用本地 DSH checkout 安装时，则生成并验证一个直接调用该 checkout CLI 的安全入口，因此无需额外全局安装 `dsh`，也不会改变任务的工作目录。运行状态、日志和设置统一保存在 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。
 
 ### 桌面提示与宠物
 

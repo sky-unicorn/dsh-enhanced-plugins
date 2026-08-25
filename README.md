@@ -2,9 +2,9 @@
 
 English | [中文](README.zh.md)
 
-`dsh-enhanced-plugins` is a collection of enhancements for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web profile. Install all six features in one bundle, or keep only the independent bundles you need.
+`dsh-enhanced-plugins` is a collection of enhancements for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness). Install all seven features together, or keep only the independent bundles and Windows companion you need.
 
-The project uses public DSH plugin extension points and does not modify DSH core. Each feature owns its Host, Client, Settings, and runtime lifecycle and can be built, installed, and removed independently.
+The project does not modify DSH core. Web features use only public plugin extension points; Windows Launcher is an installer-managed desktop companion outside the Cordis tree. Every feature can be built, installed, and removed independently.
 
 [Feature overview](#feature-overview) · [Quick install](#quick-install) · [Feature guide](#feature-guide) · [Configuration reference](#configuration-reference) · [Development](#development-and-verification)
 
@@ -14,6 +14,7 @@ The “install name” is the value accepted by the installer’s `-Features` pa
 
 | Feature | Install name | Where to find it | What it adds |
 | --- | --- | --- | --- |
+| [Windows Launcher](#windows-launcher) | `windows-launcher` | Start menu → DeepSeek Harness Launcher | Tray, Web lifecycle, Headless, Profile, log, and diagnostic control center |
 | [Desktop alerts & pet](#desktop-alerts--pet) | `notification` | Settings → Desktop Pet | Event sounds, a custom WAV library, and a native animated DeepSeek fish pet |
 | [Plugin Community](#plugin-community) | `plugin-market` | Settings → Plugin Community | Search, install, and remove community DSH plugins |
 | [MCP server manager](#mcp-server-manager) | `mcp-server-manager` | Settings → Plugins → Plugin configuration | Manage stdio / Streamable HTTP servers and import local configurations |
@@ -29,8 +30,8 @@ The “install name” is the value accepted by the installer’s `-Features` pa
 ### Before you start
 
 - Node.js 22.19 or later.
-- A current DSH Web profile. This repository is verified against DSH `0.1.0-rc.8`; its local baseline commit is `141eb6fef83422698aef7a981029e843e8161534`.
-- Native sounds and the desktop pet require Windows 10 or later and Windows PowerShell 5.1. The other features are cross-platform.
+- A current DSH Web profile. This repository is verified against DSH `0.1.1-rc.2`; its local baseline commit is `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+- Windows Launcher, native sounds, and the desktop pet require Windows 10 or later and Windows PowerShell 5.1. The other features are cross-platform.
 
 DSH is still a developer preview and may introduce compatibility-breaking changes. If an upgrade breaks the plugin, compare its ABI with the baseline above first.
 
@@ -54,7 +55,7 @@ DSH is still a developer preview and may introduce compatibility-breaking change
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-Omitting `-Features` or passing `-Features all` installs the aggregate bundle with all six available features. It does not install the retired file-reference plugin.
+Omitting `-Features` or passing `-Features all` installs six Cordis enhancements plus the standalone Windows Launcher companion. It does not install the retired file-reference plugin. Launcher files go to `%LOCALAPPDATA%\DeepSeekHarness\Launcher`, with a Start-menu shortcut; pass `-CreateLauncherDesktopShortcut` to add a desktop shortcut too.
 
 ### Install selected features
 
@@ -70,7 +71,7 @@ Then pass comma-separated install names from the feature overview. For example, 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,edit-last-message
 ```
 
-`-Features` describes the enhanced feature set the target profile should **retain after the operation**. The installer first builds and installs every selected bundle, then removes the aggregate package, unselected sibling bundles, and declared conflicting legacy packages. It also detects and removes `dsh-enhanced-referenced-file`, `dsh-referenced-file`, or the retired `#` contribution from an older all-in-one `dsh-enhanced-plugins` installation, and prints a reminder to update DSH and use official `@` references. A failed installation does not remove the previously working set early.
+`-Features` describes the enhanced feature set the target profile and machine should **retain after the operation**. The installer first builds and installs every selected bundle/companion, then removes the aggregate package, unselected sibling features, and conflicting legacy packages. Deselecting `windows-launcher` shuts down its tray and removes program files, autostart, and shortcuts while preserving logs and user settings. Historical file-reference packages are removed as before. A failed installation does not remove the previously working set early.
 
 **Different-directory install:** if the DSH checkout is elsewhere, pass it explicitly:
 
@@ -81,6 +82,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 The script installs dependencies, builds the packages, installs them into the `web` profile, and verifies that the profile loads. If DSH is already running, restart it once after the script succeeds.
 
 ## Feature guide
+
+### Windows Launcher
+
+Install name: `windows-launcher` · Location: **Start menu → DeepSeek Harness Launcher**
+
+Launcher is a Windows companion completely outside Cordis. Its redesigned control center provides a Web status card; start, open, restart, and stop actions; port and browser options; one-shot Headless tasks; background Profiles; merged logs; and environment diagnostics. The layout reflows into wider card columns when the window is maximized, and the executable, window, tray, and sidebar share the official DeepSeek whale mark. On Windows 10 and 11, per-monitor DPI awareness, custom-painted controls, coalesced resize layout, and background service sampling keep scaling crisp and interaction responsive. Closing the window stops foreground polling and keeps Launcher available in the system tray.
+
+Launcher stops only DSH process trees that it started. A listener on the configured port without a live launcher-owned supervisor is labelled an external Web service: the page can be opened, but Launcher refuses to adopt, restart, or terminate it. Tasks and Profiles run without console windows; arbitrary task text travels through a UTF-8 request file, while Headless results and Profile/Web logs are also transported and stored as UTF-8. The runtime prefers npm's `dsh.ps1` shim instead of interpolating user text into `cmd.exe`. Login autostart is off until explicitly enabled on the Overview page.
+
+Versioned deployment keeps Start-menu and existing autostart targets stable across upgrades without depending on a profile's `node_modules`. The installer preserves an explicitly configured DSH command; when installing through a local DSH checkout, it instead generates and validates a safe direct entry to that checkout's CLI, so no additional global `dsh` install is required and task working directories remain intact. Runtime state, logs, and settings live under `%LOCALAPPDATA%\DeepSeekHarness\Launcher`.
 
 ### Desktop alerts & pet
 
