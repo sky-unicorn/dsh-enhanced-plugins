@@ -90,13 +90,21 @@ namespace DshEnhanced.WindowsLauncher
 
             if (args.Length >= 2 && String.Equals(args[0], "--screenshot", StringComparison.OrdinalIgnoreCase))
             {
-                using (Icon icon = LauncherIcon.Create())
-                using (MainForm form = new MainForm(new LauncherRuntime(), icon))
+                try
                 {
-                    form.CaptureTo(args[1], args.Length >= 3 ? args[2] : "overview",
-                        args.Length >= 4 ? args[3] : "normal");
+                    using (Icon icon = LauncherIcon.Create())
+                    using (MainForm form = new MainForm(new LauncherRuntime(), icon))
+                    {
+                        form.CaptureTo(args[1], args.Length >= 3 ? args[2] : "overview",
+                            args.Length >= 4 ? args[3] : "normal");
+                    }
+                    return 0;
                 }
-                return 0;
+                catch (Exception error)
+                {
+                    File.WriteAllText(args[1] + ".error.txt", error.ToString(), new UTF8Encoding(false));
+                    return 1;
+                }
             }
 
             if (args.Length >= 1 && String.Equals(args[0], "--ui-preview", StringComparison.OrdinalIgnoreCase))
@@ -356,9 +364,11 @@ namespace DshEnhanced.WindowsLauncher
         private readonly Panel overviewPage;
         private readonly Panel tasksPage;
         private readonly Panel diagnosticsPage;
+        private readonly Panel sourcePage;
         private NavButton overviewNav;
         private NavButton tasksNav;
         private NavButton diagnosticsNav;
+        private NavButton sourceNav;
         private readonly Label pageTitle;
         private readonly Label pageSubtitle;
         private readonly Label statusTitle;
@@ -377,12 +387,13 @@ namespace DshEnhanced.WindowsLauncher
         private readonly RichTextBox taskInput;
         private readonly RichTextBox taskOutput;
         private readonly ModernButton taskRunButton;
-        private readonly ComboBox profileInput;
+        private readonly ModernComboBox profileInput;
         private Label taskInputLabel;
         private Label taskOutputLabel;
         private RoundedPanel taskInputShell;
         private RoundedPanel taskOutputShell;
         private readonly RichTextBox diagnosticsOutput;
+        private readonly RichTextBox sourceOutput;
         private readonly ModernButton buildDshButton;
         private readonly Label toast;
         private readonly System.Windows.Forms.Timer refreshTimer;
@@ -401,6 +412,9 @@ namespace DshEnhanced.WindowsLauncher
         private ModernButton runProfileButton;
         private RoundedPanel diagnosticsCard;
         private FlowLayoutPanel diagnosticsActions;
+        private RoundedPanel sourceCard;
+        private RoundedPanel sourceLogShell;
+        private Label sourcePathLabel;
         private Panel activePage;
         private bool loadingSettings;
         private bool layoutPending;
@@ -486,9 +500,14 @@ namespace DshEnhanced.WindowsLauncher
             diagnosticsPage.Dock = DockStyle.Fill;
             diagnosticsPage.BackColor = UiTheme.Background;
             diagnosticsPage.AutoScroll = true;
+            sourcePage = new Panel();
+            sourcePage.Dock = DockStyle.Fill;
+            sourcePage.BackColor = UiTheme.Background;
+            sourcePage.AutoScroll = true;
             pageHost.Controls.Add(overviewPage);
             pageHost.Controls.Add(tasksPage);
             pageHost.Controls.Add(diagnosticsPage);
+            pageHost.Controls.Add(sourcePage);
 
             statusTitle = new Label();
             statusDetail = new Label();
@@ -508,12 +527,14 @@ namespace DshEnhanced.WindowsLauncher
             taskInput = new RichTextBox();
             taskOutput = new RichTextBox();
             taskRunButton = NewButton("运行 Headless", ModernButtonKind.Primary, 144);
-            profileInput = new ComboBox();
+            profileInput = new ModernComboBox();
             BuildTasksPage();
 
             diagnosticsOutput = new RichTextBox();
-            buildDshButton = NewButton("构建 DSH 源码", ModernButtonKind.Secondary, 142);
             BuildDiagnosticsPage();
+            sourceOutput = new RichTextBox();
+            buildDshButton = NewButton("拉取最新源码并构建", ModernButtonKind.Primary, 184);
+            BuildSourcePage();
 
             startButton.Click += delegate { RunOperation(runtime.StartWeb); };
             openButton.Click += delegate { RunOperation(runtime.OpenWeb); };
@@ -552,7 +573,12 @@ namespace DshEnhanced.WindowsLauncher
 
             refreshTimer = new System.Windows.Forms.Timer();
             refreshTimer.Interval = 2000;
-            refreshTimer.Tick += delegate { RefreshNow(); };
+            refreshTimer.Tick += delegate
+            {
+                RefreshNow();
+                if (activePage == sourcePage || Interlocked.CompareExchange(ref buildInProgress, 0, 0) != 0)
+                    RefreshSourceLog(true);
+            };
             VisibleChanged += delegate
             {
                 if (Visible)
@@ -663,12 +689,15 @@ namespace DshEnhanced.WindowsLauncher
             overviewNav = NewNav("概览", 122, NavGlyph.Overview);
             tasksNav = NewNav("任务与 Profile", 172, NavGlyph.Tasks);
             diagnosticsNav = NewNav("日志与诊断", 222, NavGlyph.Diagnostics);
+            sourceNav = NewNav("DSH 源码", 272, NavGlyph.Source);
             sidebar.Controls.Add(overviewNav);
             sidebar.Controls.Add(tasksNav);
             sidebar.Controls.Add(diagnosticsNav);
+            sidebar.Controls.Add(sourceNav);
             overviewNav.Click += delegate { ShowPage(overviewPage, overviewNav, "概览"); };
             tasksNav.Click += delegate { ShowPage(tasksPage, tasksNav, "任务与 Profile"); };
             diagnosticsNav.Click += delegate { ShowPage(diagnosticsPage, diagnosticsNav, "日志与诊断"); };
+            sourceNav.Click += delegate { ShowPage(sourcePage, sourceNav, "DSH 源码"); };
 
             sidebarVersion = new Label();
             sidebarVersion.Text = "LOCAL COMPANION  ·  v0.1.0";
@@ -803,10 +832,8 @@ namespace DshEnhanced.WindowsLauncher
             profileCard.Size = new Size(780, 154);
             tasksPage.Controls.Add(profileCard);
             AddCardTitle(profileCard, "启动其他 Profile", "后台无窗口运行，输出以 UTF-8 保存在日志目录");
-            profileInput.DropDownStyle = ComboBoxStyle.DropDown;
-            profileInput.Font = UiTheme.Font(10f, FontStyle.Regular);
-            profileInput.Items.AddRange(runtime.Profiles());
-            if (profileInput.Items.Count > 0) profileInput.SelectedIndex = 0;
+            profileInput.SetItems(runtime.Profiles());
+            if (profileInput.ItemCount > 0) profileInput.SelectedIndex = 0;
             profileCard.Controls.Add(profileInput);
             runProfileButton = NewButton("启动 Profile", ModernButtonKind.Secondary, 132);
             runProfileButton.Click += delegate { ShowToast(runtime.RunProfile(profileInput.Text)); };
@@ -817,7 +844,7 @@ namespace DshEnhanced.WindowsLauncher
         {
             diagnosticsCard = new RoundedPanel();
             diagnosticsPage.Controls.Add(diagnosticsCard);
-            AddCardTitle(diagnosticsCard, "日志、环境诊断与源码构建", "源码构建仅使用安装时确认的本地 DSH checkout");
+            AddCardTitle(diagnosticsCard, "日志与环境诊断", "查看 Launcher 与 Web 运行记录，检查本机 DSH 环境");
             diagnosticsActions = new FlowLayoutPanel();
             diagnosticsActions.BackColor = UiTheme.Surface;
             diagnosticsActions.WrapContents = false;
@@ -826,13 +853,10 @@ namespace DshEnhanced.WindowsLauncher
             ModernButton folder = NewButton("打开日志目录", ModernButtonKind.Quiet, 126);
             refreshLogs.Click += delegate { diagnosticsOutput.Text = runtime.RecentLogs(); };
             doctor.Click += delegate { RunDoctor(); };
-            buildDshButton.Click += delegate { RunDshBuild(); };
             folder.Click += delegate { runtime.OpenLogFolder(); };
             diagnosticsActions.Controls.Add(refreshLogs);
             diagnosticsActions.Controls.Add(doctor);
-            diagnosticsActions.Controls.Add(buildDshButton);
             diagnosticsActions.Controls.Add(folder);
-            buildDshButton.Enabled = runtime.ResolveDshSource() != null;
             diagnosticsCard.Controls.Add(diagnosticsActions);
             diagnosticsOutput.ReadOnly = true;
             diagnosticsOutput.BorderStyle = BorderStyle.None;
@@ -841,6 +865,34 @@ namespace DshEnhanced.WindowsLauncher
             diagnosticsOutput.Font = new Font("Consolas", 8.5f, FontStyle.Regular);
             diagnosticsOutput.Text = runtime.RecentLogs();
             diagnosticsCard.Controls.Add(diagnosticsOutput);
+        }
+
+        private void BuildSourcePage()
+        {
+            sourceCard = new RoundedPanel();
+            sourcePage.Controls.Add(sourceCard);
+            AddCardTitle(sourceCard, "更新并构建 DSH", "先以安全快进方式拉取最新源码，再执行 pnpm run build");
+
+            sourcePathLabel = NewLabel(String.Empty, 8.5f, FontStyle.Regular, UiTheme.Muted);
+            sourcePathLabel.AutoSize = false;
+            sourcePathLabel.AutoEllipsis = true;
+            sourceCard.Controls.Add(sourcePathLabel);
+
+            buildDshButton.Click += delegate { RunDshBuild(); };
+            buildDshButton.Enabled = runtime.ResolveDshSource() != null;
+            sourceCard.Controls.Add(buildDshButton);
+
+            sourceLogShell = NewEditorShell();
+            sourceCard.Controls.Add(sourceLogShell);
+            sourceOutput.ReadOnly = true;
+            sourceOutput.BorderStyle = BorderStyle.None;
+            sourceOutput.BackColor = UiTheme.SurfaceSoft;
+            sourceOutput.ForeColor = UiTheme.Text;
+            sourceOutput.Font = new Font("Consolas", 8.5f, FontStyle.Regular);
+            sourceOutput.Dock = DockStyle.Fill;
+            sourceOutput.Text = runtime.DshSourceBuildLog();
+            sourceLogShell.Controls.Add(sourceOutput);
+            UpdateSourcePath();
         }
 
         private void LayoutResponsivePages()
@@ -853,6 +905,7 @@ namespace DshEnhanced.WindowsLauncher
             if (activePage == overviewPage) LayoutOverview();
             else if (activePage == tasksPage) LayoutTasks();
             else if (activePage == diagnosticsPage) LayoutDiagnostics();
+            else if (activePage == sourcePage) LayoutSource();
         }
 
         private void QueueResponsiveLayout()
@@ -893,7 +946,7 @@ namespace DshEnhanced.WindowsLauncher
                 ? new Point(Math.Max(0, (sidebarWidth - brandMark.Width) / 2), Dip(26))
                 : new Point(Dip(24), Dip(26));
 
-            NavButton[] navigation = { overviewNav, tasksNav, diagnosticsNav };
+            NavButton[] navigation = { overviewNav, tasksNav, diagnosticsNav, sourceNav };
             foreach (NavButton button in navigation) button.Width = sidebarWidth;
             LayoutSidebarFooter(sidebar, compact);
         }
@@ -1038,8 +1091,8 @@ namespace DshEnhanced.WindowsLauncher
 
             if (sideBySide)
             {
-                SetBoundsIfChanged(profileInput, Dip(28), Dip(82), Math.Max(Dip(120), profileCard.Width - Dip(56)), Dip(30));
-                runProfileButton.Location = new Point(Dip(28), Dip(134));
+                SetBoundsIfChanged(profileInput, Dip(28), Dip(78), Math.Max(Dip(120), profileCard.Width - Dip(56)), Dip(42));
+                runProfileButton.Location = new Point(Dip(28), Dip(140));
             }
             else
             {
@@ -1047,9 +1100,9 @@ namespace DshEnhanced.WindowsLauncher
                 int inputWidth = stackProfile
                     ? Math.Max(Dip(120), profileCard.Width - Dip(56))
                     : Math.Min(Dip(320), Math.Max(Dip(180), profileCard.Width - Dip(220)));
-                SetBoundsIfChanged(profileInput, Dip(28), Dip(82), inputWidth, Dip(30));
+                SetBoundsIfChanged(profileInput, Dip(28), Dip(77), inputWidth, Dip(42));
                 runProfileButton.Location = stackProfile
-                    ? new Point(Dip(28), Dip(136))
+                    ? new Point(Dip(28), Dip(142))
                     : new Point(Dip(44) + inputWidth, Dip(77));
             }
             tasksPage.AutoScrollMinSize = new Size(0, bottom);
@@ -1071,6 +1124,24 @@ namespace DshEnhanced.WindowsLauncher
             SetBoundsIfChanged(diagnosticsOutput, Dip(28), outputTop, Math.Max(Dip(120), width - Dip(56)),
                 Math.Max(Dip(160), height - outputTop - Dip(28)));
             diagnosticsPage.AutoScrollMinSize = new Size(0, height);
+        }
+
+        private void LayoutSource()
+        {
+            int left;
+            int width;
+            GetContentBounds(sourcePage, out left, out width);
+            if (width < 1) return;
+
+            int logTop = Dip(174);
+            int height = Math.Max(logTop + Dip(214), sourcePage.ClientSize.Height - Dip(2));
+            SetBoundsIfChanged(sourceCard, left, 0, width, height);
+            LayoutCardHeader(sourceCard);
+            SetBoundsIfChanged(sourcePathLabel, Dip(28), Dip(76), Math.Max(Dip(120), width - Dip(56)), Dip(24));
+            buildDshButton.Location = new Point(Dip(28), Dip(112));
+            SetBoundsIfChanged(sourceLogShell, Dip(28), logTop, Math.Max(Dip(120), width - Dip(56)),
+                Math.Max(Dip(180), height - logTop - Dip(28)));
+            sourcePage.AutoScrollMinSize = new Size(0, height);
         }
 
         private void GetContentBounds(Control page, out int left, out int width)
@@ -1206,8 +1277,7 @@ namespace DshEnhanced.WindowsLauncher
             stopButton.Enabled = status.CanStop;
             portInput.Enabled = status.Ownership == WebOwnership.Stopped;
             SetLabelText(dshPath, dsh ?? "未找到 dsh；请先安装 DeepSeek Harness");
-            buildDshButton.Enabled = Interlocked.CompareExchange(ref buildInProgress, 0, 0) == 0
-                && runtime.ResolveDshSource() != null;
+            UpdateSourcePath();
             loadingSettings = true;
             ApplyStartupModeToControls(autostartMode);
             loadingSettings = false;
@@ -1287,6 +1357,11 @@ namespace DshEnhanced.WindowsLauncher
                 ShowPage(diagnosticsPage, diagnosticsNav, "日志与诊断");
                 diagnosticsNav.Focus();
             }
+            else if (!firstShow && String.Equals(page, "source", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowPage(sourcePage, sourceNav, "DSH 源码");
+                sourceNav.Focus();
+            }
             else
             {
                 if (!firstShow) ShowPage(overviewPage, overviewNav, "概览");
@@ -1338,6 +1413,12 @@ namespace DshEnhanced.WindowsLauncher
                 foreach (Control action in diagnosticsActions.Controls)
                     EnsureContained(diagnosticsActions, action, "diagnostics action");
                 EnsureContained(diagnosticsCard, diagnosticsOutput, "diagnostics output");
+            }
+            else if (activePage == sourcePage)
+            {
+                EnsureContained(sourceCard, sourcePathLabel, "DSH source path");
+                EnsureContained(sourceCard, buildDshButton, "DSH source action");
+                EnsureContained(sourceCard, sourceLogShell, "DSH source log");
             }
         }
 
@@ -1400,23 +1481,48 @@ namespace DshEnhanced.WindowsLauncher
 
         private void RunDshBuild()
         {
+            string source = runtime.ResolveDshSource();
+            if (source == null)
+            {
+                ShowToast(OperationResult.Fail("未配置有效的 DSH 源码目录；请通过本地 checkout 重新运行安装脚本。"));
+                return;
+            }
+            bool updateSource = runtime.IsGitAvailable();
+            string confirmation = updateSource
+                ? "即将依次执行：" + Environment.NewLine + Environment.NewLine
+                    + "1. git pull --ff-only" + Environment.NewLine
+                    + "2. pnpm run build" + Environment.NewLine + Environment.NewLine
+                    + "源码目录：" + source + Environment.NewLine + Environment.NewLine
+                    + "如果存在无法快进的提交或冲突，流程会停止，不会继续构建。确定运行吗？"
+                : "未检测到 Git，无法拉取最新源码。" + Environment.NewLine + Environment.NewLine
+                    + "本次将跳过源码更新，仅执行 pnpm run build。" + Environment.NewLine + Environment.NewLine
+                    + "源码目录：" + source + Environment.NewLine + Environment.NewLine
+                    + "确定继续吗？";
+            DialogResult confirmed = MessageBox.Show(this, confirmation, "更新并构建 DSH",
+                MessageBoxButtons.YesNo, updateSource ? MessageBoxIcon.Question : MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if (confirmed != DialogResult.Yes)
+            {
+                ShowToast(OperationResult.Ok("已取消 DSH 源码操作。"));
+                return;
+            }
             if (Interlocked.CompareExchange(ref buildInProgress, 1, 0) != 0) return;
             buildDshButton.Enabled = false;
-            string source = runtime.ResolveDshSource();
-            diagnosticsOutput.Text = "正在后台构建 DSH 源码…" + Environment.NewLine
-                + "源码目录: " + (source ?? "未配置") + Environment.NewLine
-                + "命令: pnpm run build" + Environment.NewLine
-                + "完整输出会持续写入 dsh-build.log；构建期间可以点击“刷新日志”查看进度。";
-            ShowToast(OperationResult.Ok("DSH 源码构建已开始。"));
+            sourceOutput.Text = (updateSource ? "正在拉取最新 DSH 源码并构建…" : "未检测到 Git，正在仅构建 DSH 源码…")
+                + Environment.NewLine + "源码目录: " + source + Environment.NewLine
+                + "日志将自动刷新，无需离开当前页面。";
+            sourceOutput.SelectionStart = sourceOutput.TextLength;
+            sourceOutput.ScrollToCaret();
+            ShowToast(OperationResult.Ok(updateSource ? "DSH 源码更新与构建已开始。" : "DSH 源码构建已开始（已跳过 Git 更新）。"));
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string output;
                 OperationResult result;
-                try { result = runtime.BuildDshSource(out output); }
+                try { result = runtime.BuildDshSource(updateSource, out output); }
                 catch (Exception error)
                 {
                     output = error.ToString();
-                    result = OperationResult.Fail("DSH 源码构建失败：" + error.Message);
+                    result = OperationResult.Fail("DSH 源码更新或构建失败：" + error.Message);
                 }
                 Interlocked.Exchange(ref buildInProgress, 0);
                 if (IsDisposed || !IsHandleCreated) return;
@@ -1424,13 +1530,34 @@ namespace DshEnhanced.WindowsLauncher
                 {
                     BeginInvoke(new Action(delegate
                     {
-                        diagnosticsOutput.Text = String.IsNullOrWhiteSpace(output) ? result.Message : output.Trim();
+                        sourceOutput.Text = String.IsNullOrWhiteSpace(output) ? result.Message : output.Trim();
+                        sourceOutput.SelectionStart = sourceOutput.TextLength;
+                        sourceOutput.ScrollToCaret();
                         buildDshButton.Enabled = runtime.ResolveDshSource() != null;
                         ShowToast(result);
                     }));
                 }
                 catch (InvalidOperationException) { }
             });
+        }
+
+        private void UpdateSourcePath()
+        {
+            string source = runtime.ResolveDshSource();
+            sourcePathLabel.Text = "源码目录：" + (source ?? "未配置有效的本地 DSH checkout");
+            buildDshButton.Enabled = Interlocked.CompareExchange(ref buildInProgress, 0, 0) == 0 && source != null;
+        }
+
+        private void RefreshSourceLog(bool followTail)
+        {
+            string log = runtime.DshSourceBuildLog();
+            if (String.Equals(sourceOutput.Text, log, StringComparison.Ordinal)) return;
+            sourceOutput.Text = log;
+            if (followTail)
+            {
+                sourceOutput.SelectionStart = sourceOutput.TextLength;
+                sourceOutput.ScrollToCaret();
+            }
         }
 
         private void SetActionsEnabled(bool enabled)
@@ -1463,15 +1590,23 @@ namespace DshEnhanced.WindowsLauncher
             overviewPage.Visible = page == overviewPage;
             tasksPage.Visible = page == tasksPage;
             diagnosticsPage.Visible = page == diagnosticsPage;
+            sourcePage.Visible = page == sourcePage;
             overviewNav.Selected = nav == overviewNav;
             tasksNav.Selected = nav == tasksNav;
             diagnosticsNav.Selected = nav == diagnosticsNav;
+            sourceNav.Selected = nav == sourceNav;
             page.BringToFront();
             pageTitle.Text = title;
             if (page == overviewPage) pageSubtitle.Text = "本机 DSH 服务与任务控制中心";
             else if (page == tasksPage) pageSubtitle.Text = "安全运行单次任务或启动独立 Profile";
-            else pageSubtitle.Text = "查看运行记录、检查环境或构建本地 DSH 源码";
+            else if (page == diagnosticsPage) pageSubtitle.Text = "查看运行记录并检查本机环境";
+            else pageSubtitle.Text = "拉取最新代码并构建安装时确认的本地 checkout";
             if (page == diagnosticsPage) diagnosticsOutput.Text = runtime.RecentLogs();
+            if (page == sourcePage)
+            {
+                UpdateSourcePath();
+                RefreshSourceLog(true);
+            }
             LayoutResponsivePages();
         }
 

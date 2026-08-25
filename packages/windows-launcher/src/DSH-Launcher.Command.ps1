@@ -105,10 +105,25 @@ try {
         [string]::IsNullOrWhiteSpace([string] $manifest.scripts.build)) {
         throw 'The configured source directory is not a buildable DSH checkout.'
       }
-      $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
-        Select-Object -First 1
       $logPath = [string] $request.logPath
       if ([string]::IsNullOrWhiteSpace($logPath)) { throw 'DSH build log path is missing.' }
+
+      if ([bool] $request.updateSource) {
+        $git = Get-Command -Name 'git' -CommandType Application -ErrorAction Stop |
+          Select-Object -First 1
+        $gitCode = Invoke-LoggedDsh `
+          -Command $git.Source `
+          -Arguments @('-C', $workingDirectory, 'pull', '--ff-only') `
+          -LogPath $logPath `
+          -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) git pull --ff-only ($workingDirectory) ====="
+        if ($gitCode -ne 0) { exit $gitCode }
+      } else {
+        $skipHeader = "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) Git unavailable: skipping source update and running build only ($workingDirectory) ====="
+        [System.IO.File]::AppendAllText($logPath, $skipHeader + [Environment]::NewLine, $Utf8NoBom)
+      }
+
+      $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1
       $code = Invoke-LoggedDsh `
         -Command $pnpm.Source `
         -Arguments @('run', 'build') `

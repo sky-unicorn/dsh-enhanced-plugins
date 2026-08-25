@@ -46,6 +46,7 @@ namespace DshEnhanced.WindowsLauncher
         public string task { get; set; }
         public string profile { get; set; }
         public string sourceDirectory { get; set; }
+        public bool updateSource { get; set; }
     }
 
     internal sealed class LauncherState
@@ -619,7 +620,41 @@ namespace DshEnhanced.WindowsLauncher
             return result.Success ? OperationResult.Ok("诊断完成。") : result;
         }
 
+        internal bool IsGitAvailable()
+        {
+            string path = Environment.GetEnvironmentVariable("PATH");
+            if (String.IsNullOrWhiteSpace(path)) return false;
+            string[] extensions = { ".exe", ".cmd", ".bat", ".com" };
+            foreach (string rawDirectory in path.Split(Path.PathSeparator))
+            {
+                string directory = rawDirectory.Trim().Trim('"');
+                if (String.IsNullOrWhiteSpace(directory)) continue;
+                foreach (string extension in extensions)
+                {
+                    try
+                    {
+                        if (File.Exists(Path.Combine(directory, "git" + extension))) return true;
+                    }
+                    catch
+                    {
+                        // Ignore malformed or inaccessible PATH entries and keep searching.
+                    }
+                }
+            }
+            return false;
+        }
+
+        internal string DshSourceBuildLog()
+        {
+            return ReadTail(LauncherPaths.BuildLog, 320);
+        }
+
         internal OperationResult BuildDshSource(out string output)
+        {
+            return BuildDshSource(IsGitAvailable(), out output);
+        }
+
+        internal OperationResult BuildDshSource(bool updateSource, out string output)
         {
             output = String.Empty;
             string source = ResolveDshSource();
@@ -634,8 +669,9 @@ namespace DshEnhanced.WindowsLauncher
             request.sourceDirectory = source;
             request.workingDirectory = source;
             request.logPath = LauncherPaths.BuildLog;
+            request.updateSource = updateSource;
             string commandOutput;
-            LauncherLog.Write("build DSH source=" + source);
+            LauncherLog.Write((updateSource ? "update and build" : "build") + " DSH source=" + source);
             OperationResult result = RunCapturedRequest(request, out commandOutput);
             string logTail = ReadTail(LauncherPaths.BuildLog, 240);
             output = String.IsNullOrWhiteSpace(commandOutput)
@@ -644,11 +680,11 @@ namespace DshEnhanced.WindowsLauncher
                     + "────────────────────────────────────────" + Environment.NewLine + commandOutput.Trim();
             if (!result.Success)
             {
-                LauncherLog.Write("build DSH failed: " + result.Message);
+                LauncherLog.Write("update/build DSH failed: " + result.Message);
                 return result;
             }
-            LauncherLog.Write("build DSH completed source=" + source);
-            return OperationResult.Ok("DSH 源码构建完成。");
+            LauncherLog.Write("update/build DSH completed source=" + source);
+            return OperationResult.Ok(updateSource ? "DSH 源码已更新并构建完成。" : "DSH 源码构建完成（未执行 Git 更新）。");
         }
 
         internal OperationResult RunProfile(string profile)
@@ -737,10 +773,6 @@ namespace DshEnhanced.WindowsLauncher
             output.AppendLine("DSH Web 日志");
             output.AppendLine("────────────────────────────────────────");
             output.AppendLine(ReadTail(LauncherPaths.ServerLog, 160));
-            output.AppendLine();
-            output.AppendLine("DSH 源码构建日志");
-            output.AppendLine("────────────────────────────────────────");
-            output.AppendLine(ReadTail(LauncherPaths.BuildLog, 160));
             return output.ToString();
         }
 
@@ -766,6 +798,7 @@ namespace DshEnhanced.WindowsLauncher
                 task = String.Empty,
                 profile = String.Empty,
                 sourceDirectory = String.Empty,
+                updateSource = false,
             };
         }
 

@@ -53,6 +53,7 @@ const profileHome = resolve(temporary, 'User')
 const fixture = resolve(temporary, 'dsh.ps1')
 const dshSource = resolve(temporary, 'deepseek-harness')
 const fakeBin = resolve(temporary, 'bin')
+const buildOnlyBin = resolve(temporary, 'build-only-bin')
 const dataRoot = resolve(localAppData, 'DeepSeekHarness/Launcher')
 const settingsPath = resolve(dataRoot, 'settings.json')
 const port = await freePort()
@@ -71,6 +72,7 @@ try {
   await mkdir(profileHome, { recursive: true })
   await mkdir(dshSource, { recursive: true })
   await mkdir(fakeBin, { recursive: true })
+  await mkdir(buildOnlyBin, { recursive: true })
   await copyFile(fixtureSource, fixture)
   await writeFile(resolve(dshSource, 'package.json'), JSON.stringify({
     name: '@deepseek-ai/dsh-root',
@@ -81,8 +83,28 @@ try {
     '@echo off',
     'if /I not "%~1"=="run" exit /b 41',
     'if /I not "%~2"=="build" exit /b 42',
+    'if not exist "%CD%\\git-pull-marker.txt" exit /b 43',
     '> "%CD%\\build-marker.txt" echo BUILD_FIXTURE_OK',
     'echo BUILD_FIXTURE_OK',
+    'exit /b 0',
+    '',
+  ].join('\r\n'), 'utf8')
+  await writeFile(resolve(fakeBin, 'git.cmd'), [
+    '@echo off',
+    'if /I not "%~1"=="-C" exit /b 51',
+    'if /I not "%~3"=="pull" exit /b 52',
+    'if /I not "%~4"=="--ff-only" exit /b 53',
+    '> "%~2\\git-pull-marker.txt" echo GIT_PULL_FIXTURE_OK',
+    'echo GIT_PULL_FIXTURE_OK',
+    'exit /b 0',
+    '',
+  ].join('\r\n'), 'utf8')
+  await writeFile(resolve(buildOnlyBin, 'pnpm.cmd'), [
+    '@echo off',
+    'if /I not "%~1"=="run" exit /b 61',
+    'if /I not "%~2"=="build" exit /b 62',
+    '> "%CD%\\build-only-marker.txt" echo BUILD_ONLY_FIXTURE_OK',
+    'echo BUILD_ONLY_FIXTURE_OK',
     'exit /b 0',
     '',
   ].join('\r\n'), 'utf8')
@@ -107,14 +129,40 @@ try {
     throw new Error(`launcher doctor failed: ${doctorText}\n${doctor.stderr}`)
   }
 
+  const buildOnlyResultPath = resolve(temporary, 'build-only-result.json')
+  const windowsDirectory = process.env.WINDIR ?? 'C:\\Windows'
+  const gitlessPath = [
+    buildOnlyBin,
+    resolve(windowsDirectory, 'System32'),
+    windowsDirectory,
+    resolve(windowsDirectory, 'System32/WindowsPowerShell/v1.0'),
+  ].join(';')
+  const buildOnly = run(executable, ['--automation', 'build', buildOnlyResultPath], {
+    env: { ...environment, PATH: gitlessPath },
+  })
+  const buildOnlyResult = await readJson(buildOnlyResultPath)
+  if (buildOnly.status !== 0 || buildOnlyResult.success !== true) {
+    throw new Error(`launcher Git-less DSH source build did not start: ${JSON.stringify(buildOnlyResult)}\n${buildOnly.stderr}`)
+  }
+  const buildOnlyLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+  const buildOnlyMarker = await readFile(resolve(dshSource, 'build-only-marker.txt'), 'utf8')
+  if (!buildOnlyResult.output.includes('BUILD_ONLY_FIXTURE_OK')
+      || !buildOnlyLog.includes('Git unavailable: skipping source update and running build only')
+      || buildOnlyMarker.trim() !== 'BUILD_ONLY_FIXTURE_OK') {
+    throw new Error(`launcher Git-less DSH source build failed: ${JSON.stringify(buildOnlyResult)}\n${buildOnly.stderr}`)
+  }
+
   const buildResultPath = resolve(temporary, 'build-result.json')
   const build = run(executable, ['--automation', 'build', buildResultPath], { env: environment })
   const buildResult = await readJson(buildResultPath)
   const buildLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
   const buildMarker = await readFile(resolve(dshSource, 'build-marker.txt'), 'utf8')
+  const gitMarker = await readFile(resolve(dshSource, 'git-pull-marker.txt'), 'utf8')
   if (build.status !== 0 || buildResult.success !== true
       || !buildResult.output.includes('BUILD_FIXTURE_OK')
-      || !buildLog.includes('pnpm run build') || buildMarker.trim() !== 'BUILD_FIXTURE_OK') {
+      || !buildResult.output.includes('GIT_PULL_FIXTURE_OK')
+      || !buildLog.includes('git pull --ff-only') || !buildLog.includes('pnpm run build')
+      || gitMarker.trim() !== 'GIT_PULL_FIXTURE_OK' || buildMarker.trim() !== 'BUILD_FIXTURE_OK') {
     throw new Error(`launcher DSH source build failed: ${JSON.stringify(buildResult)}\n${build.stderr}`)
   }
 
@@ -225,15 +273,22 @@ try {
     ['compact-overview', 'overview', 'compact', 820, 600],
     ['compact-tasks', 'tasks', 'compact', 820, 600],
     ['compact-diagnostics', 'diagnostics', 'compact', 820, 600],
+    ['compact-source', 'source', 'compact', 820, 600],
     ['scale-150-overview', 'overview', 'scale150', 1366, 720],
     ['scale-200-overview', 'overview', 'scale200', 1366, 720],
     ['scale-200-tasks', 'tasks', 'scale200', 1366, 720],
     ['scale-200-diagnostics', 'diagnostics', 'scale200', 1366, 720],
+    ['scale-200-source', 'source', 'scale200', 1366, 720],
   ]) {
     const responsiveScreenshot = resolve(temporary, `launcher-${name}.png`)
     const responsiveCapture = run(executable, [
       '--screenshot', responsiveScreenshot, page, layout,
     ], { env: environment })
+    if (responsiveCapture.status !== 0) {
+      const captureError = await readFile(`${responsiveScreenshot}.error.txt`, 'utf8').catch(() => responsiveCapture.stderr)
+      throw new Error(`launcher ${name} capture failed: ${captureError}`)
+    }
+    await waitFor(async () => stat(responsiveScreenshot).then(() => true).catch(() => false), `${name} screenshot`, 5_000)
     const responsiveBytes = await readFile(responsiveScreenshot)
     if (responsiveCapture.status !== 0 || responsiveBytes.length < 20_000
         || responsiveBytes.readUInt32BE(16) !== expectedWidth

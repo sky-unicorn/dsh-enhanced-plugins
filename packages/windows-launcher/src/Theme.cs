@@ -235,7 +235,7 @@ namespace DshEnhanced.WindowsLauncher
         }
     }
 
-    internal enum NavGlyph { Overview, Tasks, Diagnostics }
+    internal enum NavGlyph { Overview, Tasks, Diagnostics, Source }
 
     internal sealed class NavButton : Control
     {
@@ -322,14 +322,300 @@ namespace DshEnhanced.WindowsLauncher
                     graphics.DrawLine(pen, box.X + (13 * u), box.Y + (11 * u), box.X + (16 * u), box.Y + (14 * u));
                     graphics.DrawLine(pen, box.X + (16 * u), box.Y + (14 * u), box.X + (13 * u), box.Y + (17 * u));
                 }
-                else
+                else if (Glyph == NavGlyph.Diagnostics)
                 {
                     graphics.DrawEllipse(pen, box.X + (2 * u), box.Y + (2 * u), 11 * u, 11 * u);
                     graphics.DrawLine(pen, box.X + (12 * u), box.Y + (12 * u), box.X + (17 * u), box.Y + (17 * u));
                     graphics.DrawLine(pen, box.X + (7 * u), box.Y + (5 * u), box.X + (7 * u), box.Y + (10 * u));
                     graphics.DrawLine(pen, box.X + (5 * u), box.Y + (8 * u), box.X + (10 * u), box.Y + (8 * u));
                 }
+                else
+                {
+                    graphics.DrawEllipse(pen, box.X + (2 * u), box.Y + u, 5 * u, 5 * u);
+                    graphics.DrawEllipse(pen, box.X + (2 * u), box.Y + (12 * u), 5 * u, 5 * u);
+                    graphics.DrawEllipse(pen, box.X + (12 * u), box.Y + u, 5 * u, 5 * u);
+                    graphics.DrawLine(pen, box.X + (4.5f * u), box.Y + (6 * u), box.X + (4.5f * u), box.Y + (12 * u));
+                    graphics.DrawBezier(pen, box.X + (4.5f * u), box.Y + (10 * u),
+                        box.X + (6 * u), box.Y + (6 * u), box.X + (11 * u), box.Y + (7 * u),
+                        box.X + (14.5f * u), box.Y + (6 * u));
+                }
             }
+        }
+    }
+
+    internal sealed class ModernComboBox : Control
+    {
+        private readonly TextBox editor;
+        private readonly ListBox choices;
+        private readonly ToolStripDropDown popup;
+        private bool hovering;
+        private bool arrowHovering;
+        private bool popupOpen;
+
+        internal int SelectedIndex
+        {
+            get { return choices.SelectedIndex; }
+            set
+            {
+                choices.SelectedIndex = value;
+                if (value >= 0 && value < choices.Items.Count)
+                    Text = Convert.ToString(choices.Items[value], CultureInfo.CurrentCulture);
+            }
+        }
+
+        internal int ItemCount { get { return choices.Items.Count; } }
+
+        public override string Text
+        {
+            get { return editor == null ? base.Text : editor.Text; }
+            set
+            {
+                string normalized = value ?? String.Empty;
+                if (editor != null && !String.Equals(editor.Text, normalized, StringComparison.Ordinal))
+                    editor.Text = normalized;
+                if (!String.Equals(base.Text, normalized, StringComparison.Ordinal)) base.Text = normalized;
+            }
+        }
+
+        internal ModernComboBox()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
+                | ControlStyles.Selectable, true);
+            BackColor = UiTheme.Surface;
+            Cursor = Cursors.IBeam;
+            TabStop = false;
+            AccessibleRole = AccessibleRole.ComboBox;
+
+            editor = new TextBox();
+            editor.BorderStyle = BorderStyle.None;
+            editor.BackColor = UiTheme.SurfaceSoft;
+            editor.ForeColor = UiTheme.Text;
+            editor.Font = UiTheme.Font(10f, FontStyle.Regular);
+            editor.TabStop = true;
+            editor.Enter += delegate { Invalidate(); };
+            editor.Leave += delegate { if (!popupOpen) Invalidate(); };
+            editor.MouseEnter += delegate { hovering = true; Invalidate(); };
+            editor.MouseLeave += delegate { hovering = false; Invalidate(); };
+            editor.TextChanged += delegate
+            {
+                if (!String.Equals(base.Text, editor.Text, StringComparison.Ordinal)) base.Text = editor.Text;
+            };
+            editor.KeyDown += EditorKeyDown;
+            Controls.Add(editor);
+
+            choices = new ListBox();
+            choices.BorderStyle = BorderStyle.None;
+            choices.BackColor = UiTheme.Surface;
+            choices.ForeColor = UiTheme.Text;
+            choices.Font = UiTheme.Font(9.6f, FontStyle.Regular);
+            choices.DrawMode = DrawMode.OwnerDrawFixed;
+            choices.IntegralHeight = false;
+            choices.TabStop = false;
+            choices.DrawItem += DrawChoice;
+            choices.MouseClick += delegate(object sender, MouseEventArgs e)
+            {
+                int index = choices.IndexFromPoint(e.Location);
+                if (index >= 0) CommitChoice(index);
+            };
+
+            ToolStripControlHost host = new ToolStripControlHost(choices);
+            host.AutoSize = false;
+            host.Margin = Padding.Empty;
+            host.Padding = Padding.Empty;
+            popup = new ToolStripDropDown();
+            popup.AutoSize = false;
+            popup.BackColor = UiTheme.BorderStrong;
+            popup.DropShadowEnabled = true;
+            popup.Padding = new Padding(UiTheme.Dip(this, 1));
+            popup.Items.Add(host);
+            popup.Closed += delegate
+            {
+                popupOpen = false;
+                arrowHovering = false;
+                Invalidate();
+            };
+
+            Size = new Size(320, 42);
+            MouseEnter += delegate { hovering = true; Invalidate(); };
+            MouseLeave += delegate { hovering = false; arrowHovering = false; Invalidate(); };
+        }
+
+        internal void SetItems(string[] items)
+        {
+            choices.Items.Clear();
+            if (items != null && items.Length > 0) choices.Items.AddRange(items);
+            choices.SelectedIndex = -1;
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            int left = UiTheme.Dip(this, 14);
+            int arrowWidth = UiTheme.Dip(this, 42);
+            int editorWidth = Math.Max(1, Width - left - arrowWidth);
+            editor.SetBounds(left, Math.Max(UiTheme.Dip(this, 4), (Height - editor.PreferredHeight) / 2),
+                editorWidth, editor.PreferredHeight);
+        }
+
+        protected override void OnEnabledChanged(EventArgs e)
+        {
+            base.OnEnabledChanged(e);
+            editor.Enabled = Enabled;
+            editor.BackColor = UiTheme.SurfaceSoft;
+            if (!Enabled && popup.Visible) popup.Close();
+            Invalidate();
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            bool nextArrowHovering = e.X >= Width - UiTheme.Dip(this, 42);
+            if (arrowHovering != nextArrowHovering)
+            {
+                arrowHovering = nextArrowHovering;
+                Cursor = arrowHovering ? Cursors.Hand : Cursors.IBeam;
+                Invalidate();
+            }
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button == MouseButtons.Left && e.X >= Width - UiTheme.Dip(this, 42)) TogglePopup();
+            else editor.Focus();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            bool active = editor.Focused || popupOpen;
+            Color fill = Enabled ? UiTheme.SurfaceSoft : Color.FromArgb(241, 244, 249);
+            Color border = active ? UiTheme.Primary : hovering ? Color.FromArgb(180, 192, 226) : UiTheme.BorderStrong;
+            editor.BackColor = fill;
+            Rectangle bounds = new Rectangle(UiTheme.Dip(this, 1), UiTheme.Dip(this, 1),
+                Math.Max(1, Width - UiTheme.Dip(this, 3)), Math.Max(1, Height - UiTheme.Dip(this, 3)));
+            using (GraphicsPath path = UiTheme.RoundedRectangle(bounds, UiTheme.Dip(this, 11)))
+            using (SolidBrush brush = new SolidBrush(fill))
+            using (Pen pen = new Pen(border, UiTheme.Dip(this, active ? 1.7f : 1f)))
+            {
+                e.Graphics.FillPath(brush, path);
+                e.Graphics.DrawPath(pen, path);
+            }
+
+            int arrowSize = UiTheme.Dip(this, 26);
+            Rectangle arrowButton = new Rectangle(Width - UiTheme.Dip(this, 35), (Height - arrowSize) / 2,
+                arrowSize, arrowSize);
+            if (arrowHovering || popupOpen)
+            {
+                using (SolidBrush brush = new SolidBrush(UiTheme.PrimarySoft))
+                    e.Graphics.FillEllipse(brush, arrowButton);
+            }
+            float centerX = arrowButton.Left + (arrowButton.Width / 2f);
+            float centerY = arrowButton.Top + (arrowButton.Height / 2f) + UiTheme.Dip(this, 1f);
+            using (Pen pen = new Pen(active ? UiTheme.Primary : UiTheme.Muted, UiTheme.Dip(this, 1.8f)))
+            {
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                e.Graphics.DrawLine(pen, centerX - UiTheme.Dip(this, 4f), centerY - UiTheme.Dip(this, 2f),
+                    centerX, centerY + UiTheme.Dip(this, 2f));
+                e.Graphics.DrawLine(pen, centerX, centerY + UiTheme.Dip(this, 2f),
+                    centerX + UiTheme.Dip(this, 4f), centerY - UiTheme.Dip(this, 2f));
+            }
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            e.Graphics.Clear(Parent == null ? UiTheme.Surface : Parent.BackColor);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) popup.Dispose();
+            base.Dispose(disposing);
+        }
+
+        private void EditorKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F4 || (e.Alt && e.KeyCode == Keys.Down))
+            {
+                TogglePopup();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (popupOpen && (e.KeyCode == Keys.Down || e.KeyCode == Keys.Up))
+            {
+                int direction = e.KeyCode == Keys.Down ? 1 : -1;
+                int next = choices.SelectedIndex < 0 ? 0 : choices.SelectedIndex + direction;
+                choices.SelectedIndex = Math.Max(0, Math.Min(choices.Items.Count - 1, next));
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (popupOpen && e.KeyCode == Keys.Enter)
+            {
+                if (choices.SelectedIndex >= 0) CommitChoice(choices.SelectedIndex);
+                else popup.Close();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (popupOpen && e.KeyCode == Keys.Escape)
+            {
+                popup.Close();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        private void TogglePopup()
+        {
+            if (!Enabled || choices.Items.Count == 0) { editor.Focus(); return; }
+            if (popup.Visible) { popup.Close(); return; }
+
+            int itemHeight = UiTheme.Dip(this, 36);
+            int visibleItems = Math.Min(6, Math.Max(1, choices.Items.Count));
+            int popupHeight = (visibleItems * itemHeight) + UiTheme.Dip(this, 2);
+            ToolStripControlHost host = (ToolStripControlHost)popup.Items[0];
+            choices.ItemHeight = itemHeight;
+            choices.Size = new Size(Math.Max(UiTheme.Dip(this, 140), Width - UiTheme.Dip(this, 2)),
+                popupHeight - UiTheme.Dip(this, 2));
+            host.Size = choices.Size;
+            popup.Size = new Size(choices.Width + UiTheme.Dip(this, 2), popupHeight);
+            int matchingIndex = choices.FindStringExact(editor.Text);
+            if (matchingIndex >= 0) choices.SelectedIndex = matchingIndex;
+            popupOpen = true;
+            Invalidate();
+            popup.Show(PointToScreen(new Point(0, Height + UiTheme.Dip(this, 4))));
+            editor.Focus();
+        }
+
+        private void CommitChoice(int index)
+        {
+            if (index < 0 || index >= choices.Items.Count) return;
+            choices.SelectedIndex = index;
+            Text = Convert.ToString(choices.Items[index], CultureInfo.CurrentCulture);
+            popup.Close();
+            editor.SelectionStart = editor.TextLength;
+        }
+
+        private void DrawChoice(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0 || e.Index >= choices.Items.Count) return;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (SolidBrush background = new SolidBrush(UiTheme.Surface))
+                e.Graphics.FillRectangle(background, e.Bounds);
+            bool selected = (e.State & DrawItemState.Selected) != 0;
+            Rectangle item = Rectangle.Inflate(e.Bounds, -UiTheme.Dip(this, 5), -UiTheme.Dip(this, 3));
+            if (selected)
+            {
+                using (GraphicsPath path = UiTheme.RoundedRectangle(item, UiTheme.Dip(this, 8)))
+                using (SolidBrush brush = new SolidBrush(UiTheme.PrimarySoft)) e.Graphics.FillPath(brush, path);
+            }
+            string value = Convert.ToString(choices.Items[e.Index], CultureInfo.CurrentCulture);
+            TextRenderer.DrawText(e.Graphics, value, choices.Font,
+                new Rectangle(item.Left + UiTheme.Dip(this, 9), item.Top,
+                    Math.Max(1, item.Width - UiTheme.Dip(this, 18)), item.Height),
+                selected ? UiTheme.PrimaryHover : UiTheme.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
     }
 
