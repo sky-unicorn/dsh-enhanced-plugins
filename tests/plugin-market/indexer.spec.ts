@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildPluginIndex, dshBundleEvidence, readPrevious } from '../../scripts/update-plugin-index.mjs'
+import {
+  buildPluginIndex,
+  dshBundleEvidence,
+  githubActionsCommandValue,
+  readPrevious,
+} from '../../scripts/update-plugin-index.mjs'
 
 const topic = 'dsh-plugin'
 
@@ -159,5 +164,10 @@ describe('plugin market indexer', () => {
       fetchImpl: vi.fn(async () => new Response('', { status: 503 })),
       readJsonFileImpl: vi.fn(),
     })).rejects.toThrow('Previous published index unavailable: previous index returned 503')
+  })
+
+  it('escapes diagnostic text before emitting a GitHub Actions command', () => {
+    expect(githubActionsCommandValue('failed 100%\r\nnext line'))
+      .toBe('failed 100%25%0D%0Anext line')
   })
 })

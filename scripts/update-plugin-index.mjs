@@ -406,6 +406,10 @@ async function writeJsonAtomic(filename, value) {
   await rename(temporary, filename)
 }
 
+export function githubActionsCommandValue(value) {
+  return value.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A')
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2))
   const previous = await readPrevious(options)
@@ -437,7 +441,13 @@ const invokedAsScript = process.argv[1] !== undefined
   && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 if (invokedAsScript) {
   main().catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`)
+    const message = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`${error instanceof Error ? error.stack ?? message : message}\n`)
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      process.stderr.write(
+        `::error title=Plugin index generation failed::${githubActionsCommandValue(message)}\n`,
+      )
+    }
     process.exitCode = 1
   })
 }
