@@ -5,6 +5,9 @@ import type {
   MarketCatalogFilter,
   MarketCredentialInfo,
   MarketErrorBody,
+  MarketInstallPlan,
+  MarketInstallPlanJob,
+  MarketMutationJob,
   MarketMutationResult,
   MarketPlugin,
   MarketSyncResult,
@@ -14,6 +17,33 @@ import type { LocaleKey } from './locales.ts'
 import css from './PluginMarket.module.css'
 
 export type PluginMarketProps = PropsRuntime<'settings.section'> & PropsLocale<'settings.pluginMarket'>
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported plugin market value: ${JSON.stringify(value)}`)
+}
+
+function installPlanMessage(plan: MarketInstallPlan, t: PluginMarketProps['t']): string {
+  switch (plan.kind) {
+    case 'npm': return t('npmPlan').replace('{version}', plan.version)
+    case 'github': return t('githubPlan').replace('{commit}', plan.commit.slice(0, 8))
+    case 'manual':
+      switch (plan.reason) {
+        case 'requires-build-approval': return t('manualBuildPlan')
+        case 'missing-integrity': return t('manualIntegrityPlan')
+        case 'no-automatic-source': return t('manualPlan')
+        default: return assertNever(plan.reason)
+      }
+    default: return assertNever(plan)
+  }
+}
+
+function installPlanAction(plan: Exclude<MarketInstallPlan, { readonly kind: 'manual' }>, t: PluginMarketProps['t']): string {
+  switch (plan.kind) {
+    case 'npm': return t('oneClickInstall')
+    case 'github': return t('installSource')
+    default: return assertNever(plan)
+  }
+}
 
 type ViewState =
   | { readonly status: 'loading' }
@@ -39,7 +69,9 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [state, setState] = useState<ViewState>({ status: 'loading' })
-  const [pending, setPending] = useState<string | null>(null)
+  const [pending, setPending] = useState<{ readonly fullName: string; readonly jobId: string } | null>(null)
+  const [planning, setPlanning] = useState<string | null>(null)
+  const [plans, setPlans] = useState<Readonly<Record<string, MarketInstallPlan>>>({})
   const [notice, setNotice] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
@@ -89,18 +121,74 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
     setActionError(null)
   }
 
-  const mutate = async (plugin: MarketPlugin): Promise<void> => {
-    setPending(plugin.packageName)
+  const inspectPlan = async (plugin: MarketPlugin): Promise<void> => {
+    setPlanning(plugin.fullName)
     setActionError(null)
     setNotice(null)
     try {
-      const result = await api<MarketMutationResult>(plugin.installed ? 'uninstall' : 'install', {
+      let job = await api<MarketInstallPlanJob>('install-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fullName: plugin.fullName }),
+      })
+      while (job.state === 'running') {
+        await new Promise(resolve => setTimeout(resolve, 750))
+        job = await api<MarketInstallPlanJob>(`install-plans/${job.id}`)
+      }
+      switch (job.state) {
+        case 'completed': setPlans(current => ({ ...current, [plugin.fullName]: job.plan })); break
+        case 'failed': throw new Error(job.message)
+        default: return assertNever(job)
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPlanning(null)
+    }
+  }
+
+  const waitForJob = async (initial: MarketMutationJob): Promise<MarketMutationJob> => {
+    let job = initial
+    while (job.state === 'running') {
+      await new Promise(resolve => setTimeout(resolve, 750))
+      job = await api<MarketMutationJob>(`jobs/${job.id}`)
+    }
+    return job
+  }
+
+  const mutate = async (plugin: MarketPlugin): Promise<void> => {
+    const plan = plans[plugin.fullName]
+    if (plugin.installed && !plugin.removable) return
+    if (!plugin.installed && plan === undefined) {
+      await inspectPlan(plugin)
+      return
+    }
+    if (!plugin.installed && plan?.kind === 'manual') return
+    setActionError(null)
+    setNotice(null)
+    try {
+      const started = await api<MarketMutationJob>(plugin.installed ? 'uninstall' : 'install', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(plugin.installed
           ? { packageName: plugin.packageName }
-          : { fullName: plugin.fullName }),
+          : {
+            fullName: plugin.fullName,
+            planKind: plan?.kind,
+            expectedRef: plan?.kind === 'npm' ? plan.version : plan?.kind === 'github' ? plan.commit : undefined,
+            confirmSource: plan?.kind === 'github',
+          }),
       })
+      setPending({ fullName: plugin.fullName, jobId: started.id })
+      const job = await waitForJob(started)
+      let result: MarketMutationResult
+      switch (job.state) {
+        case 'completed': result = job.result; break
+        case 'cancelled': setNotice(t('operationCancelled')); return
+        case 'failed': throw new Error(job.message)
+        case 'running': throw new Error(t('jobIncomplete'))
+        default: return assertNever(job)
+      }
       setNotice(plugin.installed
         ? t('uninstallDone')
         : t(result.source === 'npm' ? 'installNpmDone' : result.source === 'github' ? 'installGithubDone' : 'restart'))
@@ -110,6 +198,16 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
       setActionError(error instanceof Error ? error.message : String(error))
     } finally {
       setPending(null)
+    }
+  }
+
+  const cancelMutation = async (): Promise<void> => {
+    if (pending === null) return
+    setActionError(null)
+    try {
+      await api<MarketMutationJob>(`jobs/${pending.jobId}`, { method: 'DELETE' })
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -178,7 +276,7 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
       if (status.state === 'failed') throw new Error(status.message)
       if (status.state !== 'completed') throw new Error('同步任务没有返回完成状态。')
       const result: MarketSyncResult = status.result
-      setNotice(t('syncDone').replace('{count}', String(result.total)))
+      setNotice(t(result.unchanged === true ? 'syncUnchanged' : 'syncDone').replace('{count}', String(result.total)))
       setPage(1)
       retry()
     } catch (error) {
@@ -294,7 +392,16 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
           {state.catalog.total === 0 && query.trim().length > 0 ? <p className={css.status}>{t('noMatch')}</p> : null}
           <ul className={css.grid}>
             {plugins.map(plugin => {
-              const busy = pending === plugin.packageName
+              const busy = pending?.fullName === plugin.fullName
+              const plan = plans[plugin.fullName]
+              const checking = planning === plugin.fullName
+              const actionLabel = plugin.installed
+                ? t(plugin.removable ? 'uninstall' : 'installed')
+                : plan === undefined
+                  ? t('checkInstall')
+                  : plan.kind === 'manual'
+                    ? t('viewInstructions')
+                    : installPlanAction(plan, t)
               return (
                 <li className={css.card} key={plugin.fullName}>
                   <div className={css.identity}>
@@ -308,16 +415,40 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
                   <div className={css.topics}>
                     {plugin.topics.slice(0, 4).map(topic => <span key={topic}>{topic}</span>)}
                   </div>
+                  {plugin.installed && !plugin.removable ? (
+                    <p className={css.installPlan} data-kind="managed">
+                      {t('managedExternally')}
+                    </p>
+                  ) : plan === undefined ? null : (
+                    <p className={css.installPlan} data-kind={plan.kind}>
+                      {installPlanMessage(plan, t)}
+                    </p>
+                  )}
                   <footer>
                     <span aria-label={`${plugin.stars} ${t('stars')}`}>★ {plugin.stars}</span>
-                    <button
-                      type="button"
-                      data-installed={plugin.installed ? 'true' : undefined}
-                      disabled={pending !== null}
-                      onClick={() => { void mutate(plugin) }}
-                    >
-                      {busy ? t(plugin.installed ? 'uninstalling' : 'installing') : t(plugin.installed ? 'uninstall' : 'install')}
-                    </button>
+                    {!plugin.installed && plan?.kind === 'manual' ? (
+                      <a className={css.manualAction} href={plan.documentationUrl} target="_blank" rel="noreferrer">
+                        {t('viewInstructions')}
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        data-installed={plugin.installed ? 'true' : undefined}
+                        data-readonly={plugin.installed && !plugin.removable ? 'true' : undefined}
+                        data-source={plan?.kind}
+                        disabled={(plugin.installed && !plugin.removable)
+                          || (pending !== null && !busy)
+                          || (planning !== null && !checking)
+                          || checking}
+                        onClick={() => { void (busy ? cancelMutation() : mutate(plugin)) }}
+                      >
+                        {busy
+                          ? t('cancelOperation')
+                          : checking
+                            ? t('checkingInstall')
+                            : actionLabel}
+                      </button>
+                    )}
                   </footer>
                 </li>
               )

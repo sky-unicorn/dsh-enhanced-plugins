@@ -10,38 +10,43 @@ import { apply, type Config, type MarketSyncStatus } from '../../src/plugin-mark
 const config: Config = {
   profile: 'web',
   topic: 'dsh-plugin',
+  channelUrl: 'https://market.example.test/plugins-cache.json',
   pageSize: 12,
   operationTimeoutMs: 120000,
   githubTokenEnv: 'GITHUB_TOKEN',
   cliPath: '',
 }
 
-function repository(fullName: string) {
-  const [owner, name] = fullName.split('/') as [string, string]
+function channel() {
   return {
-    name,
-    full_name: fullName,
-    description: `${name} description`,
-    html_url: `https://github.com/${fullName}`,
-    stargazers_count: name === 'real-plugin' ? 10 : 100,
-    updated_at: '2026-08-18T00:00:00Z',
-    topics: ['dsh-plugin'],
-    default_branch: 'main',
-    owner: { avatar_url: `https://github.com/${owner}.png` },
+    schemaVersion: 2,
+    validation: 'root-dsh-bundle-v1',
+    topic: 'dsh-plugin',
+    syncedAt: '2026-08-25T00:00:00.000Z',
+    repositories: [{
+      name: 'real-plugin',
+      full_name: 'example/real-plugin',
+      description: 'real-plugin description',
+      html_url: 'https://github.com/example/real-plugin',
+      stargazers_count: 10,
+      updated_at: '2026-08-18T00:00:00Z',
+      topics: ['dsh-plugin'],
+      default_branch: 'main',
+      owner: { avatar_url: 'https://github.com/example.png' },
+      market: {
+        packageName: '@example/real-plugin',
+        bundlePatch: './cordis.patch.yml',
+        installCommands: [],
+      },
+    }],
   }
-}
-
-function response(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: { 'content-type': 'application/json', 'x-ratelimit-remaining': '4999' },
-  })
 }
 
 function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   let handler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined
   const ctx = {
     credentials: { resolve: vi.fn(async () => undefined) },
+    subprocess: {},
     webServer: {
       register: vi.fn((entry: { handler: typeof handler }) => {
         handler = entry.handler
@@ -77,7 +82,17 @@ async function request(
   return { status, value: JSON.parse(raw) as unknown }
 }
 
-describe('verified channel synchronization', () => {
+async function waitForSync(handler: ReturnType<typeof createHandler>): Promise<MarketSyncStatus> {
+  let sync: MarketSyncStatus = { state: 'idle' }
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    sync = (await request(handler, 'GET', 'sync')).value as MarketSyncStatus
+    if (sync.state === 'completed' || sync.state === 'failed') return sync
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  return sync
+}
+
+describe('mirrored channel synchronization', () => {
   const originalDshHome = process.env.DSH_HOME
   let testHome: string
 
@@ -93,48 +108,40 @@ describe('verified channel synchronization', () => {
     await rm(testHome, { recursive: true, force: true })
   })
 
-  it('writes only repositories whose root manifest declares dsh.bundle.patch', async () => {
-    const real = repository('example/real-plugin')
-    const topicOnly = repository('example/topic-only')
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
-      const url = String(input)
-      if (url.startsWith('https://api.github.com/search/repositories?')) {
-        return response({ total_count: 2, incomplete_results: false, items: [topicOnly, real] })
-      }
-      if (url === 'https://raw.githubusercontent.com/example/real-plugin/main/package.json') {
-        return response({ name: '@example/real-plugin', dsh: { bundle: { patch: './cordis.patch.yml' } } })
-      }
-      if (url === 'https://raw.githubusercontent.com/example/topic-only/main/package.json') {
-        return response({ name: 'topic-only', keywords: ['dsh-plugin'] })
-      }
-      throw new Error(`unexpected fetch ${url}`)
-    }))
+  it('downloads one validated snapshot and persists its ETag', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(channel()), {
+      status: 200,
+      headers: { 'content-type': 'application/json', etag: '"channel-v1"' },
+    })))
     const handler = createHandler()
 
     expect(await request(handler, 'POST', 'sync')).toMatchObject({ status: 202 })
-    let sync: MarketSyncStatus = { state: 'idle' }
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      sync = (await request(handler, 'GET', 'sync')).value as MarketSyncStatus
-      if (sync.state === 'completed' || sync.state === 'failed') break
-      await new Promise(resolve => setTimeout(resolve, 0))
-    }
-
-    expect(sync).toMatchObject({ state: 'completed', result: { total: 1 } })
-    const raw = await readFile(join(testHome, 'plugins', 'dsh-market', 'plugins-cache.json'), 'utf8')
-    expect(JSON.parse(raw)).toMatchObject({
-      schemaVersion: 2,
-      validation: 'root-dsh-bundle-v1',
-      repositories: [{
-        full_name: 'example/real-plugin',
-        market: {
-          packageName: '@example/real-plugin',
-          bundlePatch: './cordis.patch.yml',
-        },
-      }],
-    })
+    expect(await waitForSync(handler)).toMatchObject({ state: 'completed', result: { total: 1 } })
+    expect(JSON.parse(await readFile(join(testHome, 'plugins', 'dsh-market', 'plugins-cache.json'), 'utf8')))
+      .toMatchObject({ repositories: [{ full_name: 'example/real-plugin' }] })
+    expect(JSON.parse(await readFile(join(testHome, 'plugins', 'dsh-market', 'channel-metadata.json'), 'utf8')))
+      .toMatchObject({ url: config.channelUrl, etag: '"channel-v1"' })
     expect(await request(handler, 'GET', 'catalog')).toMatchObject({
       status: 200,
-      value: { total: 1, plugins: [{ fullName: 'example/real-plugin' }] },
+      value: {
+        total: 2,
+        plugins: [
+          { fullName: 'example/real-plugin' },
+          { fullName: 'sky-unicorn/dsh-enhanced-plugins' },
+        ],
+      },
     })
+  })
+
+  it('retries a transient 504 and keeps the last-good snapshot until validation succeeds', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('', { status: 504 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(channel()), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const handler = createHandler()
+
+    expect(await request(handler, 'POST', 'sync')).toMatchObject({ status: 202 })
+    expect(await waitForSync(handler)).toMatchObject({ state: 'completed', result: { total: 1 } })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

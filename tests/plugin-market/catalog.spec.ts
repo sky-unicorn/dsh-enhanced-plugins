@@ -9,6 +9,7 @@ import { apply, type Config } from '../../src/plugin-market/index.ts'
 const config: Config = {
   profile: 'web',
   topic: 'dsh-plugin',
+  channelUrl: 'https://market.example.test/plugins-cache.json',
   pageSize: 12,
   operationTimeoutMs: 120000,
   githubTokenEnv: 'GITHUB_TOKEN',
@@ -68,6 +69,20 @@ describe('catalog filtering', () => {
     }))
   }
 
+  it('keeps the marketplace repository searchable when the mirrored snapshot predates it', async () => {
+    expect(await get(createHandler(), '/api/plugin-market/catalog?query=dsh-enhanced-plugins')).toMatchObject({
+      status: 200,
+      value: {
+        total: 1,
+        plugins: [{
+          fullName: 'sky-unicorn/dsh-enhanced-plugins',
+          packageName: 'dsh-enhanced-plugins',
+          url: 'https://github.com/sky-unicorn/dsh-enhanced-plugins',
+        }],
+      },
+    })
+  })
+
   it('filters marketplace-installed entries before pagination', async () => {
     const packageName = 'dsh-deepresearch'
     const packageRoot = join(testHome, 'profiles', 'web', 'node_modules', packageName)
@@ -88,13 +103,13 @@ describe('catalog filtering', () => {
       value: {
         total: 1,
         totalPages: 1,
-        plugins: [{ packageName, installed: true }],
+        plugins: [{ packageName, installed: true, removable: true }],
       },
     })
   })
 
-  it('does not include a profile dependency that was installed outside the marketplace', async () => {
-    const packageName = 'dsh-deepresearch'
+  it('shows the externally managed marketplace bundle as installed but not removable', async () => {
+    const packageName = 'dsh-enhanced-plugins'
     const packageRoot = join(testHome, 'profiles', 'web', 'node_modules', packageName)
     await mkdir(packageRoot, { recursive: true })
     await writeFile(join(testHome, 'profiles', 'web', 'package.json'), JSON.stringify({
@@ -102,12 +117,20 @@ describe('catalog filtering', () => {
     }))
     await writeFile(join(packageRoot, 'package.json'), JSON.stringify({
       name: packageName,
-      repository: 'https://github.com/havingautism/dsh-deepresearch.git',
+      repository: 'https://github.com/sky-unicorn/dsh-enhanced-plugins.git',
     }))
 
     expect(await get(createHandler(), '/api/plugin-market/catalog?filter=installed')).toMatchObject({
       status: 200,
-      value: { total: 0, plugins: [] },
+      value: {
+        total: 1,
+        plugins: [{
+          fullName: 'sky-unicorn/dsh-enhanced-plugins',
+          packageName,
+          installed: true,
+          removable: false,
+        }],
+      },
     })
   })
 
@@ -125,7 +148,12 @@ describe('catalog filtering', () => {
       status: 200,
       value: {
         total: 1,
-        plugins: [{ fullName: 'TheYoungChen/dsh-plugin-market', packageName, installed: true }],
+        plugins: [{
+          fullName: 'TheYoungChen/dsh-plugin-market',
+          packageName,
+          installed: true,
+          removable: false,
+        }],
       },
     })
   })

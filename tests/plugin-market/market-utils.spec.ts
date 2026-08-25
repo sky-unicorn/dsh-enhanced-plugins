@@ -3,6 +3,7 @@ import {
   compareByStars,
   dshBundleEvidence,
   findInstalledPackageName,
+  hasInstallLifecycleScripts,
   isPackageName,
   npmPackageCandidates,
   npmRepositoryMatches,
@@ -17,6 +18,14 @@ describe('market catalog helpers', () => {
     expect(dshBundleEvidence({ name: 'topic-only', keywords: ['dsh-plugin'] })).toBeUndefined()
     expect(dshBundleEvidence({ name: 'missing-patch', dsh: { bundle: {} } })).toBeUndefined()
     expect(dshBundleEvidence({ name: 'empty-patch', dsh: { bundle: { patch: '  ' } } })).toBeUndefined()
+    expect(dshBundleEvidence({ name: 'escaping-patch', dsh: { bundle: { patch: '../outside.yml' } } })).toBeUndefined()
+    expect(dshBundleEvidence({ name: 'absolute-patch', dsh: { bundle: { patch: 'C:\\outside.yml' } } })).toBeUndefined()
+  })
+
+  it('detects package lifecycle scripts that require an explicit build decision', () => {
+    expect(hasInstallLifecycleScripts({ scripts: { prepare: 'npm run build' } }, 'github')).toBe(true)
+    expect(hasInstallLifecycleScripts({ scripts: { prepare: 'npm run build' } }, 'npm')).toBe(false)
+    expect(hasInstallLifecycleScripts({ scripts: { postinstall: 'node setup.js' } }, 'npm')).toBe(true)
   })
 
   it('orders higher star counts before lower ones with deterministic ties', () => {

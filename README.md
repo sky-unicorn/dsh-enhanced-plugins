@@ -121,12 +121,15 @@ Install name: `plugin-market` · Location: **Settings → Plugin Community**
 
 ![Plugin Community page](assets/readme/plugin-community.png)
 
-1. The first visit uses the bundled plugin snapshot; choose Sync sources when you need current community data.
-2. Search by repository, package, description, or topic, and open the GitHub repository to verify its source before installing.
-3. Use the Installed tab to inspect or remove items installed by Plugin Community.
-4. Restart the current Web profile when prompted after an install or removal.
+1. The first visit uses the bundled plugin snapshot; **Sync channel** downloads the maintained, schema-validated mirror with ETag caching. Transient 429/502/503/504 failures are retried and never replace the last-good snapshot.
+2. Search by repository, package, description, or topic. **Check install method** performs a live preflight: only a repository-matched npm bundle without install lifecycle scripts receives **One-click install**.
+3. A root DSH bundle without build scripts can be installed only after **Confirm source install**, pinned to the inspected commit. Plugins requiring build approval, a monorepo subdirectory, custom dependencies, or another unverifiable path show **View install instructions** instead.
+4. Install and removal run as cancellable background jobs, so the HTTP request does not remain open behind a proxy. A completed install is checked against the target profile, bundle patch, and profile composition; a failed validation is rolled back.
+5. The Installed tab shows every installed target-profile dependency that can be correlated with the channel. Only items installed and recorded by Plugin Community can be removed here; profile- or externally-managed items remain read-only. Restart the current Web profile when prompted after a mutation.
 
-The bundled snapshot works without a GitHub token. If synchronization hits GitHub API rate limits, save a read-only, short-lived fine-grained token under Configure. The token is sent only to the local DSH Host and stored by the credentials service.
+The marketplace's own `sky-unicorn/dsh-enhanced-plugins` repository is a built-in verified channel contribution. It stays searchable even when the remote mirror predates the repository, and is de-duplicated once the mirror includes it.
+
+The bundled and mirrored snapshots work without a GitHub token. Live install preflight reads repository and commit metadata from GitHub; if that API is rate-limited, save a read-only, short-lived fine-grained token under Configure. The token is sent only to the local DSH Host and stored by the credentials service.
 
 ### MCP server manager
 
@@ -202,13 +205,14 @@ The six `*CustomSoundFile` / `*CustomSoundName` fields are Host-owned references
 | Field | Default | Purpose |
 | --- | --- | --- |
 | `profile` | `web` | Target profile for installs and removals |
-| `topic` | `dsh-plugin` | GitHub discovery topic |
+| `topic` | `dsh-plugin` | Required topic identity in the validated channel document |
+| `channelUrl` | project-maintained HTTPS snapshot | Curated channel mirror used by Sync channel |
 | `pageSize` | `12` | Plugins per catalog page |
 | `operationTimeoutMs` | `120000` | Install and removal timeout |
 | `githubTokenEnv` | `GITHUB_TOKEN` | Credentials reference name |
 | `cliPath` | empty | Optional absolute DSH executable path |
 
-The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is read-only. Synchronized cache data and installation records are stored in the marketplace data directory below DSH home.
+The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is read-only. Synchronized cache data, its ETag, background task state, and installation records are owned by the Host; durable cache and records are stored in the marketplace data directory below DSH home. The marketplace never parses README shell commands or enables `dangerouslyAllowAllBuilds`.
 
 </details>
 

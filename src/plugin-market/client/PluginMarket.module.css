@@ -169,7 +169,8 @@
 }
 
 .failure button,
-.card button {
+.card button,
+.manualAction {
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 7px;
   background: var(--dsw-alias-bg-layer-1);
@@ -297,6 +298,21 @@
   line-height: 15px;
 }
 
+.installPlan {
+  margin: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.installPlan[data-kind='npm'] {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
 .card footer {
   display: flex;
   align-items: center;
@@ -309,6 +325,15 @@
 .card button {
   min-width: 68px;
   padding: 5px 10px;
+}
+
+.manualAction {
+  padding: 5px 10px;
+  text-decoration: none;
+}
+
+.manualAction:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .card button:not([data-installed='true']) {
@@ -330,7 +355,13 @@
   opacity: .55;
 }
 
+.card button[data-readonly='true']:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .card button:focus-visible,
+.manualAction:focus-visible,
 .failure button:focus-visible,
 .configure:focus-visible,
 .dialog button:focus-visible,

@@ -121,12 +121,15 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部服务时
 
 ![插件社区页面](assets/readme/plugin-community.png)
 
-1. 首次打开使用内置插件快照；需要最新社区数据时点击“同步渠道”。
-2. 按仓库名、包名、描述或 topic 搜索，安装前可打开 GitHub 仓库核对来源。
-3. 在“已安装”标签页查看或卸载由插件社区安装的项目。
-4. 安装或卸载后，按页面提示重启当前 Web profile。
+1. 首次打开使用内置插件快照；点击“同步渠道”会下载维护方提供并经过 schema 校验的镜像快照，同时使用 ETag 缓存。短暂的 429/502/503/504 会自动重试，失败时不会覆盖上次可用快照。
+2. 按仓库名、包名、描述或 topic 搜索。点击“检查安装方式”会实时预检；只有仓库身份匹配、且不包含安装生命周期脚本的 npm bundle 才显示“一键安装”。
+3. 仓库根目录是 DSH bundle 且无需构建脚本时，只能通过“确认并安装源码”安装，并固定到预检过的 commit。需要 build approval、monorepo 子目录、自定义依赖或其他无法验证路径的插件只显示“查看安装说明”。
+4. 安装与卸载以可取消的后台任务运行，HTTP 请求不会长时间挂在代理后面。安装完成后会检查目标 profile、bundle patch 和 profile 组合；验证失败会自动回滚。
+5. “已安装”标签页展示目标 profile 中所有能与渠道关联的已安装插件；只有由插件社区安装并记录的项目可以在此卸载。通过 profile 配置或外部安装脚本管理的项目只显示“已安装”，操作完成后按提示重启当前 Web profile。
 
-未配置 GitHub Token 也能使用内置快照。若同步触发 GitHub API 限流，可在“配置”中保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并由 credentials 服务保存。
+插件市场自身的 `sky-unicorn/dsh-enhanced-plugins` 是内置的已验证渠道贡献；即使远程镜像生成时间早于本仓库，它仍会出现在搜索结果中，远程镜像后续收录时也不会重复。
+
+内置快照与镜像同步都不需要 GitHub Token。安装预检需要读取 GitHub 仓库和 commit 元数据；若该 API 触发限流，可在“配置”中保存只读、短有效期的 Fine-grained Token。Token 只发送到本机 DSH Host，并由 credentials 服务保存。
 
 ### MCP 服务器管理
 
@@ -202,13 +205,14 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部服务时
 | 字段 | 默认值 | 作用 |
 | --- | --- | --- |
 | `profile` | `web` | 安装和卸载的目标 profile |
-| `topic` | `dsh-plugin` | GitHub 发现 topic |
+| `topic` | `dsh-plugin` | 已校验渠道文档必须匹配的 topic 标识 |
+| `channelUrl` | 项目维护的 HTTPS 快照 | “同步渠道”使用的精选镜像地址 |
 | `pageSize` | `12` | 每页插件数 |
 | `operationTimeoutMs` | `120000` | 安装和卸载超时 |
 | `githubTokenEnv` | `GITHUB_TOKEN` | credentials 引用名 |
 | `cliPath` | 空 | 可选 DSH 可执行文件绝对路径 |
 
-内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读快照；同步缓存和安装记录保存在 DSH home 的插件市场数据目录。
+内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读快照。同步缓存、ETag、后台任务状态和安装记录由 Host 管理；需要持久化的缓存与记录保存在 DSH home 的插件市场数据目录。插件市场不会解析 README 中的 shell 命令，也不会启用 `dangerouslyAllowAllBuilds`。
 
 </details>
 

@@ -41,6 +41,14 @@ export interface DshBundleEvidence {
   readonly bundlePatch: string
 }
 
+function safeBundlePatch(value: string): boolean {
+  const normalized = value.trim().replaceAll('\\', '/')
+  return normalized.length > 0
+    && !normalized.startsWith('/')
+    && !/^[A-Za-z]:/.test(normalized)
+    && !normalized.split('/').includes('..')
+}
+
 /**
  * Read the installable DSH bundle identity from an untrusted package manifest.
  * A topic, repository name, or keyword is not plugin evidence: the DSH launcher
@@ -54,8 +62,19 @@ export function dshBundleEvidence(value: unknown): DshBundleEvidence | undefined
   const bundle = (manifest.dsh as { readonly bundle?: unknown }).bundle
   if (bundle === null || typeof bundle !== 'object' || Array.isArray(bundle)) return undefined
   const patch = (bundle as { readonly patch?: unknown }).patch
-  if (typeof patch !== 'string' || patch.trim().length === 0) return undefined
-  return { packageName: manifest.name, bundlePatch: patch }
+  if (typeof patch !== 'string' || !safeBundlePatch(patch)) return undefined
+  return { packageName: manifest.name, bundlePatch: patch.trim() }
+}
+
+/** Whether installation would execute package-owned lifecycle code. */
+export function hasInstallLifecycleScripts(value: unknown, source: 'npm' | 'github'): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const scripts = (value as { readonly scripts?: unknown }).scripts
+  if (scripts === null || typeof scripts !== 'object' || Array.isArray(scripts)) return false
+  const keys = source === 'github'
+    ? ['preinstall', 'install', 'postinstall', 'prepare']
+    : ['preinstall', 'install', 'postinstall']
+  return keys.some(key => typeof (scripts as Record<string, unknown>)[key] === 'string')
 }
 
 function packageNameFromRegistrySpec(spec: string): string | undefined {

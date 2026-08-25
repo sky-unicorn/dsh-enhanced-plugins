@@ -1,30 +1,14 @@
-import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import type { Context } from '@deepseek-ai/cordis'
+import type { MarketInstallPlan, MarketInstallPlanJob, MarketMutationJob } from '../../src/plugin-market/contracts.ts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { apply } from '../../src/plugin-market/index.ts'
 
-const spawnMock = vi.fn((_command: string, _args: readonly string[]) => {
-  const child = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter
-    stderr: EventEmitter
-    kill: ReturnType<typeof vi.fn>
-  }
-  child.stdout = new EventEmitter()
-  child.stderr = new EventEmitter()
-  child.kill = vi.fn()
-  queueMicrotask(() => { child.emit('close', 0) })
-  return child
-})
-
-vi.mock('node:child_process', () => ({ spawn: spawnMock }))
-
-const { apply } = await import('../../src/plugin-market/index.ts')
-
-const fullName = 'bowenliang123/dsh-context'
+const fullName = 'example/dsh-context'
 const sha = '0123456789abcdef0123456789abcdef01234567'
 
 function githubRepository() {
@@ -37,7 +21,12 @@ function githubRepository() {
     updated_at: '2026-08-15T17:34:05Z',
     topics: ['dsh-plugin'],
     default_branch: 'main',
-    owner: { avatar_url: 'https://github.com/bowenliang123.png' },
+    owner: { avatar_url: 'https://github.com/example.png' },
+    market: {
+      packageName: 'dsh-context',
+      bundlePatch: './cordis.patch.yml',
+      installCommands: [],
+    },
   }
 }
 
@@ -48,7 +37,7 @@ function response(value: unknown, status = 200): Response {
   })
 }
 
-function fetchFor(options: { npm?: unknown; rootBundle: boolean }) {
+function fetchFor(options: { npm?: unknown; rootBundle: boolean; rootScripts?: unknown }) {
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input)
     if (url === `https://api.github.com/repos/${fullName}`) return response(githubRepository())
@@ -59,6 +48,7 @@ function fetchFor(options: { npm?: unknown; rootBundle: boolean }) {
         version: '1.0.0',
         repository: `https://github.com/${fullName}.git`,
         ...(options.rootBundle ? { dsh: { bundle: { patch: './cordis.patch.yml' } } } : {}),
+        ...(options.rootScripts === undefined ? {} : { scripts: options.rootScripts }),
       })
     }
     if (url === 'https://registry.npmjs.org/dsh-context/latest') {
@@ -68,10 +58,104 @@ function fetchFor(options: { npm?: unknown; rootBundle: boolean }) {
   })
 }
 
-function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+async function writeChannel(testHome: string): Promise<void> {
+  const directory = join(testHome, 'plugins', 'dsh-market')
+  await mkdir(directory, { recursive: true })
+  await writeFile(join(directory, 'plugins-cache.json'), JSON.stringify({
+    schemaVersion: 2,
+    validation: 'root-dsh-bundle-v1',
+    topic: 'dsh-plugin',
+    syncedAt: '2026-08-18T00:00:00.000Z',
+    repositories: [githubRepository()],
+  }))
+}
+
+function createSubprocess(
+  testHome: string,
+  options: { readonly invalidInstall?: boolean; readonly hangUntilAbort?: boolean } = {},
+) {
+  return {
+    spawn: vi.fn((spec: { readonly argv: readonly string[]; readonly signal?: AbortSignal }) => {
+      if (options.hangUntilAbort === true) {
+        const done = new Promise<{ exitCode: null; signal: 'SIGTERM' }>((resolve) => {
+          const finish = (): void => { resolve({ exitCode: null, signal: 'SIGTERM' }) }
+          if (spec.signal?.aborted === true) finish()
+          else spec.signal?.addEventListener('abort', finish, { once: true })
+        })
+        return {
+          pid: 1,
+          stdin: undefined,
+          stdout: undefined,
+          stderr: undefined,
+          collected: {
+            stdout: { readFrom: () => ({ text: '', nextOffset: 0, lossy: false }) },
+            stderr: { readFrom: () => ({ text: '', nextOffset: 0, lossy: false }) },
+          },
+          done,
+          terminate: vi.fn(),
+          waitForExit: vi.fn(async () => true),
+        }
+      }
+      const done = (async () => {
+        if (spec.signal?.aborted === true) return { exitCode: null, signal: 'SIGTERM' as const }
+        const addIndex = spec.argv.indexOf('add')
+        const removeIndex = spec.argv.indexOf('remove')
+        const profileDirectory = join(testHome, 'profiles', 'web')
+        if (addIndex >= 0) {
+          const installSpec = spec.argv[addIndex + 1] ?? ''
+          const version = installSpec.startsWith('github:') ? installSpec : '2.3.4'
+          const packageRoot = join(profileDirectory, 'node_modules', 'dsh-context')
+          await mkdir(packageRoot, { recursive: true })
+          await writeFile(join(packageRoot, 'package.json'), JSON.stringify({
+            name: 'dsh-context',
+            dsh: { bundle: { patch: './cordis.patch.yml' } },
+          }))
+          if (options.invalidInstall !== true) await writeFile(join(packageRoot, 'cordis.patch.yml'), '- insert: []\n')
+          await writeFile(join(profileDirectory, 'package.json'), JSON.stringify({
+            dependencies: { 'dsh-context': version },
+            dsh: { profile: { bundles: ['dsh-context'] } },
+          }))
+        } else if (removeIndex >= 0) {
+          await rm(join(profileDirectory, 'node_modules', 'dsh-context'), { recursive: true, force: true })
+          await writeFile(join(profileDirectory, 'package.json'), JSON.stringify({
+            dependencies: {},
+            dsh: { profile: { bundles: [] } },
+          }))
+        }
+        return { exitCode: 0, signal: null }
+      })()
+      return {
+        pid: 1,
+        stdin: undefined,
+        stdout: undefined,
+        stderr: undefined,
+        collected: {
+          stdout: { readFrom: () => ({ text: '', nextOffset: 0, lossy: false }) },
+          stderr: { readFrom: () => ({ text: '', nextOffset: 0, lossy: false }) },
+        },
+        done,
+        terminate: vi.fn(),
+        waitForExit: vi.fn(async () => true),
+      }
+    }),
+  }
+}
+
+function createHandler(
+  testHome: string,
+  options: { readonly invalidInstall?: boolean; readonly hangUntilAbort?: boolean } = {},
+): {
+  handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>
+  subprocess: ReturnType<typeof createSubprocess>
+} {
   let handler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined
+  const subprocess = createSubprocess(testHome, options)
   const ctx = {
-    credentials: { resolve: vi.fn(async () => undefined) },
+    credentials: {
+      resolve: vi.fn(async () => undefined),
+      describe: vi.fn(async () => ({ configured: false, writable: true })),
+    },
+    subprocess,
     webServer: {
       register: vi.fn((entry: { handler: typeof handler }) => {
         handler = entry.handler
@@ -83,43 +167,69 @@ function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise
   apply(ctx, {
     profile: 'web',
     topic: 'dsh-plugin',
+    channelUrl: 'https://market.example.test/plugins-cache.json',
     pageSize: 12,
     operationTimeoutMs: 120000,
     githubTokenEnv: 'GITHUB_TOKEN',
     cliPath: '',
   })
   if (handler === undefined) throw new Error('market route was not registered')
-  return handler
+  return { handler, subprocess }
 }
 
-async function post(path: string, value: unknown): Promise<{ status: number; value: unknown }> {
-  const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(value))]), {
-    method: 'POST',
-    url: `/api/plugin-market/${path}`,
-    headers: { 'content-type': 'application/json' },
-  }) as IncomingMessage
+async function request(
+  handler: ReturnType<typeof createHandler>['handler'],
+  method: 'GET' | 'POST' | 'DELETE',
+  path: string,
+  value?: unknown,
+): Promise<{ status: number; value: unknown }> {
+  const hasBody = value !== undefined
+  const req = hasBody
+    ? Object.assign(Readable.from([Buffer.from(JSON.stringify(value))]), {
+      method,
+      url: `/api/plugin-market/${path}`,
+      headers: { 'content-type': 'application/json' },
+    }) as IncomingMessage
+    : { method, url: `/api/plugin-market/${path}`, headers: {} } as IncomingMessage
   let status = 0
   let raw = ''
   const res = {
     writeHead(next: number) { status = next; return this },
-    end(value?: string) { raw = value ?? '' },
+    end(next?: string) { raw = next ?? '' },
   } as unknown as ServerResponse
-  await createHandler()(req, res)
+  await handler(req, res)
   return { status, value: JSON.parse(raw) as unknown }
 }
 
-async function install(): Promise<{ status: number; value: unknown }> {
-  return await post('install', { fullName })
+async function waitForJob(handler: ReturnType<typeof createHandler>['handler'], initial: MarketMutationJob): Promise<MarketMutationJob> {
+  let job = initial
+  for (let attempt = 0; attempt < 50 && job.state === 'running'; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    job = (await request(handler, 'GET', `jobs/${job.id}`)).value as MarketMutationJob
+  }
+  return job
 }
 
-describe('automatic install source selection', () => {
+async function installPlan(handler: ReturnType<typeof createHandler>['handler']): Promise<MarketInstallPlan> {
+  const started = await request(handler, 'POST', 'install-plan', { fullName })
+  expect(started.status).toBe(202)
+  let job = started.value as MarketInstallPlanJob
+  for (let attempt = 0; attempt < 50 && job.state === 'running'; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    job = (await request(handler, 'GET', `install-plans/${job.id}`)).value as MarketInstallPlanJob
+  }
+  if (job.state !== 'completed') throw new Error(job.state === 'failed' ? job.message : 'plan did not complete')
+  return job.plan
+}
+
+describe('capability-aware background installation', () => {
   const originalDshHome = process.env.DSH_HOME
   let testHome: string
 
   beforeEach(async () => {
-    spawnMock.mockClear()
     testHome = await mkdtemp(join(tmpdir(), 'dsh-plugin-market-install-'))
     process.env.DSH_HOME = testHome
+    await writeChannel(testHome)
   })
 
   afterEach(async () => {
@@ -134,7 +244,7 @@ describe('automatic install source selection', () => {
     return (JSON.parse(raw) as { readonly entries: readonly Record<string, unknown>[] }).entries
   }
 
-  it('prefers a verified npm bundle and pins its version', async () => {
+  it('offers and completes one-click install only for a verified npm bundle', async () => {
     vi.stubGlobal('fetch', fetchFor({
       rootBundle: true,
       npm: {
@@ -142,95 +252,124 @@ describe('automatic install source selection', () => {
         version: '2.3.4',
         repository: { type: 'git', url: `git+https://github.com/${fullName}.git` },
         dsh: { bundle: { patch: './cordis.patch.yml' } },
+        dist: { integrity: 'sha512-example' },
       },
     }))
-    expect(await install()).toMatchObject({ status: 200, value: { source: 'npm', packageName: 'dsh-context' } })
-    expect(spawnMock.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(['add', 'dsh-context@2.3.4']))
-    expect(await installEntries()).toEqual([expect.objectContaining({
-      profile: 'web',
-      fullName,
-      packageName: 'dsh-context',
-      source: 'npm',
-    })])
+    const { handler, subprocess } = createHandler(testHome)
+    const plan = await installPlan(handler)
+    expect(plan).toMatchObject({ kind: 'npm', packageName: 'dsh-context', version: '2.3.4', integrity: 'sha512-example' })
+
+    const started = await request(handler, 'POST', 'install', { fullName, planKind: 'npm', expectedRef: '2.3.4' })
+    expect(started).toMatchObject({ status: 202, value: { state: 'running', operation: 'install' } })
+    const completed = await waitForJob(handler, started.value as MarketMutationJob)
+    expect(completed).toMatchObject({ state: 'completed', result: { source: 'npm', packageName: 'dsh-context' } })
+    expect(subprocess.spawn.mock.calls[0]?.[0].argv).toEqual(expect.arrayContaining(['add', 'dsh-context@2.3.4']))
+    expect(await installEntries()).toEqual([expect.objectContaining({ fullName, source: 'npm' })])
   })
 
-  it('falls back to a pinned GitHub commit when npm has no matching bundle', async () => {
+  it('requires a second explicit action for a safe pinned-source plan', async () => {
     vi.stubGlobal('fetch', fetchFor({ rootBundle: true }))
-    expect(await install()).toMatchObject({ status: 200, value: { source: 'github', packageName: 'dsh-context' } })
-    expect(spawnMock.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(['add', `github:${fullName}#${sha}`]))
-    expect(await installEntries()).toEqual([expect.objectContaining({
-      profile: 'web',
+    const { handler } = createHandler(testHome)
+    const plan = await installPlan(handler)
+    expect(plan).toMatchObject({ kind: 'github', commit: sha, requiresConfirmation: true })
+
+    const started = await request(handler, 'POST', 'install', {
       fullName,
-      packageName: 'dsh-context',
-      source: 'github',
-    })])
-  })
-
-  it('refuses unrelated npm packages and non-root local-only bundles', async () => {
-    vi.stubGlobal('fetch', fetchFor({
-      rootBundle: false,
-      npm: {
-        name: 'dsh-context',
-        version: '2.3.4',
-        repository: 'https://github.com/other/project.git',
-        dsh: { bundle: { patch: './cordis.patch.yml' } },
-      },
-    }))
-    expect(await install()).toMatchObject({
-      status: 400,
-      value: { error: { code: 'NO_AUTOMATIC_INSTALL_SOURCE' } },
+      planKind: 'github',
+      expectedRef: sha,
+      confirmSource: true,
     })
-    expect(spawnMock).not.toHaveBeenCalled()
+    const completed = await waitForJob(handler, started.value as MarketMutationJob)
+    expect(completed).toMatchObject({ state: 'completed', result: { source: 'github' } })
   })
 
-  it('refuses npm packages whose dsh bundle has no patch declaration', async () => {
+  it('downgrades build-script and unverifiable repositories to manual instructions', async () => {
+    vi.stubGlobal('fetch', fetchFor({ rootBundle: true, rootScripts: { prepare: 'npm run build' } }))
+    let handler = createHandler(testHome).handler
+    expect(await installPlan(handler)).toMatchObject({ kind: 'manual', reason: 'requires-build-approval' })
+
+    vi.stubGlobal('fetch', fetchFor({ rootBundle: false }))
+    handler = createHandler(testHome).handler
+    expect(await installPlan(handler)).toMatchObject({ kind: 'manual', reason: 'no-automatic-source' })
+  })
+
+  it('runs uninstall as a background task and removes its market record after verification', async () => {
+    const profileDirectory = join(testHome, 'profiles', 'web')
+    const recordDirectory = join(testHome, 'plugins', 'dsh-market')
+    await mkdir(profileDirectory, { recursive: true })
+    await writeFile(join(profileDirectory, 'package.json'), JSON.stringify({
+      dependencies: { 'dsh-context': '2.3.4' },
+      dsh: { profile: { bundles: ['dsh-context'] } },
+    }))
+    await writeFile(join(recordDirectory, 'installed-plugins.json'), JSON.stringify({
+      schemaVersion: 1,
+      entries: [{ profile: 'web', fullName, packageName: 'dsh-context', source: 'npm', installedAt: '2026-08-18T00:00:00.000Z' }],
+    }))
+    const { handler } = createHandler(testHome)
+    const started = await request(handler, 'POST', 'uninstall', { packageName: 'dsh-context' })
+    expect(started.status).toBe(202)
+    expect(await waitForJob(handler, started.value as MarketMutationJob)).toMatchObject({ state: 'completed' })
+    expect(await installEntries()).toEqual([])
+  })
+
+  it('rolls back a package that fails post-install bundle validation', async () => {
     vi.stubGlobal('fetch', fetchFor({
-      rootBundle: false,
+      rootBundle: true,
       npm: {
         name: 'dsh-context',
         version: '2.3.4',
         repository: `https://github.com/${fullName}.git`,
-        dsh: { bundle: {} },
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+        dist: { integrity: 'sha512-example' },
       },
     }))
-    expect(await install()).toMatchObject({
-      status: 400,
-      value: { error: { code: 'NO_AUTOMATIC_INSTALL_SOURCE' } },
+    const { handler, subprocess } = createHandler(testHome, { invalidInstall: true })
+    const started = await request(handler, 'POST', 'install', {
+      fullName,
+      planKind: 'npm',
+      expectedRef: '2.3.4',
     })
-    expect(spawnMock).not.toHaveBeenCalled()
+    expect(await waitForJob(handler, started.value as MarketMutationJob)).toMatchObject({
+      state: 'failed',
+      message: expect.stringContaining('bundle patch'),
+    })
+    expect(subprocess.spawn).toHaveBeenCalledTimes(2)
+    const profile = JSON.parse(await readFile(join(testHome, 'profiles', 'web', 'package.json'), 'utf8')) as {
+      readonly dependencies: Record<string, string>
+    }
+    expect(profile.dependencies).toEqual({})
+    await expect(readFile(join(testHome, 'plugins', 'dsh-market', 'installed-plugins.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('removes the marketplace record after a successful uninstall', async () => {
-    const profileDirectory = join(testHome, 'profiles', 'web')
-    const recordDirectory = join(testHome, 'plugins', 'dsh-market')
-    await mkdir(profileDirectory, { recursive: true })
-    await mkdir(recordDirectory, { recursive: true })
-    await writeFile(join(profileDirectory, 'package.json'), JSON.stringify({
-      dependencies: { 'dsh-context': '2.3.4' },
+  it('cancels a running managed process through the background job endpoint', async () => {
+    vi.stubGlobal('fetch', fetchFor({
+      rootBundle: true,
+      npm: {
+        name: 'dsh-context',
+        version: '2.3.4',
+        repository: `https://github.com/${fullName}.git`,
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+        dist: { integrity: 'sha512-example' },
+      },
     }))
-    await writeFile(join(recordDirectory, 'installed-plugins.json'), JSON.stringify({
-      schemaVersion: 1,
-      entries: [{
-        profile: 'web',
-        fullName,
-        packageName: 'dsh-context',
-        source: 'npm',
-        installedAt: '2026-08-18T00:00:00.000Z',
-      }],
-    }))
-
-    expect(await post('uninstall', { packageName: 'dsh-context' })).toMatchObject({
-      status: 200,
-      value: { packageName: 'dsh-context' },
+    const { handler, subprocess } = createHandler(testHome, { hangUntilAbort: true })
+    const started = await request(handler, 'POST', 'install', {
+      fullName,
+      planKind: 'npm',
+      expectedRef: '2.3.4',
     })
-    expect(await installEntries()).toEqual([])
+    const running = started.value as MarketMutationJob
+    await vi.waitFor(() => { expect(subprocess.spawn).toHaveBeenCalledTimes(1) })
+    expect(await request(handler, 'DELETE', `jobs/${running.id}`)).toMatchObject({ status: 202 })
+    expect(await waitForJob(handler, running)).toMatchObject({ state: 'cancelled' })
   })
 
-  it('refuses to uninstall the merged bundle from its own marketplace', async () => {
-    expect(await post('uninstall', { packageName: 'dsh-enhanced-plugins' })).toMatchObject({
+  it('refuses to uninstall the marketplace itself', async () => {
+    const { handler, subprocess } = createHandler(testHome)
+    expect(await request(handler, 'POST', 'uninstall', { packageName: 'dsh-enhanced-plugins' })).toMatchObject({
       status: 400,
       value: { error: { code: 'INVALID_PACKAGE' } },
     })
-    expect(spawnMock).not.toHaveBeenCalled()
+    expect(subprocess.spawn).not.toHaveBeenCalled()
   })
 })

@@ -6,6 +6,7 @@ describe('plugin market configuration', () => {
     expect(Config({} as PluginConfig)).toMatchObject({
       profile: 'web',
       topic: 'dsh-plugin',
+      channelUrl: 'https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/master/assets/plugins-cache.json',
       pageSize: 12,
       operationTimeoutMs: 120000,
     })
