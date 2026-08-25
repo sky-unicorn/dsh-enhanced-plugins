@@ -98,6 +98,25 @@ describe('plugin market indexer', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/example/unchanged/'))).toBe(false)
   })
 
+  it('skips a repository whose root package manifest is not valid JSON', async () => {
+    const malformed = repository('example/malformed', '2026-08-25T01:00:00Z')
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.startsWith('https://api.github.com/search/repositories?')) {
+        return Response.json({ total_count: 1, incomplete_results: false, items: [malformed] })
+      }
+      return new Response('{ invalid package json', { status: 200 })
+    })
+
+    const index = await buildPluginIndex({
+      fetchImpl: fetchMock,
+      searchIntervalMs: 0,
+      now: () => new Date('2026-08-25T02:00:00.000Z'),
+    })
+
+    expect(index.repositories).toEqual([])
+  })
+
   it('refuses an unexpected large shrink instead of replacing the last-good index', async () => {
     const kept = repository('example/kept', '2026-08-25T00:00:00Z')
     const previous = {

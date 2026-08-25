@@ -155,6 +155,7 @@ function createGitHubClient({ token, fetchImpl = fetch, searchIntervalMs = SEARC
       try {
         return JSON.parse(text)
       } catch {
+        if (options?.allowInvalidJson === true) return undefined
         throw new Error(`GitHub returned invalid JSON for ${url}`)
       }
     },
@@ -277,7 +278,10 @@ async function validateRepositories(client, repositories, previous, topic, repor
       }
       const manifestUrl = `https://raw.githubusercontent.com/${repository.full_name}`
         + `/${encodeURIComponent(repository.default_branch)}/package.json`
-      const manifest = await client.json(manifestUrl, { allowNotFound: true })
+      const manifest = await client.json(manifestUrl, {
+        allowNotFound: true,
+        allowInvalidJson: true,
+      })
       const evidence = dshBundleEvidence(manifest)
       if (evidence !== undefined) {
         verified.push({ ...repository, market: { ...evidence, installCommands: [] } })
