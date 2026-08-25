@@ -377,17 +377,27 @@ async function readJsonFile(filename) {
   }
 }
 
-async function readPrevious(options) {
+export async function readPrevious(options, {
+  fetchImpl = fetch,
+  readJsonFileImpl = readJsonFile,
+} = {}) {
   if (options.previousUrl.length > 0) {
     try {
-      const response = await fetch(options.previousUrl, { signal: AbortSignal.timeout(15_000) })
-      if (response.ok) return await response.json()
-      if (response.status !== 404) throw new Error(`previous index returned ${response.status}`)
+      const response = await fetchImpl(options.previousUrl, { signal: AbortSignal.timeout(15_000) })
+      if (response.ok) return { document: await response.json(), authoritative: true }
+      if (response.status === 404) {
+        process.stderr.write('Previous published index does not exist; using bundled seed for bootstrap\n')
+        return { document: await readJsonFileImpl(options.previous), authoritative: false }
+      }
+      throw new Error(`previous index returned ${response.status}`)
     } catch (error) {
-      process.stderr.write(`Previous published index unavailable; using bundled seed: ${error instanceof Error ? error.message : String(error)}\n`)
+      throw new Error(
+        `Previous published index unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      )
     }
   }
-  return await readJsonFile(options.previous)
+  return { document: await readJsonFileImpl(options.previous), authoritative: true }
 }
 
 async function writeJsonAtomic(filename, value) {
@@ -405,8 +415,8 @@ async function main() {
   const document = await buildPluginIndex({
     topic: options.topic,
     token: process.env.GITHUB_TOKEN?.trim() ?? '',
-    previous,
-    allowLargeShrink: options.allowLargeShrink,
+    previous: previous.document,
+    allowLargeShrink: options.allowLargeShrink || !previous.authoritative,
     report(event) {
       if (event.kind === 'search') discovered += event.found
       else {

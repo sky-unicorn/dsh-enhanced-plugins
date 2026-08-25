@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildPluginIndex, dshBundleEvidence } from '../../scripts/update-plugin-index.mjs'
+import { buildPluginIndex, dshBundleEvidence, readPrevious } from '../../scripts/update-plugin-index.mjs'
 
 const topic = 'dsh-plugin'
 
@@ -122,5 +122,42 @@ describe('plugin market indexer', () => {
       searchIntervalMs: 0,
       now: () => new Date('2026-08-25T02:00:00.000Z'),
     })).rejects.toThrow('Refusing to publish an index that shrank from 20 to 1')
+  })
+
+  it('treats the bundled seed as non-authoritative only while bootstrapping', async () => {
+    const seed = { schemaVersion: 2, repositories: [] }
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      const bootstrap = await readPrevious({
+        previousUrl: 'https://example.test/market-index.json',
+        previous: 'seed.json',
+      }, {
+        fetchImpl: vi.fn(async () => new Response('', { status: 404 })),
+        readJsonFileImpl: vi.fn(async () => seed),
+      })
+      expect(bootstrap).toEqual({ document: seed, authoritative: false })
+
+      const published = { schemaVersion: 2, repositories: [{ full_name: 'example/plugin' }] }
+      const update = await readPrevious({
+        previousUrl: 'https://example.test/market-index.json',
+        previous: 'seed.json',
+      }, {
+        fetchImpl: vi.fn(async () => Response.json(published)),
+        readJsonFileImpl: vi.fn(async () => seed),
+      })
+      expect(update).toEqual({ document: published, authoritative: true })
+    } finally {
+      stderr.mockRestore()
+    }
+  })
+
+  it('fails closed when an existing published index cannot be read', async () => {
+    await expect(readPrevious({
+      previousUrl: 'https://example.test/market-index.json',
+      previous: 'seed.json',
+    }, {
+      fetchImpl: vi.fn(async () => new Response('', { status: 503 })),
+      readJsonFileImpl: vi.fn(),
+    })).rejects.toThrow('Previous published index unavailable: previous index returned 503')
   })
 })
