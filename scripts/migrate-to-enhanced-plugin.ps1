@@ -468,6 +468,7 @@ function Set-WindowsLauncherDshCommand {
   }
 
   $launcherCommand = $Executable
+  $launcherSourceDirectory = ''
   if ($PrefixArguments.Count -gt 0 -or -not [string]::IsNullOrWhiteSpace($RunnerWorkingDirectory)) {
     if ($PrefixArguments.Count -ne 1 -or $PrefixArguments[0] -ne 'dsh' -or
       [string]::IsNullOrWhiteSpace($RunnerWorkingDirectory)) {
@@ -510,9 +511,11 @@ function Set-WindowsLauncherDshCommand {
       throw 'The generated Windows Launcher DSH checkout invoker failed validation.'
     }
     $launcherCommand = $managedInvoker
+    $launcherSourceDirectory = $checkout
   }
 
   $settings | Add-Member -NotePropertyName DshCommand -NotePropertyValue $launcherCommand -Force
+  $settings | Add-Member -NotePropertyName DshSourceDirectory -NotePropertyValue $launcherSourceDirectory -Force
   $settingsTemporary = $settingsPath + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
   [System.IO.File]::WriteAllText(
     $settingsTemporary,
@@ -521,6 +524,9 @@ function Set-WindowsLauncherDshCommand {
   )
   Move-Item -LiteralPath $settingsTemporary -Destination $settingsPath -Force
   Write-Host "Configured Windows Launcher to invoke DSH through '$launcherCommand'."
+  if (-not [string]::IsNullOrWhiteSpace($launcherSourceDirectory)) {
+    Write-Host "Configured Windows Launcher DSH source build root '$launcherSourceDirectory'."
+  }
 }
 
 function Install-WindowsLauncher {
@@ -695,8 +701,16 @@ function Install-WindowsLauncher {
     $existing = Get-ItemProperty -Path $runKey -Name $runName -ErrorAction SilentlyContinue
     if ($null -ne $existing) {
       $existingValue = [string] $existing.$runName
-      if ($existingValue.StartsWith('"' + $installRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
-        Set-ItemProperty -Path $runKey -Name $runName -Value ('"' + $executable + '" --tray')
+      $quotedOwnedPrefix = '"' + $installRoot + '\'
+      $plainOwnedPrefix = $installRoot + '\'
+      if ($existingValue.StartsWith($quotedOwnedPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $existingValue.StartsWith($plainOwnedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $startupArguments = if ($existingValue -match '(?i)(?:^|\s)--start-dsh(?:\s|$)') {
+          ' --tray --start-dsh'
+        } else {
+          ' --tray'
+        }
+        Set-ItemProperty -Path $runKey -Name $runName -Value ('"' + $executable + '"' + $startupArguments)
       } else {
         Write-Warning "Preserved an unowned '$runName' login-startup entry."
       }

@@ -87,11 +87,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 安装名称：`windows-launcher` · 位置：**开始菜单 → DeepSeek Harness Launcher**
 
-Launcher 是完全独立于 Cordis 的 Windows Companion。现代化控制面板包含 Web 状态卡、启动/打开/重启/停止快捷操作、端口与浏览器选项、Headless 单次任务、后台 Profile、合并日志和环境诊断。窗口最大化时，卡片会自动重排为宽屏分栏；EXE、窗口、托盘和侧栏统一使用 DeepSeek 官方鲸鱼标识。针对 Windows 10/11，程序使用逐显示器 DPI 感知、完全自绘控件、合并缩放布局和后台服务采样，保证缩放清晰并降低交互卡顿；窗口隐藏后停止前台轮询，同时继续驻留系统托盘。
+Launcher 是完全独立于 Cordis 的 Windows Companion。现代化控制面板包含 Web 状态卡、启动/打开/重启/停止快捷操作、端口与浏览器选项、Headless 单次任务、后台 Profile、合并日志、环境诊断和 DSH 源码构建。窗口最大化时，卡片会自动重排为宽屏分栏；EXE、窗口、托盘和侧栏统一使用 DeepSeek 官方鲸鱼标识。针对 Windows 10/11，程序使用逐显示器 DPI 感知、完全自绘控件、合并缩放布局和后台服务采样，保证缩放清晰并降低交互卡顿；窗口隐藏后停止前台轮询，同时继续驻留系统托盘。
 
-Launcher 只停止自己启动的 DSH 进程树。端口上出现外部服务时会显示“外部 Web 服务”，允许打开页面但拒绝接管、重启或终止。任务与 Profile 都通过无控制台窗口的子进程运行；任意任务内容通过 UTF-8 请求文件交给 PowerShell 命令引擎，Headless 结果和 Profile/Web 日志也统一按 UTF-8 传递与保存。运行时优先选择 npm 生成的 `dsh.ps1`，不把用户文本拼入 `cmd.exe`。登录自启默认关闭，可在概览页显式开启。
+Launcher 只停止自己启动的 DSH 进程树。端口上出现外部服务时会显示“外部 Web 服务”，允许打开页面但拒绝接管、重启或终止。任务与 Profile 都通过无控制台窗口的子进程运行；任意任务内容通过 UTF-8 请求文件交给 PowerShell 命令引擎，Headless 结果和 Profile/Web 日志也统一按 UTF-8 传递与保存。运行时优先选择 npm 生成的 `dsh.ps1`，不把用户文本拼入 `cmd.exe`。登录启动默认关闭；概览页提供两个互斥选项：登录后仅在托盘启动 Launcher，或者先启动 Launcher、等待 30 秒初始化后再在后台启动 DSH Web。两个模式也可以全部关闭。
 
-程序使用版本化目录部署，开始菜单和已有自启项在升级后指向新版本，因此不会依赖 profile 的 `node_modules`。安装器会保留用户显式配置的 DSH 命令；使用本地 DSH checkout 安装时，则生成并验证一个直接调用该 checkout CLI 的安全入口，因此无需额外全局安装 `dsh`，也不会改变任务的工作目录。运行状态、日志和设置统一保存在 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。
+程序使用版本化目录部署，开始菜单和已选择的登录启动模式在升级后都会指向新版本，因此不会依赖 profile 的 `node_modules`。安装器会保留用户显式配置的 DSH 命令；使用本地 DSH checkout 安装时，则生成并验证一个直接调用该 checkout CLI 的安全入口，同时记录该 checkout 作为唯一允许的源码构建根目录。在“日志与诊断”页点击“构建 DSH 源码”会从该目录后台无窗口执行 `pnpm run build`，完整 UTF-8 输出写入 `dsh-build.log`；使用全局 `dsh` 且没有本地 checkout 的安装不会启用此按钮。因此无需额外全局安装 `dsh`，也不会改变任务的工作目录。运行状态、日志和设置统一保存在 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。
 
 ### 桌面提示与宠物
 

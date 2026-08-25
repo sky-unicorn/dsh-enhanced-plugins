@@ -51,6 +51,8 @@ const temporary = await mkdtemp(resolve(tmpdir(), 'dsh-enhanced-launcher-'))
 const localAppData = resolve(temporary, 'LocalAppData')
 const profileHome = resolve(temporary, 'User')
 const fixture = resolve(temporary, 'dsh.ps1')
+const dshSource = resolve(temporary, 'deepseek-harness')
+const fakeBin = resolve(temporary, 'bin')
 const dataRoot = resolve(localAppData, 'DeepSeekHarness/Launcher')
 const settingsPath = resolve(dataRoot, 'settings.json')
 const port = await freePort()
@@ -60,17 +62,35 @@ const environment = {
   USERPROFILE: profileHome,
   DSH_CMD: fixture,
   DEEPSEEK_HARNESS_LAUNCHER_HOME: dataRoot,
+  PATH: `${fakeBin};${process.env.PATH ?? ''}`,
 }
 
 let started = false
 try {
   await mkdir(dataRoot, { recursive: true })
   await mkdir(profileHome, { recursive: true })
+  await mkdir(dshSource, { recursive: true })
+  await mkdir(fakeBin, { recursive: true })
   await copyFile(fixtureSource, fixture)
+  await writeFile(resolve(dshSource, 'package.json'), JSON.stringify({
+    name: '@deepseek-ai/dsh-root',
+    private: true,
+    scripts: { build: 'fixture-build' },
+  }), 'utf8')
+  await writeFile(resolve(fakeBin, 'pnpm.cmd'), [
+    '@echo off',
+    'if /I not "%~1"=="run" exit /b 41',
+    'if /I not "%~2"=="build" exit /b 42',
+    '> "%CD%\\build-marker.txt" echo BUILD_FIXTURE_OK',
+    'echo BUILD_FIXTURE_OK',
+    'exit /b 0',
+    '',
+  ].join('\r\n'), 'utf8')
   await writeFile(settingsPath, JSON.stringify({
     Port: port,
     NoOpen: true,
     DshCommand: fixture,
+    DshSourceDirectory: dshSource,
     WorkingDirectory: profileHome,
   }), 'utf8')
 
@@ -85,6 +105,17 @@ try {
   const doctorText = await readFile(doctorPath, 'utf8')
   if (doctor.status !== 0 || !doctorText.includes('dsh-launcher-fixture 中文结果 0.1.0')) {
     throw new Error(`launcher doctor failed: ${doctorText}\n${doctor.stderr}`)
+  }
+
+  const buildResultPath = resolve(temporary, 'build-result.json')
+  const build = run(executable, ['--automation', 'build', buildResultPath], { env: environment })
+  const buildResult = await readJson(buildResultPath)
+  const buildLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+  const buildMarker = await readFile(resolve(dshSource, 'build-marker.txt'), 'utf8')
+  if (build.status !== 0 || buildResult.success !== true
+      || !buildResult.output.includes('BUILD_FIXTURE_OK')
+      || !buildLog.includes('pnpm run build') || buildMarker.trim() !== 'BUILD_FIXTURE_OK') {
+    throw new Error(`launcher DSH source build failed: ${JSON.stringify(buildResult)}\n${build.stderr}`)
   }
 
   const headlessRequest = resolve(temporary, 'headless.json')

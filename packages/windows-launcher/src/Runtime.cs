@@ -16,6 +16,7 @@ namespace DshEnhanced.WindowsLauncher
         public int Port { get; set; }
         public bool NoOpen { get; set; }
         public string DshCommand { get; set; }
+        public string DshSourceDirectory { get; set; }
         public string WorkingDirectory { get; set; }
 
         internal static LauncherSettings Defaults()
@@ -25,6 +26,7 @@ namespace DshEnhanced.WindowsLauncher
                 Port = 3080,
                 NoOpen = false,
                 DshCommand = String.Empty,
+                DshSourceDirectory = String.Empty,
                 WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             };
         }
@@ -43,6 +45,7 @@ namespace DshEnhanced.WindowsLauncher
         public string stopPath { get; set; }
         public string task { get; set; }
         public string profile { get; set; }
+        public string sourceDirectory { get; set; }
     }
 
     internal sealed class LauncherState
@@ -65,6 +68,60 @@ namespace DshEnhanced.WindowsLauncher
         Starting,
         Owned,
         External
+    }
+
+    internal enum LoginStartupMode
+    {
+        Disabled,
+        LauncherOnly,
+        LauncherAndDsh
+    }
+
+    internal static class StartupRegistration
+    {
+        internal const string StartDshArgument = "--start-dsh";
+
+        internal static string BuildCommand(string executable, LoginStartupMode mode)
+        {
+            if (mode == LoginStartupMode.Disabled) return String.Empty;
+            string quotedExecutable = NativeArguments.Quote(executable);
+            if (!quotedExecutable.StartsWith("\"", StringComparison.Ordinal))
+                quotedExecutable = "\"" + quotedExecutable + "\"";
+            string command = quotedExecutable + " --tray";
+            if (mode == LoginStartupMode.LauncherAndDsh) command += " " + StartDshArgument;
+            return command;
+        }
+
+        internal static LoginStartupMode ParseMode(string command)
+        {
+            if (String.IsNullOrWhiteSpace(command)) return LoginStartupMode.Disabled;
+            return System.Text.RegularExpressions.Regex.IsMatch(command,
+                @"(?:^|\s)--start-dsh(?:\s|$)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                ? LoginStartupMode.LauncherAndDsh
+                : LoginStartupMode.LauncherOnly;
+        }
+
+        internal static bool HasArgument(string[] args, string expected)
+        {
+            foreach (string argument in args)
+            {
+                if (String.Equals(argument, expected, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        internal static bool SelfTest()
+        {
+            const string executable = @"C:\Program Files\DeepSeek Harness\DSH-Launcher.exe";
+            string launcher = BuildCommand(executable, LoginStartupMode.LauncherOnly);
+            string dsh = BuildCommand(executable, LoginStartupMode.LauncherAndDsh);
+            return launcher == @"""C:\Program Files\DeepSeek Harness\DSH-Launcher.exe"" --tray"
+                && dsh == @"""C:\Program Files\DeepSeek Harness\DSH-Launcher.exe"" --tray --start-dsh"
+                && ParseMode(launcher) == LoginStartupMode.LauncherOnly
+                && ParseMode(dsh) == LoginStartupMode.LauncherAndDsh
+                && ParseMode(null) == LoginStartupMode.Disabled;
+        }
     }
 
     internal sealed class WebStatusSnapshot
@@ -108,6 +165,7 @@ namespace DshEnhanced.WindowsLauncher
         internal static readonly string State = Path.Combine(Run, "web-state.json");
         internal static readonly string Stop = Path.Combine(Run, "web-stop.txt");
         internal static readonly string ServerLog = Path.Combine(Logs, "dsh-web.log");
+        internal static readonly string BuildLog = Path.Combine(Logs, "dsh-build.log");
         internal static readonly string LauncherLog = Path.Combine(Logs, "launcher.log");
 
         internal static string ProfileLog(string profile)
@@ -172,6 +230,7 @@ namespace DshEnhanced.WindowsLauncher
                 settings.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
             if (settings.DshCommand == null) settings.DshCommand = String.Empty;
+            if (settings.DshSourceDirectory == null) settings.DshSourceDirectory = String.Empty;
             return settings;
         }
 
@@ -314,6 +373,34 @@ namespace DshEnhanced.WindowsLauncher
         internal string ResolveDsh()
         {
             return DshLocator.Resolve(settings.DshCommand);
+        }
+
+        internal string ResolveDshSource()
+        {
+            if (String.IsNullOrWhiteSpace(settings.DshSourceDirectory)) return null;
+            try
+            {
+                string source = Path.GetFullPath(Environment.ExpandEnvironmentVariables(
+                    settings.DshSourceDirectory.Trim().Trim('"')));
+                string packagePath = Path.Combine(source, "package.json");
+                if (!Directory.Exists(source) || !File.Exists(packagePath)) return null;
+                Dictionary<string, object> manifest = new JavaScriptSerializer()
+                    .Deserialize<Dictionary<string, object>>(File.ReadAllText(packagePath, Encoding.UTF8));
+                object name;
+                object scriptsValue;
+                if (manifest == null || !manifest.TryGetValue("name", out name)
+                    || !String.Equals(name as string, "@deepseek-ai/dsh-root", StringComparison.Ordinal)
+                    || !manifest.TryGetValue("scripts", out scriptsValue)) return null;
+                Dictionary<string, object> scripts = scriptsValue as Dictionary<string, object>;
+                object build;
+                if (scripts == null || !scripts.TryGetValue("build", out build)
+                    || String.IsNullOrWhiteSpace(build as string)) return null;
+                return source;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         internal WebStatusSnapshot Snapshot()
@@ -489,6 +576,10 @@ namespace DshEnhanced.WindowsLauncher
             report.AppendLine("端口: " + settings.Port.ToString());
             string dsh = ResolveDsh();
             report.AppendLine("dsh: " + (dsh ?? "未找到"));
+            string source = ResolveDshSource();
+            report.AppendLine("DSH 源码: " + (source ?? (String.IsNullOrWhiteSpace(settings.DshSourceDirectory)
+                ? "未配置（当前安装可能使用全局 dsh）"
+                : "配置的目录无效")));
             WebStatusSnapshot status = Snapshot();
             report.AppendLine("Web: " + status.Ownership.ToString() + " — " + status.Detail);
             if (dsh == null)
@@ -502,6 +593,38 @@ namespace DshEnhanced.WindowsLauncher
             report.AppendLine("版本: " + version.Trim());
             output = report.ToString();
             return result.Success ? OperationResult.Ok("诊断完成。") : result;
+        }
+
+        internal OperationResult BuildDshSource(out string output)
+        {
+            output = String.Empty;
+            string source = ResolveDshSource();
+            if (source == null)
+            {
+                if (String.IsNullOrWhiteSpace(settings.DshSourceDirectory))
+                    return OperationResult.Fail("当前安装未记录 DSH 源码路径；请通过本地 DSH checkout 重新运行安装脚本。");
+                return OperationResult.Fail("记录的 DSH 源码目录无效，或不是受支持的 DSH checkout。");
+            }
+
+            LauncherRequest request = BaseRequest("build", String.Empty);
+            request.sourceDirectory = source;
+            request.workingDirectory = source;
+            request.logPath = LauncherPaths.BuildLog;
+            string commandOutput;
+            LauncherLog.Write("build DSH source=" + source);
+            OperationResult result = RunCapturedRequest(request, out commandOutput);
+            string logTail = ReadTail(LauncherPaths.BuildLog, 240);
+            output = String.IsNullOrWhiteSpace(commandOutput)
+                ? logTail
+                : logTail + Environment.NewLine + Environment.NewLine + "命令引擎输出" + Environment.NewLine
+                    + "────────────────────────────────────────" + Environment.NewLine + commandOutput.Trim();
+            if (!result.Success)
+            {
+                LauncherLog.Write("build DSH failed: " + result.Message);
+                return result;
+            }
+            LauncherLog.Write("build DSH completed source=" + source);
+            return OperationResult.Ok("DSH 源码构建完成。");
         }
 
         internal OperationResult RunProfile(string profile)
@@ -541,32 +664,38 @@ namespace DshEnhanced.WindowsLauncher
             return names.ToArray();
         }
 
-        internal bool IsAutostartEnabled()
+        internal LoginStartupMode GetAutostartMode()
         {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKey))
             {
-                return key != null && key.GetValue(RunName) != null;
+                return StartupRegistration.ParseMode(key == null ? null : key.GetValue(RunName) as string);
             }
         }
 
-        internal OperationResult SetAutostart(bool enabled)
+        internal OperationResult SetAutostartMode(LoginStartupMode mode)
         {
             try
             {
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey))
                 {
-                    if (enabled)
-                    {
-                        string executable = Process.GetCurrentProcess().MainModule.FileName;
-                        key.SetValue(RunName, NativeArguments.Quote(executable) + " --tray", RegistryValueKind.String);
-                    }
-                    else
+                    if (mode == LoginStartupMode.Disabled)
                     {
                         key.DeleteValue(RunName, false);
                     }
+                    else
+                    {
+                        if (mode != LoginStartupMode.LauncherOnly && mode != LoginStartupMode.LauncherAndDsh)
+                            return OperationResult.Fail("未知的登录启动模式。");
+                        string executable = Process.GetCurrentProcess().MainModule.FileName;
+                        key.SetValue(RunName, StartupRegistration.BuildCommand(executable, mode), RegistryValueKind.String);
+                    }
                 }
-                LauncherLog.Write("autostart=" + enabled.ToString());
-                return OperationResult.Ok(enabled ? "已启用登录时启动。" : "已关闭登录时启动。");
+                LauncherLog.Write("autostartMode=" + mode.ToString());
+                if (mode == LoginStartupMode.LauncherOnly)
+                    return OperationResult.Ok("登录后将仅启动 Launcher。");
+                if (mode == LoginStartupMode.LauncherAndDsh)
+                    return OperationResult.Ok("登录后 Launcher 将在 30 秒后自动启动 DSH Web。");
+                return OperationResult.Ok("已关闭登录启动。");
             }
             catch (Exception error)
             {
@@ -584,6 +713,10 @@ namespace DshEnhanced.WindowsLauncher
             output.AppendLine("DSH Web 日志");
             output.AppendLine("────────────────────────────────────────");
             output.AppendLine(ReadTail(LauncherPaths.ServerLog, 160));
+            output.AppendLine();
+            output.AppendLine("DSH 源码构建日志");
+            output.AppendLine("────────────────────────────────────────");
+            output.AppendLine(ReadTail(LauncherPaths.BuildLog, 160));
             return output.ToString();
         }
 
@@ -608,6 +741,7 @@ namespace DshEnhanced.WindowsLauncher
                 stopPath = LauncherPaths.Stop,
                 task = String.Empty,
                 profile = String.Empty,
+                sourceDirectory = String.Empty,
             };
         }
 

@@ -77,11 +77,16 @@ if (-not (Test-Path -LiteralPath $RequestPath -PathType Leaf)) {
 
 $request = Get-Content -Raw -LiteralPath $RequestPath -Encoding UTF8 | ConvertFrom-Json
 $mode = [string] $request.mode
-if ($mode -notin @('doctor', 'headless', 'profile', 'web')) {
+if ($mode -notin @('build', 'doctor', 'headless', 'profile', 'web')) {
   throw "Unsupported launcher request mode '$mode'."
 }
-$dsh = Resolve-SafeDshCommand -Path ([string] $request.dshCommand) -Mode $mode
-$workingDirectory = [string] $request.workingDirectory
+$dsh = $null
+$workingDirectory = if ($mode -eq 'build') {
+  [string] $request.sourceDirectory
+} else {
+  $dsh = Resolve-SafeDshCommand -Path ([string] $request.dshCommand) -Mode $mode
+  [string] $request.workingDirectory
+}
 if (-not (Test-Path -LiteralPath $workingDirectory -PathType Container)) {
   throw "Working directory does not exist: $workingDirectory"
 }
@@ -90,6 +95,27 @@ $originalDirectory = (Get-Location).Path
 try {
   Set-Location -LiteralPath $workingDirectory
   switch ($mode) {
+    'build' {
+      $manifestPath = Join-Path $workingDirectory 'package.json'
+      if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw 'The configured DSH source directory has no package.json.'
+      }
+      $manifest = Get-Content -Raw -LiteralPath $manifestPath -Encoding UTF8 | ConvertFrom-Json
+      if ([string] $manifest.name -ne '@deepseek-ai/dsh-root' -or
+        [string]::IsNullOrWhiteSpace([string] $manifest.scripts.build)) {
+        throw 'The configured source directory is not a buildable DSH checkout.'
+      }
+      $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1
+      $logPath = [string] $request.logPath
+      if ([string]::IsNullOrWhiteSpace($logPath)) { throw 'DSH build log path is missing.' }
+      $code = Invoke-LoggedDsh `
+        -Command $pnpm.Source `
+        -Arguments @('run', 'build') `
+        -LogPath $logPath `
+        -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) pnpm run build ($workingDirectory) ====="
+      exit $code
+    }
     'doctor' {
       & $dsh --version
       exit $LASTEXITCODE
@@ -130,7 +156,7 @@ try {
   }
 } finally {
   Set-Location -LiteralPath $originalDirectory
-  if ($mode -in @('doctor', 'headless', 'profile')) {
+  if ($mode -in @('build', 'doctor', 'headless', 'profile')) {
     Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
   }
 }

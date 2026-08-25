@@ -15,6 +15,7 @@ namespace DshEnhanced.WindowsLauncher
     {
         internal const string ShowEventName = "Local\\DSH.Enhanced.WindowsLauncher.Show";
         internal const string ShutdownEventName = "Local\\DSH.Enhanced.WindowsLauncher.Shutdown";
+        internal const string StartDshEventName = "Local\\DSH.Enhanced.WindowsLauncher.StartDsh";
         internal const string MutexName = "Local\\DSH.Enhanced.WindowsLauncher.Single";
 
         [DllImport("user32.dll")]
@@ -54,10 +55,12 @@ namespace DshEnhanced.WindowsLauncher
                 LauncherRuntime runtime = new LauncherRuntime();
                 string action = args[1].ToLowerInvariant();
                 OperationResult result;
+                string operationOutput = String.Empty;
                 WebStatusSnapshot status;
                 if (action == "start") result = runtime.StartWeb();
                 else if (action == "stop") result = runtime.StopWeb();
                 else if (action == "restart") result = runtime.RestartWeb();
+                else if (action == "build") result = runtime.BuildDshSource(out operationOutput);
                 else if (action == "status") result = OperationResult.Ok("状态读取完成。");
                 else result = OperationResult.Fail("未知自动化操作：" + action);
                 status = runtime.Snapshot();
@@ -68,6 +71,7 @@ namespace DshEnhanced.WindowsLauncher
                     { "ownership", status.Ownership.ToString() },
                     { "port", status.Port },
                     { "canStop", status.CanStop },
+                    { "output", operationOutput },
                 });
                 return result.Success ? 0 : 1;
             }
@@ -76,7 +80,8 @@ namespace DshEnhanced.WindowsLauncher
             {
                 string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 bool complete = File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Command.ps1"))
-                    && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Supervisor.ps1"));
+                    && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Supervisor.ps1"))
+                    && StartupRegistration.SelfTest();
                 File.WriteAllText(args[1], complete ? "SELF_TEST_OK" : "SELF_TEST_INCOMPLETE", new UTF8Encoding(false));
                 return complete ? 0 : 1;
             }
@@ -100,16 +105,17 @@ namespace DshEnhanced.WindowsLauncher
                 return 0;
             }
 
+            bool startHidden = StartupRegistration.HasArgument(args, "--tray");
+            bool startDshAfterLogin = StartupRegistration.HasArgument(args, StartupRegistration.StartDshArgument);
             bool created;
             using (Mutex mutex = new Mutex(true, MutexName, out created))
             {
                 if (!created)
                 {
-                    SignalEvent(ShowEventName);
+                    SignalEvent(startDshAfterLogin ? StartDshEventName : ShowEventName);
                     return 0;
                 }
-                bool startHidden = args.Length >= 1 && String.Equals(args[0], "--tray", StringComparison.OrdinalIgnoreCase);
-                Application.Run(new LauncherApplicationContext(startHidden));
+                Application.Run(new LauncherApplicationContext(startHidden, startDshAfterLogin));
             }
             return 0;
         }
@@ -146,15 +152,20 @@ namespace DshEnhanced.WindowsLauncher
         private readonly Icon icon;
         private readonly EventWaitHandle showSignal;
         private readonly EventWaitHandle shutdownSignal;
+        private readonly EventWaitHandle startDshSignal;
         private readonly System.Windows.Forms.Timer signalTimer;
+        private readonly System.Windows.Forms.Timer delayedDshTimer;
         private bool exiting;
 
-        internal LauncherApplicationContext(bool startHidden)
+        internal LauncherApplicationContext(bool startHidden, bool startDshAfterLogin)
         {
             runtime = new LauncherRuntime();
             icon = LauncherIcon.Create();
             form = new MainForm(runtime, icon, ExitLauncher);
             form.FormClosing += OnFormClosing;
+            // A login-started instance may stay hidden for its entire lifetime. Force a
+            // native handle now so background Web completion can safely use BeginInvoke.
+            if (form.Handle == IntPtr.Zero) throw new InvalidOperationException("无法创建 Launcher 后台窗口句柄。");
 
             tray = new NotifyIcon();
             tray.Icon = icon;
@@ -165,17 +176,30 @@ namespace DshEnhanced.WindowsLauncher
 
             showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ShowEventName);
             shutdownSignal = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ShutdownEventName);
+            startDshSignal = new EventWaitHandle(false, EventResetMode.AutoReset, Program.StartDshEventName);
+            delayedDshTimer = new System.Windows.Forms.Timer();
+            delayedDshTimer.Interval = 30000;
+            delayedDshTimer.Tick += delegate
+            {
+                delayedDshTimer.Stop();
+                LauncherLog.Write("login DSH delay elapsed; submitting Web start");
+                RunTrayOperation(runtime.StartWeb);
+            };
             signalTimer = new System.Windows.Forms.Timer();
             signalTimer.Interval = 250;
             signalTimer.Tick += delegate
             {
                 if (showSignal.WaitOne(0)) ShowWindow();
                 if (shutdownSignal.WaitOne(0)) ExitLauncher();
+                if (startDshSignal.WaitOne(0)) ScheduleDelayedDsh();
             };
             signalTimer.Start();
 
             if (!startHidden) ShowWindow();
+            else if (startDshAfterLogin)
+                tray.ShowBalloonTip(2200, "DeepSeek Harness", "Launcher 已就绪，将在 30 秒后启动 DSH Web。", ToolTipIcon.Info);
             else tray.ShowBalloonTip(1800, "DeepSeek Harness", "Launcher 已在托盘就绪。", ToolTipIcon.Info);
+            if (startDshAfterLogin) ScheduleDelayedDsh();
         }
 
         private ContextMenuStrip BuildTrayMenu()
@@ -190,12 +214,17 @@ namespace DshEnhanced.WindowsLauncher
             menu.Items.Add("停止 Web", null, delegate { RunTrayOperation(runtime.StopWeb); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("打开日志目录", null, delegate { runtime.OpenLogFolder(); });
-            ToolStripMenuItem autostart = new ToolStripMenuItem("登录时启动 Launcher");
-            autostart.Click += delegate { RunTrayOperation(delegate { return runtime.SetAutostart(!runtime.IsAutostartEnabled()); }); };
-            menu.Items.Add(autostart);
+            ToolStripMenuItem launcherAutostart = new ToolStripMenuItem("登录后仅启动 Launcher");
+            launcherAutostart.Click += delegate { SetStartupModeFromTray(LoginStartupMode.LauncherOnly); };
+            menu.Items.Add(launcherAutostart);
+            ToolStripMenuItem dshAutostart = new ToolStripMenuItem("登录后自动启动 DSH（延迟 30 秒）");
+            dshAutostart.Click += delegate { SetStartupModeFromTray(LoginStartupMode.LauncherAndDsh); };
+            menu.Items.Add(dshAutostart);
             menu.Opening += delegate
             {
-                autostart.Checked = runtime.IsAutostartEnabled();
+                LoginStartupMode mode = runtime.GetAutostartMode();
+                launcherAutostart.Checked = mode == LoginStartupMode.LauncherOnly;
+                dshAutostart.Checked = mode == LoginStartupMode.LauncherAndDsh;
                 WebStatusSnapshot status = runtime.Snapshot();
                 menu.Items[2].Enabled = status.Ownership == WebOwnership.Stopped;
                 menu.Items[3].Enabled = status.Ownership == WebOwnership.Owned || status.Ownership == WebOwnership.External;
@@ -205,6 +234,22 @@ namespace DshEnhanced.WindowsLauncher
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出 Launcher", null, delegate { ExitLauncher(); });
             return menu;
+        }
+
+        private void SetStartupModeFromTray(LoginStartupMode selected)
+        {
+            RunTrayOperation(delegate
+            {
+                LoginStartupMode current = runtime.GetAutostartMode();
+                return runtime.SetAutostartMode(current == selected ? LoginStartupMode.Disabled : selected);
+            });
+        }
+
+        private void ScheduleDelayedDsh()
+        {
+            delayedDshTimer.Stop();
+            delayedDshTimer.Start();
+            LauncherLog.Write("login DSH start scheduled delay=30s");
         }
 
         private void RunTrayOperation(Func<OperationResult> operation)
@@ -248,10 +293,13 @@ namespace DshEnhanced.WindowsLauncher
             if (exiting) return;
             exiting = true;
             signalTimer.Stop();
+            delayedDshTimer.Stop();
             tray.Visible = false;
             tray.Dispose();
             showSignal.Dispose();
             shutdownSignal.Dispose();
+            startDshSignal.Dispose();
+            delayedDshTimer.Dispose();
             form.Close();
             icon.Dispose();
             ExitThread();
@@ -283,7 +331,8 @@ namespace DshEnhanced.WindowsLauncher
         private readonly ModernButton stopButton;
         private readonly PortField portInput;
         private readonly ToggleSwitch noOpenToggle;
-        private readonly ToggleSwitch autostartToggle;
+        private readonly ToggleSwitch launcherAutostartToggle;
+        private readonly ToggleSwitch dshAutostartToggle;
         private readonly RichTextBox taskInput;
         private readonly RichTextBox taskOutput;
         private readonly ModernButton taskRunButton;
@@ -293,6 +342,7 @@ namespace DshEnhanced.WindowsLauncher
         private RoundedPanel taskInputShell;
         private RoundedPanel taskOutputShell;
         private readonly RichTextBox diagnosticsOutput;
+        private readonly ModernButton buildDshButton;
         private readonly Label toast;
         private readonly System.Windows.Forms.Timer refreshTimer;
         private HeroPanel hero;
@@ -303,7 +353,8 @@ namespace DshEnhanced.WindowsLauncher
         private Label shieldLabel;
         private Label portLabel;
         private Label browserLabel;
-        private Label autoLabel;
+        private Label launcherAutoLabel;
+        private Label dshAutoLabel;
         private RoundedPanel taskCard;
         private RoundedPanel profileCard;
         private ModernButton runProfileButton;
@@ -316,6 +367,7 @@ namespace DshEnhanced.WindowsLauncher
         private string resolvedDsh;
         private int refreshInFlight;
         private int refreshAgain;
+        private int buildInProgress;
 
         internal MainForm(LauncherRuntime runtime, Icon icon, Action exitLauncher)
         {
@@ -405,7 +457,8 @@ namespace DshEnhanced.WindowsLauncher
             stopButton = NewButton("停止", ModernButtonKind.Danger, 92);
             portInput = new PortField();
             noOpenToggle = new ToggleSwitch();
-            autostartToggle = new ToggleSwitch();
+            launcherAutostartToggle = new ToggleSwitch();
+            dshAutostartToggle = new ToggleSwitch();
             BuildOverviewPage();
 
             taskInput = new RichTextBox();
@@ -415,6 +468,7 @@ namespace DshEnhanced.WindowsLauncher
             BuildTasksPage();
 
             diagnosticsOutput = new RichTextBox();
+            buildDshButton = NewButton("构建 DSH 源码", ModernButtonKind.Secondary, 142);
             BuildDiagnosticsPage();
 
             startButton.Click += delegate { RunOperation(runtime.StartWeb); };
@@ -435,17 +489,21 @@ namespace DshEnhanced.WindowsLauncher
                 runtime.Settings.NoOpen = noOpenToggle.Checked;
                 runtime.SaveSettings();
             };
-            autostartToggle.CheckedChanged += delegate
+            launcherAutostartToggle.CheckedChanged += delegate
             {
                 if (loadingSettings) return;
-                OperationResult result = runtime.SetAutostart(autostartToggle.Checked);
-                ShowToast(result);
+                ChangeAutostartMode(LoginStartupMode.LauncherOnly, launcherAutostartToggle.Checked);
+            };
+            dshAutostartToggle.CheckedChanged += delegate
+            {
+                if (loadingSettings) return;
+                ChangeAutostartMode(LoginStartupMode.LauncherAndDsh, dshAutostartToggle.Checked);
             };
 
             loadingSettings = true;
             portInput.Value = runtime.Settings.Port;
             noOpenToggle.Checked = runtime.Settings.NoOpen;
-            autostartToggle.Checked = runtime.IsAutostartEnabled();
+            ApplyStartupModeToControls(runtime.GetAutostartMode());
             loadingSettings = false;
 
             refreshTimer = new System.Windows.Forms.Timer();
@@ -572,9 +630,9 @@ namespace DshEnhanced.WindowsLauncher
             overviewPage.Controls.Add(overviewActions);
 
             settingsCard = new RoundedPanel();
-            settingsCard.Size = new Size(780, 158);
+            settingsCard.Size = new Size(780, 168);
             overviewPage.Controls.Add(settingsCard);
-            AddCardTitle(settingsCard, "启动选项", "调用官方 dsh web，不修改 profile 配置");
+            AddCardTitle(settingsCard, "启动选项", "两种登录启动模式互斥；自动 DSH 会在 Launcher 就绪 30 秒后启动 Web");
 
             portLabel = NewLabel("服务端口", 9f, FontStyle.Regular, UiTheme.Muted);
             settingsCard.Controls.Add(portLabel);
@@ -584,13 +642,17 @@ namespace DshEnhanced.WindowsLauncher
             portInput.Font = UiTheme.Font(10f, FontStyle.Regular);
             settingsCard.Controls.Add(portInput);
 
-            browserLabel = NewLabel("启动后不自动打开浏览器", 9f, FontStyle.Regular, UiTheme.Muted);
+            browserLabel = NewLabel("启动后不打开浏览器", 9f, FontStyle.Regular, UiTheme.Muted);
             settingsCard.Controls.Add(browserLabel);
             settingsCard.Controls.Add(noOpenToggle);
 
-            autoLabel = NewLabel("登录时启动托盘", 9f, FontStyle.Regular, UiTheme.Muted);
-            settingsCard.Controls.Add(autoLabel);
-            settingsCard.Controls.Add(autostartToggle);
+            launcherAutoLabel = NewLabel("登录仅启动 Launcher", 9f, FontStyle.Regular, UiTheme.Muted);
+            settingsCard.Controls.Add(launcherAutoLabel);
+            settingsCard.Controls.Add(launcherAutostartToggle);
+
+            dshAutoLabel = NewLabel("登录自动启动 DSH", 9f, FontStyle.Regular, UiTheme.Muted);
+            settingsCard.Controls.Add(dshAutoLabel);
+            settingsCard.Controls.Add(dshAutostartToggle);
 
             pathCard = new RoundedPanel();
             pathCard.Size = new Size(780, 112);
@@ -649,7 +711,7 @@ namespace DshEnhanced.WindowsLauncher
         {
             diagnosticsCard = new RoundedPanel();
             diagnosticsPage.Controls.Add(diagnosticsCard);
-            AddCardTitle(diagnosticsCard, "日志与环境诊断", "诊断不会启动、停止或接管现有 DSH 服务");
+            AddCardTitle(diagnosticsCard, "日志、环境诊断与源码构建", "源码构建仅使用安装时确认的本地 DSH checkout");
             diagnosticsActions = new FlowLayoutPanel();
             diagnosticsActions.BackColor = UiTheme.Surface;
             diagnosticsActions.WrapContents = false;
@@ -658,10 +720,13 @@ namespace DshEnhanced.WindowsLauncher
             ModernButton folder = NewButton("打开日志目录", ModernButtonKind.Quiet, 126);
             refreshLogs.Click += delegate { diagnosticsOutput.Text = runtime.RecentLogs(); };
             doctor.Click += delegate { RunDoctor(); };
+            buildDshButton.Click += delegate { RunDshBuild(); };
             folder.Click += delegate { runtime.OpenLogFolder(); };
             diagnosticsActions.Controls.Add(refreshLogs);
             diagnosticsActions.Controls.Add(doctor);
+            diagnosticsActions.Controls.Add(buildDshButton);
             diagnosticsActions.Controls.Add(folder);
+            buildDshButton.Enabled = runtime.ResolveDshSource() != null;
             diagnosticsCard.Controls.Add(diagnosticsActions);
             diagnosticsOutput.ReadOnly = true;
             diagnosticsOutput.BorderStyle = BorderStyle.None;
@@ -738,19 +803,20 @@ namespace DshEnhanced.WindowsLauncher
             }
 
             int available = Math.Max(360, settingsCard.Width - 56);
-            int column = available / 3;
-            LayoutSetting(portLabel, portInput, 28, column);
-            LayoutSetting(browserLabel, noOpenToggle, 28 + column, column);
-            LayoutSetting(autoLabel, autostartToggle, 28 + (column * 2), column);
+            int column = available / 4;
+            LayoutSetting(portLabel, portInput, 28, column, 78);
+            LayoutSetting(browserLabel, noOpenToggle, 28 + column, column, 78);
+            LayoutSetting(launcherAutoLabel, launcherAutostartToggle, 28 + (column * 2), column, 78);
+            LayoutSetting(dshAutoLabel, dshAutostartToggle, 28 + (column * 3), column, 78);
 
             SetBoundsIfChanged(dshPath, 28, 86, Math.Max(80, pathCard.Width - 56), 24);
-            overviewPage.AutoScrollMinSize = new Size(0, bottom + 16);
+            overviewPage.AutoScrollMinSize = new Size(0, bottom + 8);
         }
 
-        private static void LayoutSetting(Label label, Control control, int left, int columnWidth)
+        private static void LayoutSetting(Label label, Control control, int left, int columnWidth, int top)
         {
-            label.Location = new Point(left, 78);
-            control.Location = new Point(left, 107);
+            label.Location = new Point(left, top);
+            control.Location = new Point(left, top + 29);
             if (control is PortField) control.Width = Math.Min(118, Math.Max(92, columnWidth - 18));
         }
 
@@ -837,13 +903,13 @@ namespace DshEnhanced.WindowsLauncher
             ThreadPool.QueueUserWorkItem(delegate
             {
                 WebStatusSnapshot status = null;
-                bool autostart = false;
+                LoginStartupMode autostartMode = LoginStartupMode.Disabled;
                 string dsh = resolvedDsh;
                 Exception failure = null;
                 try
                 {
                     status = runtime.Snapshot();
-                    autostart = runtime.IsAutostartEnabled();
+                    autostartMode = runtime.GetAutostartMode();
                     if (!dshResolved) dsh = runtime.ResolveDsh();
                 }
                 catch (Exception error) { failure = error; }
@@ -862,7 +928,7 @@ namespace DshEnhanced.WindowsLauncher
                         {
                             resolvedDsh = dsh;
                             dshResolved = true;
-                            ApplyStatus(status, autostart, dsh);
+                            ApplyStatus(status, autostartMode, dsh);
                         }
                         else
                         {
@@ -877,7 +943,7 @@ namespace DshEnhanced.WindowsLauncher
             });
         }
 
-        private void ApplyStatus(WebStatusSnapshot status, bool autostart, string dsh)
+        private void ApplyStatus(WebStatusSnapshot status, LoginStartupMode autostartMode, string dsh)
         {
             if (status.Ownership == WebOwnership.Owned)
             {
@@ -907,9 +973,29 @@ namespace DshEnhanced.WindowsLauncher
             stopButton.Enabled = status.CanStop;
             portInput.Enabled = status.Ownership == WebOwnership.Stopped;
             SetLabelText(dshPath, dsh ?? "未找到 dsh；请先安装 DeepSeek Harness");
+            buildDshButton.Enabled = Interlocked.CompareExchange(ref buildInProgress, 0, 0) == 0
+                && runtime.ResolveDshSource() != null;
             loadingSettings = true;
-            autostartToggle.Checked = autostart;
+            ApplyStartupModeToControls(autostartMode);
             loadingSettings = false;
+        }
+
+        private void ChangeAutostartMode(LoginStartupMode selected, bool enabled)
+        {
+            LoginStartupMode current = runtime.GetAutostartMode();
+            LoginStartupMode desired = enabled ? selected
+                : current == selected ? LoginStartupMode.Disabled : current;
+            OperationResult result = runtime.SetAutostartMode(desired);
+            loadingSettings = true;
+            ApplyStartupModeToControls(runtime.GetAutostartMode());
+            loadingSettings = false;
+            ShowToast(result);
+        }
+
+        private void ApplyStartupModeToControls(LoginStartupMode mode)
+        {
+            launcherAutostartToggle.Checked = mode == LoginStartupMode.LauncherOnly;
+            dshAutostartToggle.Checked = mode == LoginStartupMode.LauncherAndDsh;
         }
 
         private static void SetLabelText(Label label, string value)
@@ -1025,6 +1111,41 @@ namespace DshEnhanced.WindowsLauncher
             });
         }
 
+        private void RunDshBuild()
+        {
+            if (Interlocked.CompareExchange(ref buildInProgress, 1, 0) != 0) return;
+            buildDshButton.Enabled = false;
+            string source = runtime.ResolveDshSource();
+            diagnosticsOutput.Text = "正在后台构建 DSH 源码…" + Environment.NewLine
+                + "源码目录: " + (source ?? "未配置") + Environment.NewLine
+                + "命令: pnpm run build" + Environment.NewLine
+                + "完整输出会持续写入 dsh-build.log；构建期间可以点击“刷新日志”查看进度。";
+            ShowToast(OperationResult.Ok("DSH 源码构建已开始。"));
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string output;
+                OperationResult result;
+                try { result = runtime.BuildDshSource(out output); }
+                catch (Exception error)
+                {
+                    output = error.ToString();
+                    result = OperationResult.Fail("DSH 源码构建失败：" + error.Message);
+                }
+                Interlocked.Exchange(ref buildInProgress, 0);
+                if (IsDisposed || !IsHandleCreated) return;
+                try
+                {
+                    BeginInvoke(new Action(delegate
+                    {
+                        diagnosticsOutput.Text = String.IsNullOrWhiteSpace(output) ? result.Message : output.Trim();
+                        buildDshButton.Enabled = runtime.ResolveDshSource() != null;
+                        ShowToast(result);
+                    }));
+                }
+                catch (InvalidOperationException) { }
+            });
+        }
+
         private void SetActionsEnabled(bool enabled)
         {
             if (!enabled)
@@ -1056,7 +1177,7 @@ namespace DshEnhanced.WindowsLauncher
             pageTitle.Text = title;
             if (page == overviewPage) pageSubtitle.Text = "本机 DSH 服务与任务控制中心";
             else if (page == tasksPage) pageSubtitle.Text = "安全运行单次任务或启动独立 Profile";
-            else pageSubtitle.Text = "查看运行记录并检查本机环境";
+            else pageSubtitle.Text = "查看运行记录、检查环境或构建本地 DSH 源码";
             if (page == diagnosticsPage) diagnosticsOutput.Text = runtime.RecentLogs();
             LayoutResponsivePages();
         }
