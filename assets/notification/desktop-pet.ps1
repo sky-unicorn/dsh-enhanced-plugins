@@ -796,12 +796,165 @@ $script:multiviewFrameSequences = @{
   blocked = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
 }
 $script:whaleGirlFrameSequences = @{
-  'idle-sleep' = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+  'idle-sleep' = @(0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 29, 30, 31)
   'idle-eager' = @(8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5, 6, 7)
-  working = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+  # The source row contains four blurred transition frames and two differently
+  # scaled takes. Keep the sharp, consistently sized takes in the live loop.
+  working = @(0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15)
   confirmation = @(6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5)
   ready = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
-  blocked = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+  blocked = @(0, 1, 2, 3, 5, 6, 7)
+}
+# Source-pixel offsets align the selected working frames to y=250 without
+# resampling them. PetMotion uses the fixed 104-DIP image area inside the
+# 112-DIP design grid, then the outer Viewbox applies the configured pet size.
+$script:whaleGirlWorkingFrameOffsets = @{
+  0 = 0
+  1 = -1
+  2 = 1
+  3 = 0
+  5 = -1
+  6 = 0
+  7 = 0
+  8 = 3
+  9 = 1
+  10 = 2
+  11 = 4
+  13 = 1
+  14 = 3
+  15 = 3
+}
+# The stockings meet at a three-to-four-source-pixel painted seam. At desktop
+# sizes the white sides resample across that seam, so cut a narrow transparent
+# slot at the audited per-frame center without altering either leg bitmap.
+$script:whaleGirlWorkingLegGapCenters = @{
+  0 = 140.5
+  1 = 141.5
+  2 = 141.5
+  3 = 141.5
+  5 = 142.0
+  6 = 142.0
+  7 = 141.5
+  8 = 142.5
+  9 = 139.5
+  10 = 141.5
+  11 = 140.5
+  13 = 143.5
+  14 = 140.5
+  15 = 141.5
+}
+# Background extraction left a white tapered wedge inside the closed outline
+# formed by the two legs in upright poses. Each profile stores the source-pixel
+# apex X/Y and bottom-center X for a narrow polygon that follows that wedge.
+# Raised-leg frames are intentionally absent because they already expose real
+# transparent negative space and must retain their asymmetric silhouettes.
+$script:whaleGirlIdleEagerLegGapProfiles = @{
+  0 = @(139.5, 177, 143.0)
+  1 = @(136.0, 176, 138.5)
+  2 = @(141.0, 177, 143.0)
+  3 = @(141.0, 177, 145.0)
+  4 = @(139.0, 177, 142.5)
+  5 = @(139.5, 177, 143.5)
+  6 = @(139.0, 178, 143.5)
+  7 = @(140.0, 177, 143.0)
+  8 = @(140.5, 176, 140.5)
+  9 = @(151.0, 176, 146.0)
+  10 = @(146.5, 178, 145.5)
+  11 = @(147.0, 178, 146.0)
+  16 = @(146.5, 173, 151.0)
+  17 = @(146.5, 178, 150.0)
+  18 = @(149.5, 174, 156.5)
+  19 = @(148.0, 172, 154.5)
+  20 = @(148.0, 172, 152.5)
+  21 = @(147.0, 174, 152.5)
+  22 = @(147.5, 171, 154.0)
+  23 = @(146.0, 169, 152.5)
+  24 = @(145.0, 174, 144.5)
+  25 = @(140.0, 173, 143.5)
+  26 = @(142.0, 174, 145.0)
+  27 = @(142.0, 174, 145.5)
+  28 = @(141.5, 173, 144.5)
+  29 = @(140.0, 179, 143.5)
+  30 = @(141.0, 178, 144.0)
+  31 = @(141.0, 173, 144.0)
+}
+$script:whaleGirlConfirmationLegGapProfiles = @{
+  0 = @(141.0, 195, 141.0)
+  1 = @(140.0, 196, 140.5)
+  2 = @(141.0, 194, 141.5)
+  3 = @(153.0, 182, 156.0)
+  4 = @(149.0, 185, 157.0)
+  5 = @(138.0, 193, 139.5)
+  6 = @(137.0, 193, 138.0)
+  7 = @(139.0, 192, 137.0)
+  8 = @(140.0, 193, 139.0)
+  9 = @(138.0, 192, 136.0)
+  10 = @(136.0, 189, 134.0)
+  11 = @(137.0, 190, 136.0)
+  12 = @(140.0, 192, 139.0)
+  13 = @(138.0, 191, 137.0)
+  14 = @(140.0, 192, 139.0)
+  15 = @(141.0, 190, 140.0)
+  16 = @(146.0, 194, 147.0)
+  17 = @(148.0, 194, 150.0)
+  18 = @(149.0, 194, 150.0)
+  19 = @(147.0, 194, 149.0)
+  20 = @(147.0, 194, 149.0)
+  21 = @(147.0, 193, 149.0)
+  22 = @(150.0, 192, 154.0)
+  23 = @(145.0, 191, 146.5)
+  24 = @(147.0, 193, 149.0)
+  25 = @(150.0, 193, 154.0)
+  26 = @(141.0, 192, 142.5)
+  27 = @(143.0, 190, 144.0)
+  28 = @(139.5, 190, 140.0)
+  29 = @(142.0, 190, 143.0)
+  30 = @(140.5, 188, 141.0)
+  31 = @(141.0, 188, 141.5)
+}
+$script:whaleGirlReadyLegGapProfiles = @{
+  0 = @(139.0, 187, 139.5)
+  1 = @(138.5, 187, 139.0)
+  2 = @(139.5, 187, 140.0)
+  3 = @(139.0, 187, 139.0)
+  4 = @(139.0, 187, 139.5)
+  13 = @(138.0, 187, 138.5)
+  14 = @(139.0, 187, 139.5)
+  15 = @(138.5, 187, 139.0)
+  16 = @(142.0, 188, 143.0)
+  17 = @(141.0, 188, 142.0)
+  18 = @(142.5, 188, 143.5)
+  19 = @(141.5, 188, 142.5)
+  20 = @(142.0, 188, 143.5)
+  21 = @(139.0, 187, 140.0)
+  22 = @(140.0, 187, 140.0)
+  23 = @(138.5, 187, 139.5)
+  24 = @(139.0, 186, 139.5)
+  25 = @(139.5, 187, 140.5)
+  26 = @(139.5, 186, 141.0)
+  27 = @(140.0, 186, 141.0)
+  28 = @(139.0, 186, 140.0)
+  29 = @(140.0, 186, 140.0)
+  30 = @(139.0, 186, 139.0)
+  31 = @(138.0, 186, 139.0)
+}
+$script:whaleGirlBlockedLegGapProfiles = @{
+  0 = @(149.0, 186, 151.0)
+  1 = @(150.0, 187, 152.0)
+  2 = @(149.0, 186, 150.0)
+  3 = @(151.0, 185, 151.0)
+  5 = @(151.0, 186, 153.0)
+  6 = @(151.0, 186, 152.0)
+  7 = @(150.0, 186, 153.0)
+}
+$script:whaleGirlBlockedFrameOffsets = @{
+  0 = 0
+  1 = -2
+  2 = 1
+  3 = 1
+  5 = 0
+  6 = 0
+  7 = 0
 }
 $script:spriteFrameDurations = $script:classicSpriteFrameDurations
 $script:staticSpriteFrames = $script:classicStaticSpriteFrames
@@ -866,6 +1019,94 @@ function Show-SpriteFrame([int]$index) {
   }
   $bounded = [Math]::Max(0, [Math]::Min($script:spriteFrameCount - 1, $index))
   $script:spriteFrameIndex = $bounded
+  $petMotion.Y = 0
+  if ($script:petCharacter -eq 'whale-girl') {
+    $frameOffsets = switch ($script:spriteState) {
+      'working' { $script:whaleGirlWorkingFrameOffsets; break }
+      'blocked' { $script:whaleGirlBlockedFrameOffsets; break }
+      default { $null }
+    }
+    if ($null -ne $frameOffsets -and $frameOffsets.ContainsKey($bounded)) {
+      $petMotion.Y = [double]$frameOffsets[$bounded] * 104.0 / 256.0
+    }
+  }
+  $spriteFrame.Clip = $null
+  $standingLegGapProfiles = $null
+  if ($script:petCharacter -eq 'whale-girl') {
+    $standingLegGapProfiles = switch ($script:spriteState) {
+      'idle-eager' { $script:whaleGirlIdleEagerLegGapProfiles; break }
+      confirmation { $script:whaleGirlConfirmationLegGapProfiles; break }
+      ready { $script:whaleGirlReadyLegGapProfiles; break }
+      blocked { $script:whaleGirlBlockedLegGapProfiles; break }
+      default { $null }
+    }
+  }
+  $gapGeometry = $null
+  if (
+    $script:petCharacter -eq 'whale-girl' -and
+    $null -ne $standingLegGapProfiles -and
+    $standingLegGapProfiles.ContainsKey($bounded)
+  ) {
+    $sourceScale = 104.0 / 256.0
+    $gapProfile = $standingLegGapProfiles[$bounded]
+    $topCenter = [double]$gapProfile[0]
+    $topY = [double]$gapProfile[1]
+    $bottomCenter = [double]$gapProfile[2]
+    $gapGeometry = [System.Windows.Media.StreamGeometry]::new()
+    $gapContext = $gapGeometry.Open()
+    try {
+      $gapContext.BeginFigure(
+        [System.Windows.Point]::new(($topCenter - 1.0) * $sourceScale, $topY * $sourceScale),
+        $true,
+        $true
+      )
+      $gapContext.LineTo(
+        [System.Windows.Point]::new(($topCenter + 1.0) * $sourceScale, $topY * $sourceScale),
+        $true,
+        $false
+      )
+      $gapContext.LineTo(
+        [System.Windows.Point]::new(($bottomCenter + 6.0) * $sourceScale, 256.0 * $sourceScale),
+        $true,
+        $false
+      )
+      $gapContext.LineTo(
+        [System.Windows.Point]::new(($bottomCenter - 6.0) * $sourceScale, 256.0 * $sourceScale),
+        $true,
+        $false
+      )
+    } finally {
+      $gapContext.Close()
+    }
+    $gapGeometry.Freeze()
+  } elseif (
+    $script:petCharacter -eq 'whale-girl' -and
+    $script:spriteState -eq 'working' -and
+    $script:whaleGirlWorkingLegGapCenters.ContainsKey($bounded)
+  ) {
+    $sourceScale = 104.0 / 256.0
+    $gapCenter = [double]$script:whaleGirlWorkingLegGapCenters[$bounded]
+    $gapGeometry = [System.Windows.Media.RectangleGeometry]::new(
+      [System.Windows.Rect]::new(
+        ($gapCenter - 2.0) * $sourceScale,
+        193.0 * $sourceScale,
+        4.0 * $sourceScale,
+        41.0 * $sourceScale
+      )
+    )
+  }
+  if ($null -ne $gapGeometry) {
+    $outerGeometry = [System.Windows.Media.RectangleGeometry]::new(
+      [System.Windows.Rect]::new(0, 0, 104, 104)
+    )
+    $clipGeometry = [System.Windows.Media.CombinedGeometry]::new(
+      [System.Windows.Media.GeometryCombineMode]::Exclude,
+      $outerGeometry,
+      $gapGeometry
+    )
+    $clipGeometry.Freeze()
+    $spriteFrame.Clip = $clipGeometry
+  }
   $spriteFrame.Source = $frames[$bounded]
 }
 

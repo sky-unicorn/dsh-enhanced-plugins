@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { inflateSync } from 'node:zlib'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import { describe, expect, it, vi } from 'vitest'
@@ -20,6 +21,134 @@ import { NotificationStateTracker } from '../../src/notification/host/state.ts'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '../../src/notification/shared.ts'
 
 const execFileAsync = promisify(execFile)
+
+interface RgbaPng {
+  width: number
+  height: number
+  pixels: Buffer
+}
+
+interface SpriteFrameMetrics {
+  top: number
+  bottom: number
+  height: number
+  sharpness: number
+}
+
+function paeth(left: number, up: number, upperLeft: number): number {
+  const prediction = left + up - upperLeft
+  const leftDistance = Math.abs(prediction - left)
+  const upDistance = Math.abs(prediction - up)
+  const upperLeftDistance = Math.abs(prediction - upperLeft)
+  if (leftDistance <= upDistance && leftDistance <= upperLeftDistance) return left
+  if (upDistance <= upperLeftDistance) return up
+  return upperLeft
+}
+
+function decodeRgbaPng(data: Buffer): RgbaPng {
+  expect(data.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+  let width = 0
+  let height = 0
+  const compressed: Buffer[] = []
+  for (let offset = 8; offset + 12 <= data.length;) {
+    const length = data.readUInt32BE(offset)
+    const type = data.toString('ascii', offset + 4, offset + 8)
+    const payload = data.subarray(offset + 8, offset + 8 + length)
+    if (type === 'IHDR') {
+      width = payload.readUInt32BE(0)
+      height = payload.readUInt32BE(4)
+      expect([...payload.subarray(8, 13)]).toEqual([8, 6, 0, 0, 0])
+    } else if (type === 'IDAT') {
+      compressed.push(payload)
+    }
+    offset += length + 12
+    if (type === 'IEND') break
+  }
+  expect(width).toBeGreaterThan(0)
+  expect(height).toBeGreaterThan(0)
+  expect(compressed.length).toBeGreaterThan(0)
+
+  const bytesPerPixel = 4
+  const stride = width * bytesPerPixel
+  const source = inflateSync(Buffer.concat(compressed))
+  expect(source.length).toBe((stride + 1) * height)
+  const pixels = Buffer.alloc(stride * height)
+  let sourceOffset = 0
+  for (let y = 0; y < height; y += 1) {
+    const filter = source[sourceOffset++]
+    expect(filter).toBeLessThanOrEqual(4)
+    const rowOffset = y * stride
+    for (let x = 0; x < stride; x += 1) {
+      const raw = source[sourceOffset++]
+      const left = x >= bytesPerPixel ? pixels[rowOffset + x - bytesPerPixel] : 0
+      const up = y > 0 ? pixels[rowOffset + x - stride] : 0
+      const upperLeft = y > 0 && x >= bytesPerPixel
+        ? pixels[rowOffset + x - stride - bytesPerPixel]
+        : 0
+      const predictor = switchPngFilter(filter, left, up, upperLeft)
+      pixels[rowOffset + x] = (raw + predictor) & 0xff
+    }
+  }
+  return { width, height, pixels }
+}
+
+function switchPngFilter(filter: number, left: number, up: number, upperLeft: number): number {
+  switch (filter) {
+    case 0: return 0
+    case 1: return left
+    case 2: return up
+    case 3: return Math.floor((left + up) / 2)
+    case 4: return paeth(left, up, upperLeft)
+    default: throw new TypeError(`unsupported PNG filter: ${filter}`)
+  }
+}
+
+function spriteFrameMetrics(png: RgbaPng, row: number, frame: number): SpriteFrameMetrics {
+  const cellSize = 256
+  const grays = new Float64Array(cellSize * cellSize)
+  const alphas = new Uint8Array(cellSize * cellSize)
+  let top = cellSize
+  let bottom = -1
+  for (let y = 0; y < cellSize; y += 1) {
+    for (let x = 0; x < cellSize; x += 1) {
+      const sourceX = (frame * cellSize) + x
+      const sourceY = (row * cellSize) + y
+      const sourceOffset = ((sourceY * png.width) + sourceX) * 4
+      const cellOffset = (y * cellSize) + x
+      const alpha = png.pixels[sourceOffset + 3]
+      alphas[cellOffset] = alpha
+      grays[cellOffset] = (
+        (png.pixels[sourceOffset] * 299)
+        + (png.pixels[sourceOffset + 1] * 587)
+        + (png.pixels[sourceOffset + 2] * 114)
+      ) / 1000
+      if (alpha > 16) {
+        top = Math.min(top, y)
+        bottom = Math.max(bottom, y)
+      }
+    }
+  }
+  expect(bottom).toBeGreaterThanOrEqual(top)
+
+  const laplacians: number[] = []
+  for (let y = 1; y < cellSize - 1; y += 1) {
+    for (let x = 1; x < cellSize - 1; x += 1) {
+      const offset = (y * cellSize) + x
+      if (alphas[offset] <= 16) continue
+      laplacians.push(
+        (4 * grays[offset])
+        - grays[offset - 1]
+        - grays[offset + 1]
+        - grays[offset - cellSize]
+        - grays[offset + cellSize],
+      )
+    }
+  }
+  const mean = laplacians.reduce((sum, value) => sum + value, 0) / laplacians.length
+  const sharpness = laplacians.reduce((sum, value) => sum + ((value - mean) ** 2), 0)
+    / laplacians.length
+  return { top, bottom, height: bottom - top + 1, sharpness }
+}
 
 function session(id: string, origin?: 'subagent', events: SessionEvent[] = []): Session {
   return {
@@ -337,6 +466,171 @@ describe('desktop notification assets and defaults', () => {
     expect(whaleGirlSprites.readUInt32BE(20)).toBe(1536)
     expect(whaleGirlSprites[24]).toBe(8)
     expect(whaleGirlSprites[25]).toBe(6)
+  })
+
+  it('keeps every whale girl loop sharp and anchors the stable standing reactions', async () => {
+    const script = await readFile(resolve(import.meta.dirname, '../../assets/notification/desktop-pet.ps1'), 'utf8')
+    const spriteData = await readFile(resolve(
+      import.meta.dirname,
+      '../../assets/notification/deepseek-whale-girl-pet-sprites.png',
+    ))
+    const sequenceSection = script.slice(script.indexOf('$script:whaleGirlFrameSequences'))
+    const parseSequence = (pattern: RegExp): number[] => {
+      const match = sequenceSection.match(pattern)
+      expect(match).not.toBeNull()
+      return (match?.[1] ?? '').split(',').map(value => Number.parseInt(value.trim(), 10))
+    }
+    const sequences = [
+      { state: 'idle-sleep', row: 0, frames: parseSequence(/'idle-sleep' = @\(([^)]+)\)/) },
+      { state: 'idle-eager', row: 1, frames: parseSequence(/'idle-eager' = @\(([^)]+)\)/) },
+      { state: 'working', row: 2, frames: parseSequence(/working = @\(([^)]+)\)/) },
+      { state: 'confirmation', row: 3, frames: parseSequence(/confirmation = @\(([^)]+)\)/) },
+      { state: 'ready', row: 4, frames: parseSequence(/ready = @\(([^)]+)\)/) },
+      { state: 'blocked', row: 5, frames: parseSequence(/blocked = @\(([^)]+)\)/) },
+    ]
+    const workingSequence = sequences[2]?.frames ?? []
+    const blockedSequence = sequences[5]?.frames ?? []
+    expect(sequences[0]?.frames).toEqual([
+      0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15,
+      16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 29, 30, 31,
+    ])
+    expect(workingSequence).toEqual([0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15])
+    expect(blockedSequence).toEqual([0, 1, 2, 3, 5, 6, 7])
+
+    const offsetsMatch = script.match(/\$script:whaleGirlWorkingFrameOffsets = @\{([\s\S]*?)\r?\n\}/)
+    expect(offsetsMatch).not.toBeNull()
+    const offsets = new Map<number, number>()
+    for (const match of (offsetsMatch?.[1] ?? '').matchAll(/^\s*(\d+)\s*=\s*(-?\d+)\s*$/gm)) {
+      offsets.set(Number.parseInt(match[1] ?? '', 10), Number.parseInt(match[2] ?? '', 10))
+    }
+    expect([...offsets.keys()]).toEqual(workingSequence)
+    const legGapMatch = script.match(/\$script:whaleGirlWorkingLegGapCenters = @\{([\s\S]*?)\r?\n\}/)
+    expect(legGapMatch).not.toBeNull()
+    const legGapCenters = new Map<number, number>()
+    for (const match of (legGapMatch?.[1] ?? '').matchAll(/^\s*(\d+)\s*=\s*(\d+(?:\.\d+)?)\s*$/gm)) {
+      legGapCenters.set(Number.parseInt(match[1] ?? '', 10), Number.parseFloat(match[2] ?? ''))
+    }
+    expect([...legGapCenters.keys()]).toEqual(workingSequence)
+    const parseLegGapProfiles = (name: string): Map<number, [number, number, number]> => {
+      const match = script.match(new RegExp(`\\$script:${name} = @\\{([\\s\\S]*?)\\r?\\n\\}`))
+      expect(match, `${name} must be declared`).not.toBeNull()
+      const profiles = new Map<number, [number, number, number]>()
+      for (const entry of (match?.[1] ?? '').matchAll(
+        /^\s*(\d+)\s*=\s*@\((\d+(?:\.\d+)?),\s*(\d+),\s*(\d+(?:\.\d+)?)\)\s*$/gm,
+      )) {
+        profiles.set(Number.parseInt(entry[1] ?? '', 10), [
+          Number.parseFloat(entry[2] ?? ''),
+          Number.parseInt(entry[3] ?? '', 10),
+          Number.parseFloat(entry[4] ?? ''),
+        ])
+      }
+      return profiles
+    }
+    const standingLegGapProfiles = [
+      {
+        state: 'idle-eager',
+        row: 1,
+        profiles: parseLegGapProfiles('whaleGirlIdleEagerLegGapProfiles'),
+        frames: [...Array.from({ length: 12 }, (_, frame) => frame), ...Array.from({ length: 16 }, (_, frame) => frame + 16)],
+      },
+      {
+        state: 'confirmation',
+        row: 3,
+        profiles: parseLegGapProfiles('whaleGirlConfirmationLegGapProfiles'),
+        frames: Array.from({ length: 32 }, (_, frame) => frame),
+      },
+      {
+        state: 'ready',
+        row: 4,
+        profiles: parseLegGapProfiles('whaleGirlReadyLegGapProfiles'),
+        frames: [...Array.from({ length: 5 }, (_, frame) => frame), ...Array.from({ length: 19 }, (_, frame) => frame + 13)],
+      },
+      {
+        state: 'blocked',
+        row: 5,
+        profiles: parseLegGapProfiles('whaleGirlBlockedLegGapProfiles'),
+        frames: blockedSequence,
+      },
+    ]
+    for (const state of standingLegGapProfiles) {
+      expect([...state.profiles.keys()], `${state.state} upright gap coverage`).toEqual(state.frames)
+    }
+    expect(standingLegGapProfiles[0]?.profiles.get(20)).toEqual([148, 172, 152.5])
+    const blockedOffsetsMatch = script.match(/\$script:whaleGirlBlockedFrameOffsets = @\{([\s\S]*?)\r?\n\}/)
+    expect(blockedOffsetsMatch).not.toBeNull()
+    const blockedOffsets = new Map<number, number>()
+    for (const match of (blockedOffsetsMatch?.[1] ?? '').matchAll(/^\s*(\d+)\s*=\s*(-?\d+)\s*$/gm)) {
+      blockedOffsets.set(Number.parseInt(match[1] ?? '', 10), Number.parseInt(match[2] ?? '', 10))
+    }
+    expect([...blockedOffsets.keys()]).toEqual(blockedSequence)
+    expect(script).toContain(
+      '$petMotion.Y = [double]$frameOffsets[$bounded] * 104.0 / 256.0',
+    )
+    expect(script).toContain('[System.Windows.Media.GeometryCombineMode]::Exclude')
+    expect(script).toContain('($gapCenter - 2.0) * $sourceScale')
+    expect(script).toContain('4.0 * $sourceScale')
+    expect(script).toContain('[System.Windows.Media.StreamGeometry]::new()')
+    expect(script).toContain('($topCenter - 1.0) * $sourceScale')
+    expect(script).toContain('($bottomCenter + 6.0) * $sourceScale')
+
+    const png = decodeRgbaPng(spriteData)
+    expect([png.width, png.height]).toEqual([8192, 1536])
+    const playbackMetrics = sequences.map(sequence => ({
+      ...sequence,
+      metrics: sequence.frames.map(frame => spriteFrameMetrics(png, sequence.row, frame)),
+    }))
+    for (const sequence of playbackMetrics) {
+      expect(
+        Math.min(...sequence.metrics.map(metric => metric.sharpness)),
+        `${sequence.state} contains a blurred live frame`,
+      ).toBeGreaterThan(8000)
+    }
+
+    const workingMetrics = playbackMetrics[2]?.metrics ?? []
+    const workingHeights = workingMetrics.map(metric => metric.height)
+    expect(Math.max(...workingHeights) - Math.min(...workingHeights)).toBeLessThanOrEqual(2)
+    const workingBottoms = workingMetrics.map((metric, index) => {
+      const offset = offsets.get(workingSequence[index] ?? -1)
+      expect(offset).toBeDefined()
+      return metric.bottom + (offset ?? Number.NaN)
+    })
+    expect(workingBottoms).toEqual(Array.from({ length: workingSequence.length }, () => 250))
+    for (const frame of workingSequence) {
+      const center = legGapCenters.get(frame)
+      expect(center).toBeDefined()
+      expect(center).toBeGreaterThanOrEqual(139.5)
+      expect(center).toBeLessThanOrEqual(143.5)
+      const centerX = Math.round(center ?? Number.NaN)
+      const sourceY = (2 * 256) + 212
+      const sourceX = (frame * 256) + centerX
+      const sourceOffset = ((sourceY * png.width) + sourceX) * 4
+      expect(png.pixels[sourceOffset + 3], `frame ${frame} leg gap must remove painted pixels`).toBeGreaterThan(16)
+    }
+
+    for (const state of standingLegGapProfiles) {
+      for (const [frame, [topCenter, topY, bottomCenter]] of state.profiles) {
+        const sampleY = Math.round(topY + ((230 - topY) * 0.55))
+        const progress = (sampleY - topY) / (256 - topY)
+        const sampleX = Math.round(topCenter + ((bottomCenter - topCenter) * progress))
+        const sourceOffset = ((((state.row * 256) + sampleY) * png.width) + (frame * 256) + sampleX) * 4
+        const sourcePixel = png.pixels.subarray(sourceOffset, sourceOffset + 4)
+        expect(sourcePixel[3], `${state.state} frame ${frame} gap must cover painted source pixels`).toBeGreaterThan(16)
+        expect(
+          Math.min(sourcePixel[0] ?? 0, sourcePixel[1] ?? 0, sourcePixel[2] ?? 0),
+          `${state.state} frame ${frame} gap must follow the pale background wedge`,
+        ).toBeGreaterThan(145)
+      }
+    }
+
+    const blockedMetrics = playbackMetrics[5]?.metrics ?? []
+    const blockedHeights = blockedMetrics.map(metric => metric.height)
+    expect(Math.max(...blockedHeights) - Math.min(...blockedHeights)).toBeLessThanOrEqual(1)
+    const blockedBottoms = blockedMetrics.map((metric, index) => {
+      const offset = blockedOffsets.get(blockedSequence[index] ?? -1)
+      expect(offset).toBeDefined()
+      return metric.bottom + (offset ?? Number.NaN)
+    })
+    expect(blockedBottoms).toEqual(Array.from({ length: blockedSequence.length }, () => 251))
   })
 
   it.runIf(process.platform === 'win32')('keeps 0% at source level and applies real 100% PCM gain', async () => {
