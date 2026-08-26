@@ -297,28 +297,36 @@ export function PluginMarket({ t }: PluginMarketProps): ReactNode {
   return (
     <section className={css.market} aria-busy={state.status === 'loading'}>
       <header className={css.header}>
-        <div>
+        <div className={css.headerIntro}>
           <h3>{t('title')}</h3>
           <p>{t('subtitle')}</p>
         </div>
         <div className={css.headerActions}>
-          {state.status === 'ready' ? (
-            <div className={css.meta}>
-            <span>{t('profile')}: <strong>{state.catalog.profile}</strong></span>
-            <span>{t('indexUpdated')}: <strong><time dateTime={state.catalog.fetchedAt}>
-              {new Date(state.catalog.fetchedAt).toLocaleString()}
-            </time></strong></span>
-            {state.catalog.rateLimitRemaining === null ? null : (
-              <span>{t('rateLimit')}: <strong>{state.catalog.rateLimitRemaining}</strong></span>
-            )}
-            </div>
-          ) : null}
           <button ref={configureButton} className={css.configure} type="button" onClick={() => { void openConfig() }}>{t('configure')}</button>
-          <button className={css.configure} type="button" disabled={syncing} onClick={() => { void sync() }}>
+          <button className={css.configure} data-primary="true" type="button" disabled={syncing} onClick={() => { void sync() }}>
             {syncing ? t('syncing') : t('sync')}
           </button>
         </div>
       </header>
+
+      {state.status === 'ready' ? (
+        <dl className={css.meta}>
+          <div className={css.metaItem}>
+            <dt>{t('profile')}</dt>
+            <dd>{state.catalog.profile}</dd>
+          </div>
+          <div className={css.metaItem}>
+            <dt>{t('indexUpdated')}</dt>
+            <dd><time dateTime={state.catalog.fetchedAt}>{new Date(state.catalog.fetchedAt).toLocaleString()}</time></dd>
+          </div>
+          {state.catalog.rateLimitRemaining === null ? null : (
+            <div className={css.metaItem}>
+              <dt>{t('rateLimit')}</dt>
+              <dd>{state.catalog.rateLimitRemaining}</dd>
+            </div>
+          )}
+        </dl>
+      ) : null}
 
       <div className={css.tabs} role="tablist" aria-label={t('tabsLabel')}>
         {tabs.map((tab, index) => {

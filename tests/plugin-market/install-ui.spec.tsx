@@ -151,8 +151,10 @@ describe('capability-aware install actions', () => {
 
     render(<PluginMarket t={t} />)
 
-    expect(await screen.findByText((_content, element) =>
-      element?.tagName === 'SPAN' && element.textContent?.startsWith('索引生成时间:') === true)).toBeTruthy()
+    expect(await screen.findByText('索引生成时间')).toBeTruthy()
+    expect(screen.getByText('安装目标').closest('dl')).toBe(screen.getByText('索引生成时间').closest('dl'))
+    expect(screen.getByRole('heading', { name: '插件社区' }).closest('header')
+      ?.contains(screen.getByRole('button', { name: '同步最新索引' }))).toBe(true)
     expect(screen.getByText(zh.indexStale)).toBeTruthy()
     expect(screen.getByRole('button', { name: '同步最新索引' })).toBeTruthy()
   })
