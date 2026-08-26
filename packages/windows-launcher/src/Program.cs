@@ -82,6 +82,7 @@ namespace DshEnhanced.WindowsLauncher
                 string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 bool complete = File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Command.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Supervisor.ps1"))
+                    && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.PluginManager.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.exe.config"))
                     && StartupRegistration.SelfTest();
                 File.WriteAllText(args[1], complete ? "SELF_TEST_OK" : "SELF_TEST_INCOMPLETE", new UTF8Encoding(false));
@@ -117,6 +118,7 @@ namespace DshEnhanced.WindowsLauncher
 
             bool startHidden = StartupRegistration.HasArgument(args, "--tray");
             bool startDshAfterLogin = StartupRegistration.HasArgument(args, StartupRegistration.StartDshArgument);
+            string readyFile = ArgumentValue(args, "--ready-file");
             bool created;
             using (Mutex mutex = new Mutex(true, MutexName, out created))
             {
@@ -125,7 +127,7 @@ namespace DshEnhanced.WindowsLauncher
                     SignalEvent(startDshAfterLogin ? StartDshEventName : ShowEventName);
                     return 0;
                 }
-                Application.Run(new LauncherApplicationContext(startHidden, startDshAfterLogin));
+                Application.Run(new LauncherApplicationContext(startHidden, startDshAfterLogin, readyFile));
             }
             return 0;
         }
@@ -152,6 +154,15 @@ namespace DshEnhanced.WindowsLauncher
             }
             catch (WaitHandleCannotBeOpenedException) { }
         }
+
+        private static string ArgumentValue(string[] args, string name)
+        {
+            for (int index = 0; index + 1 < args.Length; index++)
+            {
+                if (String.Equals(args[index], name, StringComparison.OrdinalIgnoreCase)) return args[index + 1];
+            }
+            return null;
+        }
     }
 
     internal sealed class LauncherApplicationContext : ApplicationContext
@@ -168,7 +179,7 @@ namespace DshEnhanced.WindowsLauncher
         private bool exiting;
         private int stopAndExitInProgress;
 
-        internal LauncherApplicationContext(bool startHidden, bool startDshAfterLogin)
+        internal LauncherApplicationContext(bool startHidden, bool startDshAfterLogin, string readyFile)
         {
             runtime = new LauncherRuntime();
             icon = LauncherIcon.Create();
@@ -211,6 +222,11 @@ namespace DshEnhanced.WindowsLauncher
                 tray.ShowBalloonTip(2200, "DeepSeek Harness", "Launcher 已就绪，将在 30 秒后启动 DSH Web。", ToolTipIcon.Info);
             else tray.ShowBalloonTip(1800, "DeepSeek Harness", "Launcher 已在托盘就绪。", ToolTipIcon.Info);
             if (startDshAfterLogin) ScheduleDelayedDsh();
+            if (!String.IsNullOrWhiteSpace(readyFile))
+            {
+                try { File.WriteAllText(readyFile, "READY", new UTF8Encoding(false)); }
+                catch (Exception error) { LauncherLog.Write("ready file failed: " + error.Message); }
+            }
         }
 
         private ContextMenuStrip BuildTrayMenu()
@@ -351,7 +367,7 @@ namespace DshEnhanced.WindowsLauncher
         }
     }
 
-    internal sealed class MainForm : Form
+    internal sealed partial class MainForm : Form
     {
         private readonly LauncherRuntime runtime;
         private Panel sidebar;
@@ -429,6 +445,7 @@ namespace DshEnhanced.WindowsLauncher
         internal MainForm(LauncherRuntime runtime, Icon icon)
         {
             this.runtime = runtime;
+            pluginRuntime = new PluginManagerRuntime();
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                 | ControlStyles.ResizeRedraw, true);
             UpdateStyles();
@@ -504,10 +521,15 @@ namespace DshEnhanced.WindowsLauncher
             sourcePage.Dock = DockStyle.Fill;
             sourcePage.BackColor = UiTheme.Background;
             sourcePage.AutoScroll = true;
+            pluginPage = new Panel();
+            pluginPage.Dock = DockStyle.Fill;
+            pluginPage.BackColor = UiTheme.Background;
+            pluginPage.AutoScroll = true;
             pageHost.Controls.Add(overviewPage);
             pageHost.Controls.Add(tasksPage);
             pageHost.Controls.Add(diagnosticsPage);
             pageHost.Controls.Add(sourcePage);
+            pageHost.Controls.Add(pluginPage);
 
             statusTitle = new Label();
             statusDetail = new Label();
@@ -535,6 +557,7 @@ namespace DshEnhanced.WindowsLauncher
             sourceOutput = new RichTextBox();
             buildDshButton = NewButton("拉取最新源码并构建", ModernButtonKind.Primary, 184);
             BuildSourcePage();
+            BuildPluginManagerPage();
 
             startButton.Click += delegate { RunOperation(runtime.StartWeb); };
             openButton.Click += delegate { RunOperation(runtime.OpenWeb); };
@@ -578,6 +601,7 @@ namespace DshEnhanced.WindowsLauncher
                 RefreshNow();
                 if (activePage == sourcePage || Interlocked.CompareExchange(ref buildInProgress, 0, 0) != 0)
                     RefreshSourceLog(true);
+                if (activePage == pluginPage || pendingPluginOperation != null) RefreshPluginOperation();
             };
             VisibleChanged += delegate
             {
@@ -599,6 +623,9 @@ namespace DshEnhanced.WindowsLauncher
                 pageHost.PerformLayout();
                 LayoutResponsivePages();
                 QueueResponsiveLayout();
+                // Warm the dynamic catalog in the background so opening the
+                // plugin page does not pay PowerShell and source-scan startup.
+                if (!captureMode && pluginSnapshot == null) RefreshPluginManager(true);
             };
             PerformLayout();
             LayoutResponsivePages();
@@ -690,14 +717,17 @@ namespace DshEnhanced.WindowsLauncher
             tasksNav = NewNav("任务与 Profile", 172, NavGlyph.Tasks);
             diagnosticsNav = NewNav("日志与诊断", 222, NavGlyph.Diagnostics);
             sourceNav = NewNav("DSH 源码", 272, NavGlyph.Source);
+            pluginNav = NewNav("插件管理", 322, NavGlyph.Plugins);
             sidebar.Controls.Add(overviewNav);
             sidebar.Controls.Add(tasksNav);
             sidebar.Controls.Add(diagnosticsNav);
             sidebar.Controls.Add(sourceNav);
+            sidebar.Controls.Add(pluginNav);
             overviewNav.Click += delegate { ShowPage(overviewPage, overviewNav, "概览"); };
             tasksNav.Click += delegate { ShowPage(tasksPage, tasksNav, "任务与 Profile"); };
             diagnosticsNav.Click += delegate { ShowPage(diagnosticsPage, diagnosticsNav, "日志与诊断"); };
             sourceNav.Click += delegate { ShowPage(sourcePage, sourceNav, "DSH 源码"); };
+            pluginNav.Click += delegate { ShowPage(pluginPage, pluginNav, "插件管理"); };
 
             sidebarVersion = new Label();
             sidebarVersion.Text = "LOCAL COMPANION  ·  v0.1.0";
@@ -906,6 +936,7 @@ namespace DshEnhanced.WindowsLauncher
             else if (activePage == tasksPage) LayoutTasks();
             else if (activePage == diagnosticsPage) LayoutDiagnostics();
             else if (activePage == sourcePage) LayoutSource();
+            else if (activePage == pluginPage) LayoutPluginManager();
         }
 
         private void QueueResponsiveLayout()
@@ -946,8 +977,14 @@ namespace DshEnhanced.WindowsLauncher
                 ? new Point(Math.Max(0, (sidebarWidth - brandMark.Width) / 2), Dip(26))
                 : new Point(Dip(24), Dip(26));
 
-            NavButton[] navigation = { overviewNav, tasksNav, diagnosticsNav, sourceNav };
-            foreach (NavButton button in navigation) button.Width = sidebarWidth;
+            NavButton[] navigation = { overviewNav, tasksNav, diagnosticsNav, sourceNav, pluginNav };
+            int navigationTop = Math.Min(Dip(122), Math.Max(Dip(92), sidebar.ClientSize.Height / 4));
+            int navigationBottom = Math.Max(navigationTop + Dip(220), sidebar.ClientSize.Height - Dip(18));
+            int navigationStep = Math.Min(Dip(50), Math.Max(Dip(44),
+                (navigationBottom - navigationTop) / navigation.Length));
+            int navigationHeight = Math.Min(Dip(44), Math.Max(Dip(38), navigationStep - Dip(4)));
+            for (int index = 0; index < navigation.Length; index++)
+                SetBoundsIfChanged(navigation[index], 0, navigationTop + (index * navigationStep), sidebarWidth, navigationHeight);
             LayoutSidebarFooter(sidebar, compact);
         }
 
@@ -984,29 +1021,14 @@ namespace DshEnhanced.WindowsLauncher
             int settingsColumns = Math.Max(1, Math.Min(4, availableForSettings / Dip(165)));
             int settingsRows = (4 + settingsColumns - 1) / settingsColumns;
             int settingsHeight = Dip(92) + (settingsRows * Dip(70)) + Dip(10);
-            bool sideBySide = width >= Dip(1020);
-            int bottom;
-            if (sideBySide)
-            {
-                int gap = Dip(18);
-                int settingsWidth = Math.Max(Dip(680), (int)Math.Round(width * 0.64));
-                availableForSettings = Math.Max(Dip(120), settingsWidth - Dip(56));
-                settingsColumns = Math.Max(1, Math.Min(4, availableForSettings / Dip(165)));
-                settingsRows = (4 + settingsColumns - 1) / settingsColumns;
-                settingsHeight = Dip(92) + (settingsRows * Dip(70)) + Dip(10);
-                SetBoundsIfChanged(settingsCard, left, cardsTop, settingsWidth, settingsHeight);
-                SetBoundsIfChanged(pathCard, left + settingsWidth + gap, cardsTop,
-                    width - settingsWidth - gap, settingsHeight);
-                bottom = cardsTop + settingsHeight;
-            }
-            else
-            {
-                int pathHeight = Dip(112);
-                int gap = Dip(18);
-                SetBoundsIfChanged(settingsCard, left, cardsTop, width, settingsHeight);
-                SetBoundsIfChanged(pathCard, left, cardsTop + settingsHeight + gap, width, pathHeight);
-                bottom = cardsTop + settingsHeight + gap + pathHeight;
-            }
+            // Keep primary cards in the same vertical reading order at every window size.
+            // A wider viewport may give controls more room inside a card, but must not turn
+            // the page itself into a left-to-right dashboard.
+            int pathHeight = Dip(112);
+            int gap = Dip(18);
+            SetBoundsIfChanged(settingsCard, left, cardsTop, width, settingsHeight);
+            SetBoundsIfChanged(pathCard, left, cardsTop + settingsHeight + gap, width, pathHeight);
+            int bottom = cardsTop + settingsHeight + gap + pathHeight;
 
             LayoutCardHeader(settingsCard);
             LayoutCardHeader(pathCard);
@@ -1042,26 +1064,13 @@ namespace DshEnhanced.WindowsLauncher
             GetContentBounds(tasksPage, out left, out width);
             if (width < 1) return;
 
-            bool sideBySide = width >= Dip(1080);
             int gap = Dip(18);
-            int bottom;
-            if (sideBySide)
-            {
-                int taskWidth = (int)Math.Round((width - gap) * 0.66);
-                int cardHeight = Math.Min(Dip(450), Math.Max(Dip(390), tasksPage.ClientSize.Height - Dip(80)));
-                SetBoundsIfChanged(taskCard, left, 0, taskWidth, cardHeight);
-                SetBoundsIfChanged(profileCard, left + taskWidth + gap, 0, width - taskWidth - gap, Dip(212));
-                bottom = cardHeight;
-            }
-            else
-            {
-                bool stackEditors = width < Dip(680);
-                int taskHeight = Dip(stackEditors ? 600 : 344);
-                int profileHeight = width < Dip(480) ? Dip(204) : Dip(154);
-                SetBoundsIfChanged(taskCard, left, 0, width, taskHeight);
-                SetBoundsIfChanged(profileCard, left, taskHeight + gap, width, profileHeight);
-                bottom = taskHeight + gap + profileHeight;
-            }
+            bool stackEditors = width < Dip(680);
+            int taskHeight = Dip(stackEditors ? 600 : 344);
+            int profileHeight = width < Dip(480) ? Dip(204) : Dip(154);
+            SetBoundsIfChanged(taskCard, left, 0, width, taskHeight);
+            SetBoundsIfChanged(profileCard, left, taskHeight + gap, width, profileHeight);
+            int bottom = taskHeight + gap + profileHeight;
 
             LayoutCardHeader(taskCard);
             LayoutCardHeader(profileCard);
@@ -1089,22 +1098,14 @@ namespace DshEnhanced.WindowsLauncher
                 taskRunButton.Location = new Point(Dip(28), taskCard.Height - Dip(58));
             }
 
-            if (sideBySide)
-            {
-                SetBoundsIfChanged(profileInput, Dip(28), Dip(78), Math.Max(Dip(120), profileCard.Width - Dip(56)), Dip(42));
-                runProfileButton.Location = new Point(Dip(28), Dip(140));
-            }
-            else
-            {
-                bool stackProfile = profileCard.Width < Dip(480);
-                int inputWidth = stackProfile
-                    ? Math.Max(Dip(120), profileCard.Width - Dip(56))
-                    : Math.Min(Dip(320), Math.Max(Dip(180), profileCard.Width - Dip(220)));
-                SetBoundsIfChanged(profileInput, Dip(28), Dip(77), inputWidth, Dip(42));
-                runProfileButton.Location = stackProfile
-                    ? new Point(Dip(28), Dip(142))
-                    : new Point(Dip(44) + inputWidth, Dip(77));
-            }
+            bool stackProfile = profileCard.Width < Dip(480);
+            int inputWidth = stackProfile
+                ? Math.Max(Dip(120), profileCard.Width - Dip(56))
+                : Math.Min(Dip(320), Math.Max(Dip(180), profileCard.Width - Dip(220)));
+            SetBoundsIfChanged(profileInput, Dip(28), Dip(77), inputWidth, Dip(42));
+            runProfileButton.Location = stackProfile
+                ? new Point(Dip(28), Dip(142))
+                : new Point(Dip(44) + inputWidth, Dip(77));
             tasksPage.AutoScrollMinSize = new Size(0, bottom);
         }
 
@@ -1312,6 +1313,7 @@ namespace DshEnhanced.WindowsLauncher
             StartPosition = FormStartPosition.Manual;
             Location = new Point(-20000, -20000);
             bool stressResize = String.Equals(layout, "stress", StringComparison.OrdinalIgnoreCase);
+            bool pluginScrollStress = String.Equals(layout, "pluginstress", StringComparison.OrdinalIgnoreCase);
             bool firstShow = String.Equals(layout, "first", StringComparison.OrdinalIgnoreCase);
             bool simulated150 = String.Equals(layout, "scale150", StringComparison.OrdinalIgnoreCase);
             bool simulated200 = String.Equals(layout, "scale200", StringComparison.OrdinalIgnoreCase);
@@ -1324,6 +1326,7 @@ namespace DshEnhanced.WindowsLauncher
             }
             else if (String.Equals(layout, "compact", StringComparison.OrdinalIgnoreCase)) Size = new Size(820, 600);
             else if (String.Equals(layout, "wide", StringComparison.OrdinalIgnoreCase)) Size = new Size(1600, 900);
+            else if (pluginScrollStress) Size = new Size(1600, 900);
             Show();
             Application.DoEvents();
             if (firstShow)
@@ -1362,6 +1365,32 @@ namespace DshEnhanced.WindowsLauncher
                 ShowPage(sourcePage, sourceNav, "DSH 源码");
                 sourceNav.Focus();
             }
+            else if (!firstShow && String.Equals(page, "plugins", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowPage(pluginPage, pluginNav, "插件管理");
+                pluginNav.Focus();
+                DateTime pluginDeadline = DateTime.UtcNow.AddSeconds(12);
+                while (Interlocked.CompareExchange(ref pluginRefreshInProgress, 0, 0) != 0
+                    && DateTime.UtcNow < pluginDeadline)
+                {
+                    Application.DoEvents();
+                    Thread.Sleep(40);
+                }
+                if (pluginScrollStress)
+                {
+                    LayoutPluginManager();
+                    pluginPage.AutoScrollPosition = new Point(0, Dip(520));
+                    Application.DoEvents();
+                    Size[] pluginSizes = {
+                        new Size(1180, 760), new Size(1600, 900), new Size(1320, 800), new Size(1600, 900),
+                    };
+                    foreach (Size pluginSize in pluginSizes)
+                    {
+                        Size = pluginSize;
+                        Application.DoEvents();
+                    }
+                }
+            }
             else
             {
                 if (!firstShow) ShowPage(overviewPage, overviewNav, "概览");
@@ -1390,6 +1419,8 @@ namespace DshEnhanced.WindowsLauncher
         {
             if (activePage == overviewPage)
             {
+                if (pathCard.Top <= settingsCard.Bottom)
+                    throw new InvalidOperationException("Overview cards must remain vertically stacked.");
                 EnsureContained(overviewActions, startButton, "overview start action");
                 EnsureContained(overviewActions, openButton, "overview open action");
                 EnsureContained(overviewActions, restartButton, "overview restart action");
@@ -1402,6 +1433,8 @@ namespace DshEnhanced.WindowsLauncher
             }
             else if (activePage == tasksPage)
             {
+                if (profileCard.Top <= taskCard.Bottom)
+                    throw new InvalidOperationException("Task cards must remain vertically stacked.");
                 EnsureContained(taskCard, taskInputShell, "task input");
                 EnsureContained(taskCard, taskOutputShell, "task output");
                 EnsureContained(taskCard, taskRunButton, "task action");
@@ -1419,6 +1452,15 @@ namespace DshEnhanced.WindowsLauncher
                 EnsureContained(sourceCard, sourcePathLabel, "DSH source path");
                 EnsureContained(sourceCard, buildDshButton, "DSH source action");
                 EnsureContained(sourceCard, sourceLogShell, "DSH source log");
+            }
+            else if (activePage == pluginPage)
+            {
+                if (pluginSourceCard.Top != pluginPage.AutoScrollPosition.Y)
+                    throw new InvalidOperationException("Plugin scroll offset was not preserved during responsive layout.");
+                EnsureContained(pluginSourceCard, pluginSourcePath, "plugin source path");
+                EnsureContained(pluginFeaturesCard, pluginProfileInput, "plugin profile selector");
+                EnsureContained(pluginFeaturesCard, pluginFeatureRows, "plugin feature list");
+                EnsureContained(pluginPlanShell, pluginApplyButton, "plugin apply action");
             }
         }
 
@@ -1591,22 +1633,26 @@ namespace DshEnhanced.WindowsLauncher
             tasksPage.Visible = page == tasksPage;
             diagnosticsPage.Visible = page == diagnosticsPage;
             sourcePage.Visible = page == sourcePage;
+            pluginPage.Visible = page == pluginPage;
             overviewNav.Selected = nav == overviewNav;
             tasksNav.Selected = nav == tasksNav;
             diagnosticsNav.Selected = nav == diagnosticsNav;
             sourceNav.Selected = nav == sourceNav;
+            pluginNav.Selected = nav == pluginNav;
             page.BringToFront();
             pageTitle.Text = title;
             if (page == overviewPage) pageSubtitle.Text = "本机 DSH 服务与任务控制中心";
             else if (page == tasksPage) pageSubtitle.Text = "安全运行单次任务或启动独立 Profile";
             else if (page == diagnosticsPage) pageSubtitle.Text = "查看运行记录并检查本机环境";
-            else pageSubtitle.Text = "拉取最新代码并构建安装时确认的本地 checkout";
+            else if (page == sourcePage) pageSubtitle.Text = "拉取最新代码并构建安装时确认的本地 checkout";
+            else pageSubtitle.Text = "按 Profile 管理本项目源码、独立功能包与 Launcher 更新";
             if (page == diagnosticsPage) diagnosticsOutput.Text = runtime.RecentLogs();
             if (page == sourcePage)
             {
                 UpdateSourcePath();
                 RefreshSourceLog(true);
             }
+            if (page == pluginPage) RefreshPluginManager(false);
             LayoutResponsivePages();
         }
 

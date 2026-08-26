@@ -24,7 +24,23 @@
       ]
     }
   },
-  "dshEnhanced": { "feature": "model-input-types", "legacyPackages": [] },
+  "dshEnhanced": {
+    "feature": "model-input-types",
+    "kind": "bundle",
+    "legacyPackages": [],
+    "manager": {
+      "scope": "profile",
+      "required": false,
+      "defaultSelected": true,
+      "order": 30,
+      "category": "model",
+      "name": { "zh-CN": "模型输入类型", "en-US": "Model Input Types" },
+      "description": {
+        "zh-CN": "配置模型请求支持的输入类型。",
+        "en-US": "Configure the input types supported by model requests."
+      }
+    }
+  },
   "files": ["lib/", "cordis.patch.yml"],
   "scripts": { "build": "node ../../build.mjs --feature model-input-types", "prepare": "npm run build" },
   "license": "MIT",

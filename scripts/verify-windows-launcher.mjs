@@ -115,6 +115,30 @@ try {
     DshSourceDirectory: dshSource,
     WorkingDirectory: profileHome,
   }), 'utf8')
+  await writeFile(resolve(dataRoot, 'install-state.json'), JSON.stringify({
+    schemaVersion: 1,
+    projectSource: {
+      mode: 'git-checkout',
+      boundPath: root,
+      repositoryUrl: 'https://github.com/sky-unicorn/dsh-enhanced-plugins.git',
+      ref: 'master',
+      lastSuccessfulRevision: 'fixture',
+      lastCheckedRevision: 'fixture',
+    },
+    profiles: {
+      web: {
+        managed: true,
+        desiredFeatures: [
+          'edit-last-message', 'mcp-server-manager', 'model-input-types',
+          'notification', 'plugin-market', 'sub-agent',
+        ],
+        knownFeatures: [
+          'edit-last-message', 'mcp-server-manager', 'model-input-types',
+          'notification', 'plugin-market', 'sub-agent',
+        ],
+      },
+    },
+  }), 'utf8')
 
   const selfTest = resolve(temporary, 'self-test.txt')
   const self = run(executable, ['--self-test', selfTest], { env: environment })
@@ -274,11 +298,19 @@ try {
     ['compact-tasks', 'tasks', 'compact', 820, 600],
     ['compact-diagnostics', 'diagnostics', 'compact', 820, 600],
     ['compact-source', 'source', 'compact', 820, 600],
+    ['compact-plugins', 'plugins', 'compact', 820, 600],
+    ['wide-tasks', 'tasks', 'wide', 1600, 900],
+    ['wide-diagnostics', 'diagnostics', 'wide', 1600, 900],
+    ['wide-source', 'source', 'wide', 1600, 900],
+    ['wide-plugins', 'plugins', 'wide', 1600, 900],
+    ['resize-scroll-plugins', 'plugins', 'pluginstress', 1600, 900],
     ['scale-150-overview', 'overview', 'scale150', 1366, 720],
     ['scale-200-overview', 'overview', 'scale200', 1366, 720],
     ['scale-200-tasks', 'tasks', 'scale200', 1366, 720],
     ['scale-200-diagnostics', 'diagnostics', 'scale200', 1366, 720],
     ['scale-200-source', 'source', 'scale200', 1366, 720],
+    ['scale-150-plugins', 'plugins', 'scale150', 1366, 720],
+    ['scale-200-plugins', 'plugins', 'scale200', 1366, 720],
   ]) {
     const responsiveScreenshot = resolve(temporary, `launcher-${name}.png`)
     const responsiveCapture = run(executable, [

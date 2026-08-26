@@ -8,11 +8,24 @@
     "kind": "companion",
     "platforms": ["win32"],
     "legacyPackages": [],
+    "manager": {
+      "scope": "global",
+      "required": true,
+      "defaultSelected": true,
+      "order": 0,
+      "category": "system",
+      "name": { "zh-CN": "Windows Launcher", "en-US": "Windows Launcher" },
+      "description": {
+        "zh-CN": "本机 DSH 控制中心与本项目插件管理器。",
+        "en-US": "Local DSH control center and project plugin manager."
+      }
+    },
     "runtimeEntries": [
       "./lib/DSH-Launcher.exe",
       "./lib/DSH-Launcher.exe.config",
       "./lib/DSH-Launcher.Supervisor.ps1",
-      "./lib/DSH-Launcher.Command.ps1"
+      "./lib/DSH-Launcher.Command.ps1",
+      "./lib/DSH-Launcher.PluginManager.ps1"
     ]
   },
   "files": ["lib/"],

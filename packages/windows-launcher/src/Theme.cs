@@ -235,7 +235,7 @@ namespace DshEnhanced.WindowsLauncher
         }
     }
 
-    internal enum NavGlyph { Overview, Tasks, Diagnostics, Source }
+    internal enum NavGlyph { Overview, Tasks, Diagnostics, Source, Plugins }
 
     internal sealed class NavButton : Control
     {
@@ -329,7 +329,7 @@ namespace DshEnhanced.WindowsLauncher
                     graphics.DrawLine(pen, box.X + (7 * u), box.Y + (5 * u), box.X + (7 * u), box.Y + (10 * u));
                     graphics.DrawLine(pen, box.X + (5 * u), box.Y + (8 * u), box.X + (10 * u), box.Y + (8 * u));
                 }
-                else
+                else if (Glyph == NavGlyph.Source)
                 {
                     graphics.DrawEllipse(pen, box.X + (2 * u), box.Y + u, 5 * u, 5 * u);
                     graphics.DrawEllipse(pen, box.X + (2 * u), box.Y + (12 * u), 5 * u, 5 * u);
@@ -338,6 +338,15 @@ namespace DshEnhanced.WindowsLauncher
                     graphics.DrawBezier(pen, box.X + (4.5f * u), box.Y + (10 * u),
                         box.X + (6 * u), box.Y + (6 * u), box.X + (11 * u), box.Y + (7 * u),
                         box.X + (14.5f * u), box.Y + (6 * u));
+                }
+                else
+                {
+                    graphics.DrawRectangle(pen, box.X + (2 * u), box.Y + (2 * u), 6 * u, 6 * u);
+                    graphics.DrawRectangle(pen, box.X + (10 * u), box.Y + (2 * u), 6 * u, 6 * u);
+                    graphics.DrawRectangle(pen, box.X + (2 * u), box.Y + (10 * u), 6 * u, 6 * u);
+                    graphics.DrawRectangle(pen, box.X + (10 * u), box.Y + (10 * u), 6 * u, 6 * u);
+                    graphics.DrawLine(pen, box.X + (8 * u), box.Y + (5 * u), box.X + (10 * u), box.Y + (5 * u));
+                    graphics.DrawLine(pen, box.X + (5 * u), box.Y + (8 * u), box.X + (5 * u), box.Y + (10 * u));
                 }
             }
         }
@@ -663,7 +672,7 @@ namespace DshEnhanced.WindowsLauncher
                 Math.Max(1, Width - UiTheme.Dip(this, 4)), Math.Max(1, Height - UiTheme.Dip(this, 8)));
             Color trackColor = Checked ? UiTheme.Primary : Color.FromArgb(196, 205, 219);
             if (hovering) trackColor = Checked ? UiTheme.PrimaryHover : Color.FromArgb(178, 189, 207);
-            if (!Enabled) trackColor = Color.FromArgb(220, 225, 234);
+            if (!Enabled) trackColor = Checked ? Color.FromArgb(145, 162, 247) : Color.FromArgb(220, 225, 234);
             using (GraphicsPath path = UiTheme.RoundedRectangle(track, track.Height / 2))
             using (SolidBrush brush = new SolidBrush(trackColor)) e.Graphics.FillPath(brush, path);
             int thumb = Math.Max(UiTheme.Dip(this, 8), Height - UiTheme.Dip(this, 12));

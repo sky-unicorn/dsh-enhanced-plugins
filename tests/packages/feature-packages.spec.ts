@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -18,6 +19,15 @@ interface FeatureManifest {
     platforms?: string[]
     runtimeEntries?: string[]
     legacyPackages: string[]
+    manager: {
+      scope: 'profile' | 'global'
+      required: boolean
+      defaultSelected: boolean
+      order: number
+      category: string
+      name: { 'zh-CN': string, 'en-US': string }
+      description: { 'zh-CN': string, 'en-US': string }
+    }
   }
   files: string[]
   scripts: { build: string, prepare: string }
@@ -66,6 +76,10 @@ describe('selective feature packages', () => {
       expect(manifest.files).toContain('cordis.patch.yml')
       expect(manifest.scripts.prepare).toBe('npm run build')
       expect(manifest.scripts.build).toContain(`--feature ${manifest.dshEnhanced.feature}`)
+      expect(manifest.dshEnhanced.manager.scope).toBe('profile')
+      expect(manifest.dshEnhanced.manager.required).toBe(false)
+      expect(manifest.dshEnhanced.manager.defaultSelected).toBe(true)
+      expect(manifest.dshEnhanced.manager.name['zh-CN']).not.toBe('')
       expect(patch).toContain(`name: '${manifest.name}`)
       const ids = [...(patch ?? '').matchAll(/^\s+- id: (.+)$/gm)].map(match => match[1])
       expect(ids).toEqual(expectedRows[manifest.dshEnhanced.feature])
@@ -82,7 +96,11 @@ describe('selective feature packages', () => {
       './lib/DSH-Launcher.exe.config',
       './lib/DSH-Launcher.Supervisor.ps1',
       './lib/DSH-Launcher.Command.ps1',
+      './lib/DSH-Launcher.PluginManager.ps1',
     ])
+    expect(launcher?.dshEnhanced.manager).toMatchObject({
+      scope: 'global', required: true, defaultSelected: true, order: 0,
+    })
     expect(launcher?.scripts.build).toBe('node ./build.mjs')
   })
 
@@ -100,7 +118,106 @@ describe('selective feature packages', () => {
       '-Features', 'notification,mcp-server-manager', '-WhatIf',
     ], { cwd: root, encoding: 'utf8' })
     expect(selected.status, selected.stderr).toBe(0)
-    expect(selected.stdout).toContain("feature set 'mcp-server-manager,notification'")
+    expect(selected.stdout).toContain("feature set 'mcp-server-manager,notification,windows-launcher'")
+
+    const none = spawnSync('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+      '-Features', 'none', '-WhatIf',
+    ], { cwd: root, encoding: 'utf8' })
+    expect(none.status, none.stderr).toBe(0)
+    expect(none.stdout).toContain("feature set 'none (+required windows-launcher)'")
+
+    const managerDirectory = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-manager-catalog-'))
+    try {
+      const managerSource = readFileSync(resolve(root,
+        'packages/windows-launcher/src/DSH-Launcher.PluginManager.ps1'), 'utf8')
+      const managerScript = resolve(managerDirectory, 'DSH-Launcher.PluginManager.ps1')
+      const catalogPath = resolve(managerDirectory, 'catalog.json')
+      // Windows PowerShell 5.1 requires a BOM to parse localized source text.
+      writeFileSync(managerScript, `\uFEFF${managerSource}`, 'utf8')
+      const machineCatalog = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'Catalog', '-RepositoryRoot', root, '-OutputPath', catalogPath,
+      ], { cwd: root, encoding: 'utf8' })
+      expect(machineCatalog.status, `${machineCatalog.stdout}\n${machineCatalog.stderr}`).toBe(0)
+      const catalog = JSON.parse(readFileSync(catalogPath, 'utf8')) as {
+        protocolVersion: number
+        sourceRevision: string
+        features: Array<{ id: string, required: boolean, scope: string }>
+      }
+      expect(catalog.protocolVersion).toBe(1)
+      expect(catalog.features.map(feature => feature.id).sort()).toEqual(expectedFeatures)
+      expect(catalog.features.find(feature => feature.id === 'windows-launcher')).toMatchObject({
+        required: true, scope: 'global',
+      })
+
+      const planRequestPath = resolve(managerDirectory, 'request.json')
+      const planPath = resolve(managerDirectory, 'plan.json')
+      writeFileSync(planRequestPath, JSON.stringify({
+        requestId: '11111111-1111-1111-1111-111111111111',
+        profile: 'web',
+        desiredFeatures: ['notification'],
+        updateSource: false,
+      }), 'utf8')
+      const machinePlan = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'Plan', '-RepositoryRoot', root,
+        '-Profile', 'web', '-RequestPath', planRequestPath, '-OutputPath', planPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(managerDirectory, 'launcher'),
+          DSH_HOME: resolve(managerDirectory, 'dsh-home'),
+        },
+      })
+      expect(machinePlan.status, `${machinePlan.stdout}\n${machinePlan.stderr}`).toBe(0)
+      const plan = JSON.parse(readFileSync(planPath, 'utf8')) as {
+        launcher: { required: boolean, action: string }
+        profile: { install: string[], update: string[], remove: string[] }
+      }
+      expect(plan.launcher.required).toBe(true)
+      expect(plan.profile.install).toEqual(['notification'])
+      expect(plan.profile.update).toEqual([])
+      expect(plan.profile.remove).toEqual([])
+
+      const launcherRoot = resolve(managerDirectory, 'launcher')
+      const dshHome = resolve(managerDirectory, 'dsh-home')
+      mkdirSync(resolve(launcherRoot), { recursive: true })
+      mkdirSync(resolve(dshHome, 'profiles/web'), { recursive: true })
+      writeFileSync(resolve(dshHome, 'profiles/web/package.json'), JSON.stringify({
+        dependencies: { 'dsh-enhanced-notification': '0.1.0' },
+      }), 'utf8')
+      writeFileSync(resolve(launcherRoot, 'install-state.json'), JSON.stringify({
+        schemaVersion: 1,
+        profiles: {
+          web: {
+            managed: true,
+            desiredFeatures: ['notification'],
+            knownFeatures: expectedFeatures,
+            lastAppliedRevision: catalog.sourceRevision,
+          },
+        },
+      }), 'utf8')
+      const noChangePlanPath = resolve(managerDirectory, 'no-change-plan.json')
+      const noChangePlan = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'Plan', '-RepositoryRoot', root,
+        '-Profile', 'web', '-RequestPath', planRequestPath, '-OutputPath', noChangePlanPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, DEEPSEEK_HARNESS_LAUNCHER_HOME: launcherRoot, DSH_HOME: dshHome },
+      })
+      expect(noChangePlan.status, `${noChangePlan.stdout}\n${noChangePlan.stderr}`).toBe(0)
+      const unchanged = JSON.parse(readFileSync(noChangePlanPath, 'utf8')) as {
+        profile: { install: string[], update: string[], remove: string[] }
+      }
+      expect(unchanged.profile).toMatchObject({ install: [], update: [], remove: [] })
+    } finally {
+      rmSync(managerDirectory, { recursive: true, force: true })
+    }
 
     const retired = spawnSync('powershell.exe', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
@@ -109,7 +226,51 @@ describe('selective feature packages', () => {
     expect(retired.status).not.toBe(0)
     expect(`${retired.stdout}\n${retired.stderr}`).toContain("Feature 'referenced-file' is retired and cannot be installed")
     expect(`${retired.stdout}\n${retired.stderr}`).toContain('Official DSH now supports @ workspace file references')
-  }, 10_000)
+  }, 20_000)
+
+  it.runIf(process.platform === 'win32')('imports a manual source ZIP as a validated immutable snapshot', () => {
+    const managerDirectory = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-manager-import-'))
+    try {
+      const archivePath = resolve(managerDirectory, 'source.zip')
+      const archived = spawnSync('tar.exe', [
+        '-a', '-cf', archivePath, '--exclude=.git', '--exclude=node_modules',
+        '--exclude=lib', '--exclude=*/lib', '--exclude=.verify-*', '.',
+      ], { cwd: root, encoding: 'utf8' })
+      expect(archived.status, `${archived.stdout}\n${archived.stderr}`).toBe(0)
+
+      const managerSource = readFileSync(resolve(root,
+        'packages/windows-launcher/src/DSH-Launcher.PluginManager.ps1'), 'utf8')
+      const managerScript = resolve(managerDirectory, 'DSH-Launcher.PluginManager.ps1')
+      const outputPath = resolve(managerDirectory, 'import.json')
+      const launcherHome = resolve(managerDirectory, 'launcher')
+      writeFileSync(managerScript, `\uFEFF${managerSource}`, 'utf8')
+      const imported = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'ImportZip', '-RepositoryRoot', archivePath,
+        '-OutputPath', outputPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DEEPSEEK_HARNESS_LAUNCHER_HOME: launcherHome,
+          DSH_HOME: resolve(managerDirectory, 'dsh-home'),
+        },
+      })
+      expect(imported.status, `${imported.stdout}\n${imported.stderr}`).toBe(0)
+      const snapshot = JSON.parse(readFileSync(outputPath, 'utf8')) as {
+        success: boolean
+        source: { path: string, revision: string }
+        features: Array<{ id: string }>
+      }
+      expect(snapshot.success).toBe(true)
+      expect(snapshot.source.revision).toMatch(/^local-[0-9a-f]{64}$/)
+      expect(snapshot.source.path.startsWith(resolve(launcherHome, 'sources'))).toBe(true)
+      expect(snapshot.features.map(feature => feature.id).sort()).toEqual(expectedFeatures)
+    } finally {
+      rmSync(managerDirectory, { recursive: true, force: true })
+    }
+  }, 30_000)
 
   it('keeps the Windows companion outside Cordis and avoids port-owner termination', () => {
     const launcherRoot = resolve(packagesRoot, 'windows-launcher')
@@ -123,6 +284,8 @@ describe('selective feature packages', () => {
     const command = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.Command.ps1'), 'utf8')
     const supervisor = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.Supervisor.ps1'), 'utf8')
     const installer = readFileSync(resolve(root, 'scripts', 'migrate-to-enhanced-plugin.ps1'), 'utf8')
+    const manager = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.PluginManager.ps1'), 'utf8')
+    const pluginUi = readFileSync(resolve(launcherRoot, 'src', 'PluginManagement.cs'), 'utf8')
 
     expect(runtime).not.toContain('cmd.exe')
     expect(runtime).not.toContain('Get-NetTCPConnection')
@@ -140,7 +303,11 @@ describe('selective feature packages', () => {
     expect(program).toContain('if (activePage == overviewPage) LayoutOverview();')
     expect(program).not.toContain('if (overviewPage.Visible) LayoutOverview();')
     expect(program).toContain('The overview page did not complete its first-show layout.')
-    expect(program).toContain('width >= Dip(1020)')
+    expect(program).not.toContain('bool sideBySide = width >=')
+    expect(program).toContain('SetBoundsIfChanged(pathCard, left, cardsTop + settingsHeight + gap, width, pathHeight);')
+    expect(program).toContain('SetBoundsIfChanged(profileCard, left, taskHeight + gap, width, profileHeight);')
+    expect(program).toContain('Overview cards must remain vertically stacked.')
+    expect(program).toContain('Task cards must remain vertically stacked.')
     expect(program).toContain('ClientSize.Width < Dip(760)')
     expect(program).toContain('ApplyDisplayConstraints')
     expect(program).toContain('DeviceDpi / 96f')
@@ -158,6 +325,8 @@ describe('selective feature packages', () => {
     expect(program).toContain('LoginStartupMode.LauncherOnly')
     expect(program).toContain('LoginStartupMode.LauncherAndDsh')
     expect(program).toContain('NewNav("DSH 源码", 272, NavGlyph.Source)')
+    expect(program).toContain('NewNav("插件管理", 322, NavGlyph.Plugins)')
+    expect(program).toContain('LayoutPluginManager()')
     expect(program).toContain('NewButton("拉取最新源码并构建"')
     expect(program).toContain('MessageBox.Show(this, confirmation, "更新并构建 DSH"')
     expect(program).toContain('bool updateSource = runtime.IsGitAvailable()')
@@ -171,6 +340,7 @@ describe('selective feature packages', () => {
     expect(whale).toContain('official DeepSeek whale silhouette')
     expect(build).toContain('/win32icon:')
     expect(build).toContain('/win32manifest:')
+    expect(build).toContain('`\\uFEFF${content}`')
     expect(appConfig).toContain('DpiAwareness" value="PerMonitorV2')
     expect(appManifest).toContain('PerMonitorV2,PerMonitor')
     expect(command).toContain('& $Command @Arguments')
@@ -200,7 +370,43 @@ describe('selective feature packages', () => {
     expect(installer).toContain('TSX_TSCONFIG_PATH')
     expect(installer).toContain('DshSourceDirectory')
     expect(installer).toContain("' --tray --start-dsh'")
-    expect(installer).toContain('Preserved the user-configured Launcher DSH command')
+    expect(installer).toContain('Save-LauncherInstallState')
+    expect(installer).toContain('[AllowEmptyCollection()][string[]] $DesiredFeatures')
+    expect(installer).toContain("Feature 'none'")
+    expect(installer).toContain('npm run check')
+    expect(manager).toContain("[ValidateSet('Catalog', 'Snapshot', 'CheckUpdate', 'Bind', 'ImportZip', 'Plan', 'Apply')]")
+    expect(manager).toContain("'Local\\DSH.Enhanced.WindowsLauncher.PluginManagement'")
+    expect(manager).toContain('Expand-SafeZip')
+    expect(manager).toContain("@('pull', '--ff-only')")
+    expect(manager).toContain(".dsh-enhanced-source.json")
+    expect(manager).toContain('Write-SourceRevisionMarker')
+    expect(manager).toContain('Import-ManualSourceZip')
+    expect(manager).toContain('New-BuildWorkspace')
+    expect(installer).toContain('$SkipLauncherInstall')
+    expect(installer).toContain('[switch] $RestartLauncherAfterUpdate')
+    expect(installer).toContain('if ($launcherChanged -and $RestartAfterUpdate)')
+    expect(installer).toContain('-RestartAfterUpdate:$RestartLauncherAfterUpdate')
+    expect(manager).toContain("$installerArguments += '-RestartLauncherAfterUpdate'")
+    expect(pluginUi).toContain('class PluginFeatureRow')
+    expect(pluginUi).toContain('desiredFeatures = desired.Distinct')
+    expect(pluginUi).toContain('File.Copy(ScriptPath, coordinatorPath, true)')
+    expect(pluginUi).toContain('LatestPendingOperation')
+    expect(pluginUi).toContain('CapturePluginSelections')
+    expect(pluginUi).toContain('pluginSelections[feature.id] = selected')
+    expect(pluginUi).toContain('NewButton("确认并应用"')
+    expect(pluginUi).toContain('pluginPlanShell.Controls.Add(pluginApplyButton)')
+    expect(pluginUi).toContain('DateTime.UtcNow - pluginSnapshotLoadedAtUtc < TimeSpan.FromSeconds(30)')
+    expect(pluginUi).toContain('pluginRows.TryGetValue(feature.id, out row)')
+    expect(pluginUi).not.toContain('pluginFeatureRows.AutoScroll = true')
+    expect(pluginUi).not.toContain('pluginGlobalCard')
+    expect(manager).toContain('if (-not $manifestInventoryAvailable')
+    expect(manager).toContain("$ErrorActionPreference = 'Continue'")
+    expect(manager).toContain("lastAppliedRevision = [string](Get-OptionalProperty $profileState 'lastAppliedRevision' '')")
+    expect(manager).toContain("Invoke-LoggedCommand $npm.Source @('run', 'build') $source $logPath 'npm run build'")
+    expect(manager).not.toContain("Invoke-LoggedCommand $npm.Source @('run', 'check')")
+    expect(pluginUi).toContain('PluginPlanHasWork(plan)')
+    expect(pluginUi).toContain('当前已是目标状态，无需再次构建或应用。')
+    expect(pluginUi).not.toContain('edit-last-message')
   })
 
   it('keeps retired package names as migration metadata without publishing the feature', () => {

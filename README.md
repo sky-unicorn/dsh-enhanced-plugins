@@ -24,7 +24,7 @@ The installer only needs the stable “feature ID.” Every feature also has a s
 | [Edit last message](#6-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
 | [Product subagents](#7-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
 
-The aggregate package is `dsh-enhanced-plugins`. With no feature selection, the installer composes all seven entries above; with a selection, it installs only the matching packages or companion.
+The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed installs now express “all” as every independent Profile package plus the required global Launcher, so any one Profile feature can later be removed without changing the others.
 
 ## Quick start
 
@@ -58,7 +58,7 @@ When both repositories share a parent directory, run this from the root of this 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-Omitting `-Features`, or passing `-Features all`, installs the six Cordis enhancements and Windows Launcher. The launcher is deployed to `%LOCALAPPDATA%\DeepSeekHarness\Launcher` and creates a Start menu shortcut. Add `-CreateLauncherDesktopShortcut` if you also want a desktop shortcut.
+Omitting `-Features`, or passing `-Features all`, installs the six **independent** Cordis packages and the required Windows Launcher; it no longer uses the root aggregate package to represent “all.” The launcher is deployed to `%LOCALAPPDATA%\DeepSeekHarness\Launcher` and creates a Start menu shortcut. Add `-CreateLauncherDesktopShortcut` if you also want a desktop shortcut. Running the installer directly only installs or updates the program files; it does not start or open Launcher. An update initiated inside Launcher still performs the required version restart and readiness check.
 
 If the DSH checkout is not a sibling, provide its location explicitly:
 
@@ -90,12 +90,25 @@ Common combinations can replace the `-Features` value in that command:
 | Agent and model enhancements | `mcp-server-manager,model-input-types,edit-last-message,sub-agent` |
 | Plugin discovery and integration management | `plugin-market,mcp-server-manager` |
 
-`-Features` is not an additive list. It describes the **final enhanced feature set** that the target profile and machine should retain. The installer:
+`-Features` is not an additive list. It describes the **final project feature set** that the target Profile should retain. Windows Launcher is a required global component: it is added by the backend, is not written in the list, and cannot be removed through feature selection. `-Features none` removes this project's Profile packages while keeping Launcher. The installer:
 
 1. Installs dependencies and builds every selected feature.
 2. Installs and verifies that every selected bundle or companion loads.
 3. Only then removes the aggregate package, unselected sibling features, and declared legacy conflicts.
 4. Detects and cleans up the retired file-reference plugin.
+
+### Launcher plugin management
+
+The source installer records the DSH checkout, this repository's source path, Git remote/ref, source revision, and each managed Profile's desired set in `%LOCALAPPDATA%\DeepSeekHarness\Launcher\install-state.json`. The control center's **Plugin Management** page then provides:
+
+- a dynamic feature catalog generated from `packages/*/package.json`, so normal new features do not require Launcher changes;
+- first-use default selection, per-Profile desired state, individual install/removal, and aggregate-package migration;
+- safe Git `fetch`/`pull --ff-only`, or an exact-commit source ZIP when Git is unavailable; an extracted source directory or manual source ZIP can be bound when the network is unavailable;
+- `npm ci`, a production `npm run build`, and runtime-entry validation in a per-request isolated worktree only when the source revision or desired feature set changed; repository-wide development typechecks remain a source-checkout concern so sibling DSH type paths do not block an isolated install; native stderr warnings remain in the log while failure is determined by the real process exit code; Launcher-owned DSH is stopped only after these checks pass;
+- an external coordinator that switches Launcher versions only when the executable hash changes, waits for readiness, rolls back failures, and restores DSH when appropriate;
+- recovery of a still-running or interrupted coordinator after Launcher restarts, plus preservation and partial reconstruction when install state is damaged.
+
+The first version supports only a local DSH source checkout and source installs of this repository. It does not support npx, a global `dsh`, npm-published packages, or GitHub Releases. A dirty, ahead, or diverged Git checkout is never reset, rebased, or overwritten.
 
 If a prerequisite step fails, the installer does not dismantle the previously working combination. Restart the current Web profile once after a successful install if DSH is already running.
 
@@ -113,7 +126,7 @@ A Windows control center outside the Cordis plugin tree for local DSH users who 
 - **Tasks and profiles:** run one-shot Headless tasks and background profiles with unified UTF-8 results and logs.
 - **Source maintenance:** run `git pull --ff-only` against the bound DSH checkout and only run `pnpm run build` after a successful update; explicitly allow build-only operation when Git is unavailable.
 - **Diagnostics:** collect command, port, working directory, status, and log information, with a dedicated DSH Source page.
-- **Desktop behavior:** system tray, optional login startup, wide split layouts, compact layouts, per-monitor DPI scaling, and multi-monitor bounds protection.
+- **Desktop behavior:** system tray, optional login startup, a centered vertical layout at every window size, per-monitor DPI scaling, and multi-monitor bounds protection.
 
 <details>
 <summary><strong>Process ownership, exit, and background behavior</strong></summary>
@@ -133,7 +146,7 @@ Login startup is off by default. You can start Launcher in the tray only, or sta
 
 Versioned deployment directories keep Start menu and login-startup entries pointed at the current release without depending on profile `node_modules`. The installer preserves an explicitly configured DSH command. For a local DSH checkout, it generates and verifies a safe direct CLI entry and records that checkout as the only permitted source-build root.
 
-Settings, runtime state, and logs live under `%LOCALAPPDATA%\DeepSeekHarness\Launcher`. Deselecting `windows-launcher` stops the tray and removes program files, startup entries, and shortcuts while preserving logs and user settings.
+Settings, runtime state, install state, update requests, and logs live under `%LOCALAPPDATA%\DeepSeekHarness\Launcher`. Launcher remains selected and required in the management UI. The control center does not self-uninstall; run `migrate-to-enhanced-plugin.ps1 -UninstallLauncher` from this repository to remove the program files, shortcuts, and login-startup entry. Logs and user settings are preserved by default.
 
 </details>
 

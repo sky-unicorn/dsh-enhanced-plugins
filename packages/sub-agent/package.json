@@ -25,7 +25,23 @@
       ]
     }
   },
-  "dshEnhanced": { "feature": "sub-agent", "legacyPackages": ["dsh-sub-agent-toggle"] },
+  "dshEnhanced": {
+    "feature": "sub-agent",
+    "kind": "bundle",
+    "legacyPackages": ["dsh-sub-agent-toggle"],
+    "manager": {
+      "scope": "profile",
+      "required": false,
+      "defaultSelected": true,
+      "order": 60,
+      "category": "agent",
+      "name": { "zh-CN": "产品 Sub-Agent", "en-US": "Product Subagents" },
+      "description": {
+        "zh-CN": "按需启用 Claude Code 与 Codex 子代理工具。",
+        "en-US": "Enable Claude Code and Codex subagent tools on demand."
+      }
+    }
+  },
   "files": ["lib/", "cordis.patch.yml"],
   "scripts": { "build": "node ../../build.mjs --feature sub-agent", "prepare": "npm run build" },
   "license": "MIT",

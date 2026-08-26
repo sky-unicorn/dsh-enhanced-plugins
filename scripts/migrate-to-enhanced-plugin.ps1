@@ -15,11 +15,21 @@ param(
 
   [string] $PluginPath = '',
 
+  [string] $ProjectSourceBinding = '',
+
   [string[]] $Features = @('all'),
 
   [switch] $CreateLauncherDesktopShortcut,
 
   [switch] $SkipLauncherSystemIntegration,
+
+  [switch] $SkipLauncherInstall,
+
+  [switch] $RestartLauncherAfterUpdate,
+
+  [switch] $SkipBuild,
+
+  [switch] $UninstallLauncher,
 
   [switch] $ListFeatures
 )
@@ -75,7 +85,7 @@ function Get-ProfileDependencies {
   if ($null -ne $profilePathProperty -and $profilePathProperty.Value -is [string]) {
     $profileManifestPath = Join-Path $profilePathProperty.Value 'package.json'
     if (Test-Path -LiteralPath $profileManifestPath -PathType Leaf) {
-      $profileManifest = Get-Content -Raw -LiteralPath $profileManifestPath | ConvertFrom-Json
+      $profileManifest = Get-Content -Raw -LiteralPath $profileManifestPath -Encoding UTF8 | ConvertFrom-Json
       $declaredDependencies = $profileManifest.PSObject.Properties['dependencies']
       if ($null -ne $declaredDependencies) {
         $dependencyNames += @($declaredDependencies.Value.PSObject.Properties | ForEach-Object { $_.Name })
@@ -209,7 +219,7 @@ function Get-FeatureCatalog {
       if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
         return
       }
-      $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+      $manifest = Get-Content -Raw -LiteralPath $manifestPath -Encoding UTF8 | ConvertFrom-Json
       $metadata = $manifest.PSObject.Properties['dshEnhanced']
       if ($null -eq $metadata) {
         return
@@ -293,6 +303,12 @@ function Resolve-RequestedFeatures {
     if ($normalized.Count -ne 1) {
       throw "Feature 'all' cannot be combined with individual feature ids."
     }
+    return @($Catalog)
+  }
+  if ($normalized -contains 'none') {
+    if ($normalized.Count -ne 1) {
+      throw "Feature 'none' cannot be combined with individual feature ids."
+    }
     return @()
   }
 
@@ -326,10 +342,15 @@ function Ensure-PluginBuild {
   $originalDirectory = (Get-Location).Path
   try {
     Set-Location -LiteralPath $RepositoryRoot
-    Write-Host 'Preparing selected dsh-enhanced-plugins packages and their runtime entries...'
-    & $npm.Source install --no-audit --no-fund --ignore-scripts=false
+    Write-Host 'Installing the exact locked dependencies for dsh-enhanced-plugins...'
+    & $npm.Source ci --no-audit --no-fund --ignore-scripts=false
     if ($LASTEXITCODE -ne 0) {
-      throw "npm install failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
+      throw "npm ci failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
+    }
+    Write-Host 'Running type checks, tests, and all source builds before changing any Profile...'
+    & $npm.Source run check
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm run check failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
     }
   } finally {
     Set-Location -LiteralPath $originalDirectory
@@ -343,7 +364,7 @@ function Ensure-PluginBuild {
   if ($missing.Count -gt 0) {
     try {
       Set-Location -LiteralPath $RepositoryRoot
-      Write-Host 'prepare left runtime entries missing; rebuilding explicitly...'
+      Write-Host 'The full check left runtime entries missing; rebuilding explicitly...'
       & $npm.Source run build
       if ($LASTEXITCODE -ne 0) {
         throw "npm run build failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
@@ -463,8 +484,7 @@ function Set-WindowsLauncherDshCommand {
   $existingCommand = if ($null -eq $commandProperty) { '' } else { [string] $commandProperty.Value }
   $isManagedCommand = $existingCommand.Equals($managedInvoker, [System.StringComparison]::OrdinalIgnoreCase)
   if (-not [string]::IsNullOrWhiteSpace($existingCommand) -and -not $isManagedCommand) {
-    Write-Host "Preserved the user-configured Launcher DSH command '$existingCommand'."
-    return
+    Write-Host "Replacing the previous Launcher DSH command '$existingCommand' with the validated source-checkout invoker."
   }
 
   $launcherCommand = $Executable
@@ -529,6 +549,162 @@ function Set-WindowsLauncherDshCommand {
   }
 }
 
+function Get-ProjectSourceRevision {
+  param([Parameter(Mandatory = $true)][string] $RepositoryRoot)
+  $git = Get-Command -Name 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -ne $git -and (Test-Path -LiteralPath (Join-Path $RepositoryRoot '.git'))) {
+    $revision = @(& $git.Source -C $RepositoryRoot rev-parse HEAD 2>$null) -join ''
+    $status = @(& $git.Source -C $RepositoryRoot status --porcelain=v1 --untracked-files=normal 2>$null) -join [Environment]::NewLine
+    if ($LASTEXITCODE -eq 0 -and $revision -match '^[0-9a-fA-F]{40}$' -and
+      [string]::IsNullOrWhiteSpace($status)) {
+      return $revision.ToLowerInvariant()
+    }
+  }
+  $installRoot = Get-WindowsLauncherInstallRoot
+  $ownedSources = [System.IO.Path]::GetFullPath((Join-Path $installRoot 'sources')).TrimEnd('\') + '\'
+  $ownedUpdates = [System.IO.Path]::GetFullPath((Join-Path $installRoot 'updates')).TrimEnd('\') + '\'
+  $fullRoot = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\') + '\'
+  if ($fullRoot.StartsWith($ownedSources, [System.StringComparison]::OrdinalIgnoreCase) -or
+    $fullRoot.StartsWith($ownedUpdates, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $markerPath = Join-Path $RepositoryRoot '.dsh-enhanced-source.json'
+    if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+      $marker = Get-Content -Raw -LiteralPath $markerPath -Encoding UTF8 | ConvertFrom-Json
+      $markedRevision = [string]$marker.revision
+      if ($markedRevision -match '^(?:[0-9a-fA-F]{40}|local-[0-9a-fA-F]{64})$') {
+        return $markedRevision.ToLowerInvariant()
+      }
+    }
+  }
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $relativePaths = @('package.json', 'package-lock.json', 'build.mjs', 'scripts\migrate-to-enhanced-plugin.ps1') + @(
+      Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'packages') -File -Recurse | Where-Object {
+        $_.FullName -notmatch '[\\/](?:node_modules|lib)[\\/]'
+      } | ForEach-Object { $_.FullName.Substring($RepositoryRoot.Length).TrimStart('\') }
+    ) | Where-Object { Test-Path -LiteralPath (Join-Path $RepositoryRoot $_) -PathType Leaf }
+    foreach ($relative in @($relativePaths | Sort-Object -Unique)) {
+      $relativeBytes = [System.Text.Encoding]::UTF8.GetBytes($relative.ToLowerInvariant() + "`n")
+      [void]$sha.TransformBlock($relativeBytes, 0, $relativeBytes.Length, $relativeBytes, 0)
+      $path = Join-Path $RepositoryRoot $relative
+      $bytes = [System.IO.File]::ReadAllBytes($path)
+      [void]$sha.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
+    }
+    [void]$sha.TransformFinalBlock(@(), 0, 0)
+    return 'local-' + ([BitConverter]::ToString($sha.Hash).Replace('-', '').ToLowerInvariant())
+  } finally { $sha.Dispose() }
+}
+
+function Get-FileSha256 {
+  param([Parameter(Mandatory = $true)][string] $Path)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [System.IO.File]::OpenRead($Path)
+  try { ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() }
+  finally { $stream.Dispose(); $sha.Dispose() }
+}
+
+function Save-LauncherInstallState {
+  param(
+    [Parameter(Mandatory = $true)][string] $InstallRoot,
+    [Parameter(Mandatory = $true)][string] $DshCheckoutPath,
+    [Parameter(Mandatory = $true)][string] $RepositoryRoot,
+    [Parameter(Mandatory = $true)][string] $AppliedSourceRoot,
+    [Parameter(Mandatory = $true)][string] $ProfileName,
+    [Parameter(Mandatory = $true)][object[]] $Catalog,
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]] $DesiredFeatures
+  )
+
+  $statePath = Join-Path $InstallRoot 'install-state.json'
+  [void](Assert-LauncherOwnedPath -Path $statePath -InstallRoot $InstallRoot)
+  $state = if (Test-Path -LiteralPath $statePath -PathType Leaf) {
+    try { Get-Content -Raw -LiteralPath $statePath -Encoding UTF8 | ConvertFrom-Json }
+    catch {
+      $backup = Join-Path $InstallRoot ('install-state.corrupt-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N') + '.json')
+      [void](Assert-LauncherOwnedPath -Path $backup -InstallRoot $InstallRoot)
+      Move-Item -LiteralPath $statePath -Destination $backup
+      Write-Warning "The damaged Launcher install state was preserved at '$backup'; recoverable bindings and the current Profile will be rebuilt."
+      [pscustomobject][ordered]@{ schemaVersion = 1; profiles = [pscustomobject]@{} }
+    }
+  } else {
+    [pscustomobject][ordered]@{ schemaVersion = 1; profiles = [pscustomobject]@{} }
+  }
+  $revision = Get-ProjectSourceRevision -RepositoryRoot $AppliedSourceRoot
+  $git = Get-Command -Name 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  $isGit = $null -ne $git -and (Test-Path -LiteralPath (Join-Path $RepositoryRoot '.git'))
+  $repositoryUrl = ''
+  $ref = 'master'
+  if ($isGit) {
+    $repositoryUrl = @(& $git.Source -C $RepositoryRoot config --get remote.origin.url 2>$null) -join ''
+    $branch = @(& $git.Source -C $RepositoryRoot branch --show-current 2>$null) -join ''
+    if (-not [string]::IsNullOrWhiteSpace($branch)) { $ref = $branch.Trim() }
+  } else {
+    $rootManifest = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'package.json') -Encoding UTF8 | ConvertFrom-Json
+    $repositoryProperty = $rootManifest.PSObject.Properties['repository']
+    if ($null -ne $repositoryProperty) {
+      if ($repositoryProperty.Value -is [string]) { $repositoryUrl = [string]$repositoryProperty.Value }
+      else {
+        $urlProperty = $repositoryProperty.Value.PSObject.Properties['url']
+        if ($null -ne $urlProperty) { $repositoryUrl = [string]$urlProperty.Value }
+      }
+    }
+    $enhanced = $rootManifest.PSObject.Properties['dshEnhanced']
+    if ($null -ne $enhanced) {
+      $manager = $enhanced.Value.PSObject.Properties['manager']
+      if ($null -ne $manager) {
+        $defaultRef = $manager.Value.PSObject.Properties['defaultRef']
+        if ($null -ne $defaultRef) { $ref = [string]$defaultRef.Value }
+      }
+    }
+  }
+  $invoker = Join-Path $InstallRoot 'dsh-checkout-invoker.ps1'
+  $dshVersion = ''
+  if (Test-Path -LiteralPath $invoker -PathType Leaf) {
+    $dshVersion = @(& $invoker --version 2>$null) -join [Environment]::NewLine
+  }
+  $state | Add-Member -NotePropertyName schemaVersion -NotePropertyValue 1 -Force
+  $state | Add-Member -NotePropertyName dsh -NotePropertyValue ([pscustomobject][ordered]@{
+    mode = 'source'
+    checkout = [System.IO.Path]::GetFullPath($DshCheckoutPath)
+    invoker = $invoker
+    home = if ([string]::IsNullOrWhiteSpace($env:DSH_HOME)) {
+      Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh'
+    } else { [System.IO.Path]::GetFullPath($env:DSH_HOME) }
+    validatedVersion = $dshVersion.Trim()
+  }) -Force
+  $state | Add-Member -NotePropertyName projectSource -NotePropertyValue ([pscustomobject][ordered]@{
+    mode = if ($isGit) { 'git-checkout' } else { 'source-snapshot' }
+    boundPath = [System.IO.Path]::GetFullPath($RepositoryRoot)
+    repositoryUrl = $repositoryUrl.Trim()
+    ref = $ref
+    lastSuccessfulRevision = $revision
+    lastCheckedRevision = $revision
+  }) -Force
+  $profilesProperty = $state.PSObject.Properties['profiles']
+  if ($null -eq $profilesProperty -or $null -eq $profilesProperty.Value) {
+    $state | Add-Member -NotePropertyName profiles -NotePropertyValue ([pscustomobject]@{}) -Force
+  }
+  $profileValue = [pscustomobject][ordered]@{
+    managed = $true
+    desiredFeatures = @($DesiredFeatures | Sort-Object -Unique)
+    knownFeatures = @($Catalog | Where-Object { $_.Kind -eq 'bundle' } | ForEach-Object { $_.Feature } | Sort-Object -Unique)
+    lastAppliedRevision = $revision
+    lastAppliedAtUtc = [DateTime]::UtcNow.ToString('o')
+  }
+  $state.profiles | Add-Member -NotePropertyName $ProfileName -NotePropertyValue $profileValue -Force
+  $currentPath = Join-Path $InstallRoot 'current.json'
+  $current = if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
+    Get-Content -Raw -LiteralPath $currentPath -Encoding UTF8 | ConvertFrom-Json
+  } else { $null }
+  $state | Add-Member -NotePropertyName launcher -NotePropertyValue ([pscustomobject][ordered]@{
+    required = $true
+    lastAppliedRevision = $revision
+    executableSha256 = if ($null -eq $current) { '' } else { [string]$current.hash }
+  }) -Force
+  $temporary = $statePath + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+  [System.IO.File]::WriteAllText($temporary, ($state | ConvertTo-Json -Depth 16), (New-Object System.Text.UTF8Encoding($false)))
+  Move-Item -LiteralPath $temporary -Destination $statePath -Force
+  Write-Host "Recorded Launcher source and Profile state at '$statePath'."
+}
+
 function Install-WindowsLauncher {
   param(
     [Parameter(Mandatory = $true)]
@@ -543,7 +719,9 @@ function Install-WindowsLauncher {
 
     [switch] $CreateDesktopShortcut,
 
-    [switch] $SkipSystemIntegration
+    [switch] $SkipSystemIntegration,
+
+    [switch] $RestartAfterUpdate
   )
 
   if ($env:OS -ne 'Windows_NT') {
@@ -563,7 +741,7 @@ function Install-WindowsLauncher {
 
   $executableSource = @($runtimeFiles | Where-Object { $_.Name -eq 'DSH-Launcher.exe' })[0]
   if ($null -eq $executableSource) { throw 'Windows Launcher executable is missing from runtimeEntries.' }
-  $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $executableSource.FullName).Hash.ToLowerInvariant()
+  $hash = Get-FileSha256 -Path $executableSource.FullName
   $version = [string] $Package.Manifest.version
   if ($version -notmatch '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-[0-9A-Za-z.-]+)?$') {
     throw "Windows Launcher package version '$version' is invalid."
@@ -648,9 +826,12 @@ function Install-WindowsLauncher {
     -RunnerWorkingDirectory $DshRunnerWorkingDirectory
   $currentPath = Join-Path $installRoot 'current.json'
   $previousExecutable = $null
+  $previousCurrent = $null
+  $previousCurrentJson = $null
   if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
     try {
-      $previousCurrent = Get-Content -Raw -LiteralPath $currentPath -Encoding UTF8 | ConvertFrom-Json
+      $previousCurrentJson = Get-Content -Raw -LiteralPath $currentPath -Encoding UTF8
+      $previousCurrent = $previousCurrentJson | ConvertFrom-Json
       if ($previousCurrent.executable -is [string]) {
         $previousCandidate = Assert-LauncherOwnedPath -Path $previousCurrent.executable -InstallRoot $installRoot
         if (Test-Path -LiteralPath $previousCandidate -PathType Leaf) {
@@ -661,14 +842,24 @@ function Install-WindowsLauncher {
       Write-Warning "Unable to inspect the previous Windows Launcher version: $($_.Exception.Message)"
     }
   }
-  if ($null -ne $previousExecutable -and
+  if ($RestartAfterUpdate -and $null -ne $previousExecutable -and
     -not $previousExecutable.Equals($executable, [System.StringComparison]::OrdinalIgnoreCase)) {
     try {
       $shutdown = Start-Process -FilePath $previousExecutable -ArgumentList '--shutdown' -PassThru -Wait -WindowStyle Hidden
       if ($shutdown.ExitCode -ne 0) {
         Write-Warning "Previous Windows Launcher shutdown exited with code $($shutdown.ExitCode)."
       }
-      Start-Sleep -Milliseconds 600
+      $shutdownDeadline = [DateTime]::UtcNow.AddSeconds(12)
+      do {
+        Start-Sleep -Milliseconds 250
+        $stillRunning = @(
+          Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            try { $_.MainModule.FileName.Equals($previousExecutable, [System.StringComparison]::OrdinalIgnoreCase) }
+            catch { $false }
+          }
+        ).Count -gt 0
+      } while ($stillRunning -and [DateTime]::UtcNow -lt $shutdownDeadline)
+      if ($stillRunning) { throw 'The previous Windows Launcher did not exit within 12 seconds.' }
     } catch {
       Write-Warning "Unable to request shutdown of the previous Windows Launcher: $($_.Exception.Message)"
     }
@@ -677,15 +868,33 @@ function Install-WindowsLauncher {
     [void](New-Item -ItemType Directory -Force -Path $installRoot)
   }
   $currentTemporary = $currentPath + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+  $launcherChanged = $null -ne $previousExecutable -and
+    -not $previousExecutable.Equals($executable, [System.StringComparison]::OrdinalIgnoreCase)
+  $previousVersionRoot = if ($launcherChanged) {
+    Split-Path -Parent $previousExecutable
+  } elseif ($null -ne $previousCurrent -and $previousCurrent.PSObject.Properties['previousVersionRoot']) {
+    [string]$previousCurrent.previousVersionRoot
+  } else { '' }
+  $previousHash = if ($launcherChanged -and $null -ne $previousCurrent -and $previousCurrent.PSObject.Properties['hash']) {
+    [string]$previousCurrent.hash
+  } elseif ($null -ne $previousCurrent -and $previousCurrent.PSObject.Properties['previousHash']) {
+    [string]$previousCurrent.previousHash
+  } else { '' }
+  $previousRollbackExecutable = if ([string]::IsNullOrWhiteSpace($previousVersionRoot)) { '' }
+    else { Join-Path $previousVersionRoot 'DSH-Launcher.exe' }
+  $currentDocument = [ordered]@{
+    version = $version
+    hash = $hash
+    versionRoot = $versionRoot
+    executable = $executable
+    previousVersionRoot = $previousVersionRoot
+    previousExecutable = $previousRollbackExecutable
+    previousHash = $previousHash
+    installedAtUtc = [DateTime]::UtcNow.ToString('o')
+  }
   [System.IO.File]::WriteAllText(
     $currentTemporary,
-    ([ordered]@{
-      version = $version
-      hash = $hash
-      versionRoot = $versionRoot
-      executable = $executable
-      installedAtUtc = [DateTime]::UtcNow.ToString('o')
-    } | ConvertTo-Json),
+    ($currentDocument | ConvertTo-Json),
     (New-Object System.Text.UTF8Encoding($false))
   )
   Move-Item -LiteralPath $currentTemporary -Destination $currentPath -Force
@@ -717,8 +926,59 @@ function Install-WindowsLauncher {
     }
   }
 
+  if ($launcherChanged -and $RestartAfterUpdate) {
+    $readyPath = Join-Path $versionRoot ('.ready-' + [Guid]::NewGuid().ToString('N') + '.txt')
+    [void](Assert-LauncherOwnedPath -Path $readyPath -InstallRoot $installRoot)
+    try {
+      $newLauncher = Start-Process -FilePath $executable `
+        -ArgumentList @('--tray', '--ready-file', ('"' + $readyPath + '"')) `
+        -PassThru -WindowStyle Hidden
+      $readyDeadline = [DateTime]::UtcNow.AddSeconds(12)
+      do {
+        Start-Sleep -Milliseconds 200
+        $ready = Test-Path -LiteralPath $readyPath -PathType Leaf
+      } while (-not $ready -and -not $newLauncher.HasExited -and [DateTime]::UtcNow -lt $readyDeadline)
+      if ($newLauncher.HasExited -or -not $ready) {
+        $code = if ($newLauncher.HasExited) { [string]$newLauncher.ExitCode } else { 'still running without readiness signal' }
+        throw "The new Windows Launcher failed its readiness check: $code."
+      }
+      $newLauncher.Dispose()
+      Write-Host 'Started the updated Windows Launcher and completed the readiness check.'
+    } catch {
+      $launchFailure = $_.Exception.Message
+      if (-not [string]::IsNullOrWhiteSpace($previousCurrentJson) -and
+        -not [string]::IsNullOrWhiteSpace($previousExecutable) -and
+        (Test-Path -LiteralPath $previousExecutable -PathType Leaf)) {
+        $rollbackTemporary = $currentPath + '.' + [Guid]::NewGuid().ToString('N') + '.rollback'
+        [System.IO.File]::WriteAllText($rollbackTemporary, $previousCurrentJson, (New-Object System.Text.UTF8Encoding($false)))
+        Move-Item -LiteralPath $rollbackTemporary -Destination $currentPath -Force
+        if (-not $SkipSystemIntegration) {
+          New-WindowsLauncherShortcut -Executable $previousExecutable -Path $startShortcut
+          if ($CreateDesktopShortcut) { New-WindowsLauncherShortcut -Executable $previousExecutable -Path $desktopShortcut }
+          $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $runName = 'DeepSeekHarnessLauncher'
+          $existing = Get-ItemProperty -Path $runKey -Name $runName -ErrorAction SilentlyContinue
+          if ($null -ne $existing) {
+            $startupArguments = if ([string]$existing.$runName -match '(?i)(?:^|\s)--start-dsh(?:\s|$)') {
+              ' --tray --start-dsh'
+            } else { ' --tray' }
+            Set-ItemProperty -Path $runKey -Name $runName -Value ('"' + $previousExecutable + '"' + $startupArguments)
+          }
+        }
+        [void](Start-Process -FilePath $previousExecutable -ArgumentList '--tray' -WindowStyle Hidden)
+      }
+      throw "The Windows Launcher update was rolled back: $launchFailure"
+    } finally {
+      if (Test-Path -LiteralPath $readyPath -PathType Leaf) { Remove-Item -LiteralPath $readyPath -Force }
+    }
+  } elseif ($launcherChanged) {
+    Write-Host 'Installed the updated Windows Launcher without starting it; the new version will be used the next time Launcher starts.'
+  }
+
   foreach ($oldVersion in @(Get-ChildItem -LiteralPath $versionsRoot -Directory -Force)) {
     if ($oldVersion.FullName.Equals($versionRoot, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+    if (-not [string]::IsNullOrWhiteSpace($previousVersionRoot) -and
+      $oldVersion.FullName.Equals($previousVersionRoot, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
     [void](Assert-LauncherOwnedPath -Path $oldVersion.FullName -InstallRoot $installRoot)
     try {
       Remove-Item -LiteralPath $oldVersion.FullName -Recurse -Force
@@ -742,7 +1002,7 @@ function Uninstall-WindowsLauncher {
   $executable = $null
   if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
     try {
-      $current = Get-Content -Raw -LiteralPath $currentPath | ConvertFrom-Json
+      $current = Get-Content -Raw -LiteralPath $currentPath -Encoding UTF8 | ConvertFrom-Json
       if ($current.executable -is [string]) {
         $candidate = Assert-LauncherOwnedPath -Path $current.executable -InstallRoot $installRoot
         if (Test-Path -LiteralPath $candidate -PathType Leaf) { $executable = $candidate }
@@ -811,15 +1071,22 @@ if (-not (Test-Path -LiteralPath $pluginManifestPath -PathType Leaf)) {
   throw "Cannot find the enhanced plugin manifest at '$pluginManifestPath'."
 }
 
-$pluginManifest = Get-Content -Raw -LiteralPath $pluginManifestPath | ConvertFrom-Json
+$pluginManifest = Get-Content -Raw -LiteralPath $pluginManifestPath -Encoding UTF8 | ConvertFrom-Json
 if ($pluginManifest.name -ne 'dsh-enhanced-plugins') {
   throw "Expected dsh-enhanced-plugins at '$pluginRoot', found '$($pluginManifest.name)'."
 }
 
 $catalog = @(Get-FeatureCatalog -RepositoryRoot $pluginRoot)
 $retiredCatalog = @(Get-RetiredFeatureCatalog -Manifest $pluginManifest)
+if ($UninstallLauncher) {
+  if ($PSCmdlet.ShouldProcess('Windows Launcher companion', 'stop and remove Launcher program files and system integration')) {
+    Uninstall-WindowsLauncher -SkipSystemIntegration:$SkipLauncherSystemIntegration
+  }
+  return
+}
 if ($ListFeatures) {
-  Write-Output "all`tInstall the aggregate DSH bundle and every available companion feature."
+  Write-Output "all`tInstall every independent Profile feature and the required Windows Launcher."
+  Write-Output "none`tRemove every Profile feature from this project while keeping the required Windows Launcher."
   foreach ($feature in $catalog) {
     Write-Output "$($feature.Feature)`t$($feature.Description)"
   }
@@ -829,27 +1096,23 @@ if ($ListFeatures) {
 $requestedFeatures = @(
   Resolve-RequestedFeatures -Catalog $catalog -RetiredCatalog $retiredCatalog -Requested $Features
 )
-$installAggregate = $requestedFeatures.Count -eq 0
-$selectedFeatures = if ($installAggregate) { @($catalog) } else { @($requestedFeatures) }
+$requiredCompanions = @($catalog | Where-Object { $_.Kind -eq 'companion' -and $_.Feature -eq 'windows-launcher' })
+if ($requiredCompanions.Count -ne 1) {
+  throw 'The catalog must contain exactly one required windows-launcher companion.'
+}
+$requestedFeatureIds = @($requestedFeatures | ForEach-Object { $_.Feature })
+$selectedFeatures = @($requestedFeatures) + @(
+  $requiredCompanions | Where-Object { $requestedFeatureIds -notcontains $_.Feature }
+)
 $selectedBundles = @($selectedFeatures | Where-Object { $_.Kind -eq 'bundle' })
 $selectedCompanions = @($selectedFeatures | Where-Object { $_.Kind -eq 'companion' })
-$aggregatePackage = [pscustomobject]@{
-  Feature = 'all'
-  Kind = 'bundle'
-  PackageName = $pluginManifest.name
-  Root = $pluginRoot
-  Manifest = $pluginManifest
-  Description = $pluginManifest.description
-  LegacyPackages = @($catalog | Where-Object { $_.Kind -eq 'bundle' } | ForEach-Object { $_.LegacyPackages } | Select-Object -Unique)
-  Platforms = @()
-  RuntimeEntries = @()
-}
-$selectedPackages = @(if ($installAggregate) { $aggregatePackage } else { $selectedBundles })
+$selectedPackages = @($selectedBundles)
 $buildPackages = @($selectedPackages) + @($selectedCompanions)
 $selectedBundleFeatures = @($selectedBundles | ForEach-Object { $_.Feature })
 $selectedCompanionFeatures = @($selectedCompanions | ForEach-Object { $_.Feature })
 $selectedPackageNames = @($selectedPackages | ForEach-Object { $_.PackageName })
-$selectedLabel = if ($installAggregate) { 'all' } else { ($selectedFeatures.Feature -join ',') }
+$selectedLabel = if ($selectedBundleFeatures.Count -eq 0) { 'none (+required windows-launcher)' }
+  else { ($selectedFeatures.Feature -join ',') }
 $allFeaturePackageNames = @($catalog | Where-Object { $_.Kind -eq 'bundle' } | ForEach-Object { $_.PackageName })
 $retiredPackageNames = @($retiredCatalog | ForEach-Object { $_.PackageNames } | Select-Object -Unique)
 $allLegacyPackages = @(
@@ -865,36 +1128,43 @@ if (-not $PSCmdlet.ShouldProcess($target, $action)) {
 # Build and validate every selected package before changing the profile. The
 # repository prepare builds all feature packages, while the check below fences
 # the exact package roots this invocation will install.
-Ensure-PluginBuild -RepositoryRoot $pluginRoot -Packages $buildPackages
+if (-not $SkipBuild) {
+  Ensure-PluginBuild -RepositoryRoot $pluginRoot -Packages $buildPackages
+} else {
+  $missingPreparedEntries = @()
+  foreach ($package in $buildPackages) {
+    $missingPreparedEntries += @(Get-MissingRuntimeEntries -PackageRoot $package.Root -Manifest $package.Manifest |
+      ForEach-Object { "$($package.PackageName):$_" })
+  }
+  if ($missingPreparedEntries.Count -gt 0) {
+    throw "The external coordinator marked the source as built, but runtime entries are missing: $($missingPreparedEntries -join ', ')."
+  }
+}
 
 [string] $executable = ''
 [string[]] $prefixArguments = @()
 [string] $runnerWorkingDirectory = ''
 
-$dsh = if ($DshCheckout -eq '') {
-  Get-Command -Name $DshCommand -CommandType Application -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-}
-
-if ($null -ne $dsh) {
-  $executable = $dsh.Source
+$checkoutCandidate = if ($DshCheckout -ne '') {
+  $DshCheckout
 } else {
-  $checkoutCandidate = if ($DshCheckout -ne '') {
-    $DshCheckout
-  } else {
-    Join-Path $PSScriptRoot '..\..\deepseek-harness'
-  }
-  $checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
-  if (-not (Test-Path -LiteralPath (Join-Path $checkout 'package.json') -PathType Leaf)) {
-    throw "Cannot find '$DshCommand' on PATH or a DSH checkout at '$checkout'."
-  }
-
-  $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
-    Select-Object -First 1
-  $executable = $pnpm.Source
-  $prefixArguments = @('dsh')
-  $runnerWorkingDirectory = $checkout
+  Join-Path $PSScriptRoot '..\..\deepseek-harness'
 }
+$checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
+foreach ($requiredDshPath in @(
+  'package.json',
+  'tsconfig.json',
+  'apps\cli\src\bin.ts',
+  'node_modules\tsx\dist\esm\index.mjs'
+)) {
+  if (-not (Test-Path -LiteralPath (Join-Path $checkout $requiredDshPath) -PathType Leaf)) {
+    throw "The DSH source checkout at '$checkout' is missing '$requiredDshPath'. First-version plugin management only supports a prepared local DSH checkout."
+  }
+}
+$pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
+$executable = $pnpm.Source
+$prefixArguments = @('dsh')
+$runnerWorkingDirectory = $checkout
 
 $originalWorkingDirectory = (Get-Location).Path
 try {
@@ -955,45 +1225,20 @@ try {
     throw "DSH reported a successful install, but selected packages are missing from profile '$Profile': $($missingSelected -join ', ')."
   }
 
-  foreach ($companion in $selectedCompanions) {
-    switch ($companion.Feature) {
-      'windows-launcher' {
-        Install-WindowsLauncher `
-          -Package $companion `
-          -DshExecutable $executable `
-          -DshPrefixArguments $prefixArguments `
-          -DshRunnerWorkingDirectory $runnerWorkingDirectory `
-          -CreateDesktopShortcut:$CreateLauncherDesktopShortcut `
-          -SkipSystemIntegration:$SkipLauncherSystemIntegration
-        break
-      }
-      default { throw "No installer owns companion feature '$($companion.Feature)'." }
-    }
-  }
   $launcherSelected = $selectedCompanionFeatures -contains 'windows-launcher'
   $launcherInstallRoot = Get-WindowsLauncherInstallRoot
   $launcherCurrent = Join-Path $launcherInstallRoot 'current.json'
   $launcherVersions = Join-Path $launcherInstallRoot 'versions'
-  if (-not $launcherSelected -and (
-    (Test-Path -LiteralPath $launcherCurrent -PathType Leaf) -or
-    (Test-Path -LiteralPath $launcherVersions -PathType Container)
-  )) {
-    Uninstall-WindowsLauncher -SkipSystemIntegration:$SkipLauncherSystemIntegration
-  }
 
-  $conflictingPackages = if ($installAggregate) {
-    @($allFeaturePackageNames + $allLegacyPackages)
-  } else {
-    $unselectedFeaturePackages = @(
-      $catalog |
-        Where-Object { $_.Kind -eq 'bundle' -and $selectedBundleFeatures -notcontains $_.Feature } |
-        ForEach-Object { $_.PackageName }
-    )
-    $selectedLegacyPackages = @(
-      $selectedBundles | ForEach-Object { $_.LegacyPackages } | Select-Object -Unique
-    )
-    @($pluginManifest.name) + $unselectedFeaturePackages + $selectedLegacyPackages + $retiredPackageNames
-  }
+  $unselectedFeaturePackages = @(
+    $catalog |
+      Where-Object { $_.Kind -eq 'bundle' -and $selectedBundleFeatures -notcontains $_.Feature } |
+      ForEach-Object { $_.PackageName }
+  )
+  $selectedLegacyPackages = @(
+    $selectedBundles | ForEach-Object { $_.LegacyPackages } | Select-Object -Unique
+  )
+  $conflictingPackages = @($pluginManifest.name) + $unselectedFeaturePackages + $selectedLegacyPackages + $retiredPackageNames
   $packagesToRemove = @(
     $conflictingPackages |
       Select-Object -Unique |
@@ -1031,15 +1276,6 @@ try {
     throw "Feature migration finished with conflicting bundles still present in profile '$Profile': $($remainingConflicts -join ', ')."
   }
 
-  if ($launcherSelected) {
-    $launcherManifest = Get-Content -Raw -LiteralPath $launcherCurrent | ConvertFrom-Json
-    if ($launcherManifest.executable -isnot [string] -or -not (Test-Path -LiteralPath $launcherManifest.executable -PathType Leaf)) {
-      throw 'Feature migration finished without a valid Windows Launcher installation.'
-    }
-  } elseif (Test-Path -LiteralPath $launcherCurrent -PathType Leaf) {
-    throw 'Feature migration finished with the unselected Windows Launcher still installed.'
-  }
-
   Write-Host 'Validating the assembled DSH profile...'
   $finalConfig = Get-ProfileConfig `
     -Executable $executable `
@@ -1048,6 +1284,42 @@ try {
   if (Test-RetiredReferencedFileConfig -Config $finalConfig) {
     throw "Feature migration finished with the retired # file-reference Loader entry still active in profile '$Profile'."
   }
+
+  if (-not $SkipLauncherInstall) {
+    foreach ($companion in $selectedCompanions) {
+      switch ($companion.Feature) {
+        'windows-launcher' {
+          Install-WindowsLauncher `
+            -Package $companion `
+            -DshExecutable $executable `
+            -DshPrefixArguments $prefixArguments `
+            -DshRunnerWorkingDirectory $runnerWorkingDirectory `
+            -CreateDesktopShortcut:$CreateLauncherDesktopShortcut `
+            -SkipSystemIntegration:$SkipLauncherSystemIntegration `
+            -RestartAfterUpdate:$RestartLauncherAfterUpdate
+          break
+        }
+        default { throw "No installer owns companion feature '$($companion.Feature)'." }
+      }
+    }
+  }
+  if ($launcherSelected) {
+    $launcherManifest = Get-Content -Raw -LiteralPath $launcherCurrent -Encoding UTF8 | ConvertFrom-Json
+    if ($launcherManifest.executable -isnot [string] -or -not (Test-Path -LiteralPath $launcherManifest.executable -PathType Leaf)) {
+      throw 'Feature migration finished without a valid Windows Launcher installation.'
+    }
+  }
+
+  Save-LauncherInstallState `
+    -InstallRoot (Get-WindowsLauncherInstallRoot) `
+    -DshCheckoutPath $checkout `
+    -RepositoryRoot $(if ([string]::IsNullOrWhiteSpace($ProjectSourceBinding)) {
+      $pluginRoot
+    } else { [System.IO.Path]::GetFullPath($ProjectSourceBinding) }) `
+    -AppliedSourceRoot $pluginRoot `
+    -ProfileName $Profile `
+    -Catalog $catalog `
+    -DesiredFeatures $selectedBundleFeatures
 
   Write-Host "Installed enhanced feature set '$selectedLabel' for profile '$Profile'."
   Write-Host 'Use the latest official DSH and type @ in the conversation input for workspace file references.'

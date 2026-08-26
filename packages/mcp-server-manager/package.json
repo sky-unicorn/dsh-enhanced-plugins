@@ -24,7 +24,23 @@
       ]
     }
   },
-  "dshEnhanced": { "feature": "mcp-server-manager", "legacyPackages": ["dsh-mcp-server-manager"] },
+  "dshEnhanced": {
+    "feature": "mcp-server-manager",
+    "kind": "bundle",
+    "legacyPackages": ["dsh-mcp-server-manager"],
+    "manager": {
+      "scope": "profile",
+      "required": false,
+      "defaultSelected": true,
+      "order": 20,
+      "category": "integration",
+      "name": { "zh-CN": "MCP 服务管理", "en-US": "MCP Server Manager" },
+      "description": {
+        "zh-CN": "管理 MCP 服务并导入本机已有配置。",
+        "en-US": "Manage MCP servers and import existing local configuration."
+      }
+    }
+  },
   "files": ["lib/", "cordis.patch.yml"],
   "scripts": { "build": "node ../../build.mjs --feature mcp-server-manager", "prepare": "npm run build" },
   "license": "MIT",

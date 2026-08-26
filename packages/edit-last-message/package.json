@@ -24,7 +24,23 @@
       ]
     }
   },
-  "dshEnhanced": { "feature": "edit-last-message", "legacyPackages": [] },
+  "dshEnhanced": {
+    "feature": "edit-last-message",
+    "kind": "bundle",
+    "legacyPackages": [],
+    "manager": {
+      "scope": "profile",
+      "required": false,
+      "defaultSelected": true,
+      "order": 10,
+      "category": "conversation",
+      "name": { "zh-CN": "编辑最后一条消息", "en-US": "Edit Last Message" },
+      "description": {
+        "zh-CN": "修改最近一条用户消息，并在同一会话中重新生成。",
+        "en-US": "Edit the latest user message and regenerate in the same session."
+      }
+    }
+  },
   "files": ["lib/", "cordis.patch.yml"],
   "scripts": { "build": "node ../../build.mjs --feature edit-last-message", "prepare": "npm run build" },
   "license": "MIT",

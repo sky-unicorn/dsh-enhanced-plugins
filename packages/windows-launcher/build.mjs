@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { copyFile, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -102,8 +102,22 @@ export async function buildWindowsLauncher() {
     await rm(temporary, { recursive: true, force: true })
   }
 
-  for (const file of ['DSH-Launcher.Supervisor.ps1', 'DSH-Launcher.Command.ps1', 'DSH-Launcher.exe.config']) {
-    await copyFile(resolve(source, file), resolve(output, basename(file)))
+  for (const file of [
+    'DSH-Launcher.Supervisor.ps1',
+    'DSH-Launcher.Command.ps1',
+    'DSH-Launcher.PluginManager.ps1',
+    'DSH-Launcher.exe.config',
+  ]) {
+    const destination = resolve(output, basename(file))
+    if (file.endsWith('.ps1')) {
+      // Windows PowerShell 5.1 treats BOM-less scripts as the active ANSI code
+      // page. Emit UTF-8 with BOM so localized diagnostics remain parseable on
+      // both Win10 and Win11; runtime logs and JSON stay UTF-8 without BOM.
+      const content = await readFile(resolve(source, file), 'utf8')
+      await writeFile(destination, `\uFEFF${content}`, 'utf8')
+    } else {
+      await copyFile(resolve(source, file), destination)
+    }
   }
 }
 

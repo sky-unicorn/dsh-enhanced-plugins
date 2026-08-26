@@ -160,6 +160,7 @@ namespace DshEnhanced.WindowsLauncher
     {
         internal static readonly string DataRoot = ResolveDataRoot();
         internal static readonly string Requests = Path.Combine(DataRoot, "requests");
+        internal static readonly string Updates = Path.Combine(DataRoot, "updates");
         internal static readonly string Logs = Path.Combine(DataRoot, "logs");
         internal static readonly string Run = Path.Combine(DataRoot, "run");
         internal static readonly string Settings = Path.Combine(DataRoot, "settings.json");
@@ -186,6 +187,7 @@ namespace DshEnhanced.WindowsLauncher
         {
             Directory.CreateDirectory(DataRoot);
             Directory.CreateDirectory(Requests);
+            Directory.CreateDirectory(Updates);
             Directory.CreateDirectory(Logs);
             Directory.CreateDirectory(Run);
         }
@@ -214,8 +216,16 @@ namespace DshEnhanced.WindowsLauncher
             if (!String.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
             string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.WriteAllText(temporary, Serializer.Serialize(value), new UTF8Encoding(false));
-            File.Copy(temporary, path, true);
-            File.Delete(temporary);
+            try
+            {
+                if (File.Exists(path)) File.Replace(temporary, path, null, true);
+                else File.Move(temporary, path);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                File.Copy(temporary, path, true);
+                File.Delete(temporary);
+            }
         }
     }
 
@@ -352,6 +362,7 @@ namespace DshEnhanced.WindowsLauncher
     {
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string RunName = "DeepSeekHarnessLauncher";
+        private const string PluginManagementMutex = @"Local\DSH.Enhanced.WindowsLauncher.PluginManagement";
         private readonly SettingsStore settingsStore = new SettingsStore();
         private LauncherSettings settings;
 
@@ -359,6 +370,33 @@ namespace DshEnhanced.WindowsLauncher
         {
             LauncherPaths.Ensure();
             settings = settingsStore.Load();
+        }
+
+        private static bool PluginManagementBusy()
+        {
+            bool acquired = false;
+            using (Mutex mutex = new Mutex(false, PluginManagementMutex))
+            {
+                try
+                {
+                    acquired = mutex.WaitOne(0);
+                    return !acquired;
+                }
+                catch (AbandonedMutexException)
+                {
+                    acquired = true;
+                    return false;
+                }
+                finally
+                {
+                    if (acquired) mutex.ReleaseMutex();
+                }
+            }
+        }
+
+        private static OperationResult PluginManagementConflict()
+        {
+            return OperationResult.Fail("插件管理正在构建或提交更新；完成前不能启动新的 DSH 操作。");
         }
 
         internal LauncherSettings Settings
@@ -444,6 +482,7 @@ namespace DshEnhanced.WindowsLauncher
 
         internal OperationResult StartWeb()
         {
+            if (PluginManagementBusy()) return PluginManagementConflict();
             if (settings.Port < 1 || settings.Port > 65535) return OperationResult.Fail("端口必须在 1 到 65535 之间。");
             WebStatusSnapshot current = Snapshot();
             if (current.Ownership == WebOwnership.Owned || current.Ownership == WebOwnership.Starting)
@@ -583,6 +622,7 @@ namespace DshEnhanced.WindowsLauncher
         internal OperationResult RunHeadless(string task, out string output)
         {
             output = String.Empty;
+            if (PluginManagementBusy()) return PluginManagementConflict();
             if (String.IsNullOrWhiteSpace(task)) return OperationResult.Fail("请输入任务描述。");
             string dsh = ResolveDsh();
             if (dsh == null) return OperationResult.Fail("未找到 dsh。");
@@ -657,6 +697,7 @@ namespace DshEnhanced.WindowsLauncher
         internal OperationResult BuildDshSource(bool updateSource, out string output)
         {
             output = String.Empty;
+            if (PluginManagementBusy()) return PluginManagementConflict();
             string source = ResolveDshSource();
             if (source == null)
             {
@@ -689,6 +730,7 @@ namespace DshEnhanced.WindowsLauncher
 
         internal OperationResult RunProfile(string profile)
         {
+            if (PluginManagementBusy()) return PluginManagementConflict();
             if (String.IsNullOrWhiteSpace(profile) || !System.Text.RegularExpressions.Regex.IsMatch(profile, "^[A-Za-z0-9][A-Za-z0-9._-]*$"))
                 return OperationResult.Fail("Profile 名称无效。");
             string dsh = ResolveDsh();

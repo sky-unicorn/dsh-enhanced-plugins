@@ -24,7 +24,23 @@
       ]
     }
   },
-  "dshEnhanced": { "feature": "notification", "legacyPackages": [] },
+  "dshEnhanced": {
+    "feature": "notification",
+    "kind": "bundle",
+    "legacyPackages": [],
+    "manager": {
+      "scope": "profile",
+      "required": false,
+      "defaultSelected": true,
+      "order": 40,
+      "category": "experience",
+      "name": { "zh-CN": "桌面通知", "en-US": "Desktop Notifications" },
+      "description": {
+        "zh-CN": "提供桌面通知、提示音与桌面宠物联动。",
+        "en-US": "Desktop notifications, sounds, and desktop-pet integration."
+      }
+    }
+  },
   "files": ["lib/", "assets/notification/", "cordis.patch.yml"],
   "scripts": { "build": "node ../../build.mjs --feature notification", "prepare": "npm run build" },
   "license": "MIT",

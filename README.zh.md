@@ -58,7 +58,7 @@
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-省略 `-Features` 或传入 `-Features all` 会安装 6 个 Cordis 增强和 Windows Launcher。Launcher 位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，默认只创建开始菜单快捷方式；需要桌面快捷方式时添加 `-CreateLauncherDesktopShortcut`。
+省略 `-Features` 或传入 `-Features all` 会安装 6 个**独立** Cordis 功能包和必选的 Windows Launcher，不再用根聚合包表示“全选”。Launcher 位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，默认只创建开始菜单快捷方式；需要桌面快捷方式时添加 `-CreateLauncherDesktopShortcut`。直接运行安装脚本只安装或更新程序文件，不会自动启动或打开 Launcher；从 Launcher 内执行自更新时仍会完成必要的版本重启和就绪检查。
 
 如果 DSH checkout 不在同级目录，显式指定它：
 
@@ -90,12 +90,25 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 | Agent 与模型增强 | `mcp-server-manager,model-input-types,edit-last-message,sub-agent` |
 | 插件发现与集成管理 | `plugin-market,mcp-server-manager` |
 
-`-Features` 不是“额外添加列表”，而是目标 profile 与本机**最终保留的增强功能集合**。脚本会：
+`-Features` 不是“额外添加列表”，而是目标 Profile **最终保留的本项目功能集合**。Windows Launcher 是全局必选组件，不需要写入列表，也不能通过功能选择卸载；`-Features none` 只清空当前 Profile 中本项目的功能包并保留 Launcher。脚本会：
 
 1. 安装依赖并构建全部所选功能。
 2. 安装并验证所选 bundle / Companion 能否加载。
 3. 成功后再移除聚合包、未选择的同仓库功能和已声明冲突的旧包。
 4. 检测并清理已经退役的文件引用插件。
+
+### Launcher 插件管理
+
+安装脚本会把 DSH checkout、本项目源码路径、Git remote/ref、源码 revision 和每个已管理 Profile 的目标集合写入 `%LOCALAPPDATA%\DeepSeekHarness\Launcher\install-state.json`。控制中心的“插件管理”页据此提供：
+
+- 从各 `packages/*/package.json` 动态生成的功能列表，新增普通功能无需修改 Launcher；
+- 首次默认全选、按 Profile 选择、单项安装/卸载、历史聚合包迁移；
+- Git 工作区的安全 `fetch`/`pull --ff-only`，或没有 Git 时下载准确 commit 的源码 ZIP；无网络时也可手动绑定源码目录或导入源码 ZIP；
+- 只有源码 revision 或目标功能发生变化时，才在请求的隔离工作区执行 `npm ci`、正式 `npm run build` 和 runtime entry 校验；开发期的全仓类型检查仍在源码目录运行，不会因隔离目录无法使用 sibling DSH 类型路径而阻止安装；npm 的 stderr 警告会保留在日志中，是否失败只看真实退出码；全部完成后才停止 Launcher-owned DSH 并提交更改；
+- Launcher 哈希变化时由外部协调器切换版本、等待新版就绪、失败回滚，并恢复此前运行的 DSH；
+- Launcher 重启后继续跟踪仍在运行的协调器；异常中断或状态文件损坏时保留日志/备份并从实际 Profile inventory 重新读取状态。
+
+第一版只支持本地 DSH 源码 checkout 和本项目源码安装，不支持 npx、全局 `dsh`、npm 发布包或 GitHub Releases。Git 工作区有修改、本地领先或发生分叉时不会 reset、rebase 或覆盖用户改动。
 
 任何前置步骤失败时，脚本都不会提前破坏原有可用组合。安装成功后如果 DSH 正在运行，重启当前 Web profile 一次。
 
@@ -113,7 +126,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
 - **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后再运行 `pnpm run build`；无 Git 时可明确选择仅构建。
 - **诊断：** 汇总命令、端口、工作目录、运行状态和日志，并提供独立的 DSH 源码页。
-- **桌面体验：** 系统托盘、可选登录启动、宽屏分栏、紧凑布局、逐显示器 DPI 缩放与多显示器边界保护。
+- **桌面体验：** 系统托盘、可选登录启动、各尺寸统一的居中纵向布局、逐显示器 DPI 缩放与多显示器边界保护。
 
 <details>
 <summary><strong>进程所有权、退出与后台行为</strong></summary>
@@ -133,7 +146,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 程序使用版本化目录部署，开始菜单和登录启动项在升级后都会指向新版本，不依赖 profile 内的 `node_modules`。安装器保留用户显式配置的 DSH 命令；使用本地 DSH checkout 安装时，则生成并验证直接调用该 checkout CLI 的安全入口，并将它记录为唯一允许执行源码构建的根目录。
 
-设置、运行状态与日志统一位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。取消选择 `windows-launcher` 会停止托盘、移除程序文件、自启项和快捷方式，但保留日志与用户设置。
+设置、运行状态、安装状态、更新请求与日志统一位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。Launcher 在管理页中始终必选；控制中心不提供自卸载按钮，需要移除程序文件、快捷方式和登录启动项时，在项目源码中运行 `migrate-to-enhanced-plugin.ps1 -UninstallLauncher`。日志与用户设置默认保留。
 
 </details>
 

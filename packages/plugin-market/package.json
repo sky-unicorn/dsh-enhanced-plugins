@@ -22,7 +22,23 @@
       ]
     }
   },
-  "dshEnhanced": { "feature": "plugin-market", "legacyPackages": ["dsh-plugin-market"] },
+  "dshEnhanced": {
+    "feature": "plugin-market",
+    "kind": "bundle",
+    "legacyPackages": ["dsh-plugin-market"],
+    "manager": {
+      "scope": "profile",
+      "required": false,
+      "defaultSelected": true,
+      "order": 50,
+      "category": "ecosystem",
+      "name": { "zh-CN": "插件社区", "en-US": "Plugin Community" },
+      "description": {
+        "zh-CN": "浏览、预检并管理 DSH 社区插件。",
+        "en-US": "Browse, preflight, and manage DSH community plugins."
+      }
+    }
+  },
   "files": ["lib/", "assets/plugins-cache.json", "cordis.patch.yml"],
   "scripts": { "build": "node ../../build.mjs --feature plugin-market", "prepare": "npm run build" },
   "license": "MIT",

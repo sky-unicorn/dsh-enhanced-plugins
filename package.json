@@ -37,6 +37,12 @@
     }
   },
   "dshEnhanced": {
+    "manager": {
+      "protocolVersion": 1,
+      "catalogVersion": 1,
+      "repository": "sky-unicorn/dsh-enhanced-plugins",
+      "defaultRef": "master"
+    },
     "retiredFeatures": [
       {
         "feature": "referenced-file",
@@ -92,6 +98,10 @@
     "subagent"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sky-unicorn/dsh-enhanced-plugins.git"
+  },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
   },
