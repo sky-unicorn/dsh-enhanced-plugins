@@ -58,6 +58,7 @@
     "assets/readme/model-input-types.png",
     "assets/readme/plugin-community.png",
     "assets/readme/subagent-toggles.png",
+    "assets/readme/windows-launcher.png",
     "packages/windows-launcher/lib/",
     "packages/windows-launcher/package.json",
     "scripts/migrate-to-enhanced-plugin.ps1",

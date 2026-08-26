@@ -1,39 +1,42 @@
 # dsh-enhanced-plugins
 
-English | [中文](README.zh.md)
+[中文](README.zh.md) | English
 
-`dsh-enhanced-plugins` is a collection of enhancements for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness). Install all seven features together, or keep only the independent bundles and Windows companion you need.
+An enhancement suite for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness): **six independently installable Cordis bundles plus one Windows companion**.
 
-The project does not modify DSH core. Web features use only public plugin extension points; Windows Launcher is an installer-managed desktop companion outside the Cordis tree. Every feature can be built, installed, and removed independently.
+- Does not modify DSH core; every Web feature uses public plugin extension points.
+- Installs everything in one pass or keeps only the independently packaged features you select.
+- Keeps Host, Web Client, and Windows Companion lifecycles and security boundaries separate.
 
-[Feature overview](#feature-overview) · [Quick install](#quick-install) · [Feature guide](#feature-guide) · [Configuration reference](#configuration-reference) · [Development](#development-and-verification)
+[Features](#features) · [Quick start](#quick-start) · [Feature guide](#feature-guide) · [Compatibility and migration](#compatibility-and-migration) · [Configuration](#configuration) · [Development](#development-and-verification)
 
-## Feature overview
+## Features
 
-The “install name” is the value accepted by the installer’s `-Features` parameter and is the only identifier needed for a selective install.
+The installer only needs the stable “feature ID.” Every feature also has a self-contained selective package.
 
-| Feature | Install name | Where to find it | What it adds |
-| --- | --- | --- | --- |
-| [Windows Launcher](#windows-launcher) | `windows-launcher` | Start menu → DeepSeek Harness Launcher | Tray, Web lifecycle, Headless, Profile, log, and diagnostic control center |
-| [Desktop alerts & pet](#desktop-alerts--pet) | `notification` | Settings → Desktop Pet | Event sounds, a custom WAV library, and a native animated DeepSeek fish pet |
-| [Plugin Community](#plugin-community) | `plugin-market` | Settings → Plugin Community | Search, install, and remove community DSH plugins |
-| [MCP server manager](#mcp-server-manager) | `mcp-server-manager` | Settings → Plugins → Plugin configuration | Manage stdio / Streamable HTTP servers and import local configurations |
-| [pi-ai model request types](#pi-ai-model-request-types) | `model-input-types` | Settings → Plugins → Plugin configuration | Declare whether each model accepts text-only or image requests |
-| [Edit last message](#edit-last-message) | `edit-last-message` | Latest user-message bubble | Edit that turn and regenerate within the current session |
-| [Product subagents](#product-subagents) | `sub-agent` | Settings → Subagents | Enable or disable Claude Code / Codex tools live |
+| Feature | Feature ID | Selective package | Platform and entry point | What it adds |
+| --- | --- | --- | --- | --- |
+| [Windows Launcher](#1-windows-launcher) | `windows-launcher` | `dsh-enhanced-windows-launcher` | Windows Start menu | Tray controls for Web, Headless, profiles, source builds, and diagnostics |
+| [Desktop alerts and pet](#2-desktop-alerts-and-pet) | `notification` | `dsh-enhanced-notification` | Windows; Settings → Desktop Pet | Task sounds, a custom WAV library, and a native animated pet |
+| [Plugin Community](#3-plugin-community) | `plugin-market` | `dsh-enhanced-plugin-market` | Web; Settings → Plugin Community | Search, safely preflight, install, and uninstall community plugins |
+| [MCP server manager](#4-mcp-server-manager) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web; Settings → Plugins | Manage stdio / Streamable HTTP servers and import local configuration |
+| [pi-ai model request types](#5-pi-ai-model-request-types) | `model-input-types` | `dsh-enhanced-model-input-types` | Web; Settings → Plugins | Declare whether a model accepts text-only or image requests |
+| [Edit last message](#6-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
+| [Product subagents](#7-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
 
-> [!NOTE]
-> Workspace file references are no longer an enhanced-plugin feature. The latest official DSH provides [`@` file references](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference): type `@` (or `@"` for a quoted path) in the conversation input and choose a workspace path. The former `referenced-file` install name and its `#` snapshot syntax are retired. They are absent from the aggregate bundle, `-Features referenced-file` is rejected, and a normal installer run removes historical standalone packages or the contribution carried by an older aggregate install.
+The aggregate package is `dsh-enhanced-plugins`. With no feature selection, the installer composes all seven entries above; with a selection, it installs only the matching packages or companion.
 
-## Quick install
+## Quick start
 
-### Before you start
+### Requirements
 
-- Node.js 22.19 or later.
-- A current DSH Web profile. This repository is verified against DSH `0.1.1-rc.2`; its local baseline commit is `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
-- Windows Launcher, native sounds, and the desktop pet require Windows 10 or later and Windows PowerShell 5.1. The other features are cross-platform.
+- Node.js 22.19.x, or Node.js 24 and later.
+- A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
+- This repository is verified against DSH [`0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e), with local ABI baseline commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+- Windows Launcher, native sounds, and the desktop pet require Windows 10 or later and Windows PowerShell 5.1. The remaining features are cross-platform.
 
-DSH is still a developer preview and may introduce compatibility-breaking changes. If an upgrade breaks the plugin, compare its ABI with the baseline above first.
+> [!IMPORTANT]
+> DSH remains a developer preview. If a DSH upgrade causes compatibility issues, check the verified version and commit above first.
 
 > [!CAUTION]
 > **Check the DSH/plugin repository layout before copying an install command:**
@@ -43,7 +46,7 @@ DSH is still a developer preview and may introduce compatibility-breaking change
 
 ### Install every feature
 
-**Sibling-directory install:** when `deepseek-harness` and this repository share a parent directory, run the installer from this repository root:
+When both repositories share a parent directory, run this from the root of this repository:
 
 ```text
 <workspace>/
@@ -55,180 +58,239 @@ DSH is still a developer preview and may introduce compatibility-breaking change
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-Omitting `-Features` or passing `-Features all` installs six Cordis enhancements plus the standalone Windows Launcher companion. It does not install the retired file-reference plugin. Launcher files go to `%LOCALAPPDATA%\DeepSeekHarness\Launcher`, with a Start-menu shortcut; pass `-CreateLauncherDesktopShortcut` to add a desktop shortcut too.
+Omitting `-Features`, or passing `-Features all`, installs the six Cordis enhancements and Windows Launcher. The launcher is deployed to `%LOCALAPPDATA%\DeepSeekHarness\Launcher` and creates a Start menu shortcut. Add `-CreateLauncherDesktopShortcut` if you also want a desktop shortcut.
+
+If the DSH checkout is not a sibling, provide its location explicitly:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 `
+  -DshCheckout "E:\projects\deepseek-harness"
+```
 
 ### Install selected features
 
-List the features provided by the current checkout:
+List the stable feature IDs exposed by this version:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
 ```
 
-Then pass comma-separated install names from the feature overview. For example, keep only desktop alerts, MCP management, and editing the last message:
+Then pass the final set you want to keep. For example, install desktop alerts, MCP management, and message editing only:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,edit-last-message
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 `
+  -Features notification,mcp-server-manager,edit-last-message
 ```
 
-`-Features` describes the enhanced feature set the target profile and machine should **retain after the operation**. The installer first builds and installs every selected bundle/companion, then removes the aggregate package, unselected sibling features, and conflicting legacy packages. Deselecting `windows-launcher` shuts down its tray and removes program files, autostart, and shortcuts while preserving logs and user settings. Historical file-reference packages are removed as before. A failed installation does not remove the previously working set early.
+Common combinations can replace the `-Features` value in that command:
 
-**Different-directory install:** if the DSH checkout is elsewhere, pass it explicitly:
+| Goal | Feature set |
+| --- | --- |
+| Windows desktop experience | `windows-launcher,notification` |
+| Agent and model enhancements | `mcp-server-manager,model-input-types,edit-last-message,sub-agent` |
+| Plugin discovery and integration management | `plugin-market,mcp-server-manager` |
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -DshCheckout "E:\projects\deepseek-harness"
-```
+`-Features` is not an additive list. It describes the **final enhanced feature set** that the target profile and machine should retain. The installer:
 
-The script installs dependencies, builds the packages, installs them into the `web` profile, and verifies that the profile loads. If DSH is already running, restart it once after the script succeeds.
+1. Installs dependencies and builds every selected feature.
+2. Installs and verifies that every selected bundle or companion loads.
+3. Only then removes the aggregate package, unselected sibling features, and declared legacy conflicts.
+4. Detects and cleans up the retired file-reference plugin.
+
+If a prerequisite step fails, the installer does not dismantle the previously working combination. Restart the current Web profile once after a successful install if DSH is already running.
 
 ## Feature guide
 
-### Windows Launcher
+### 1. Windows Launcher
 
-Install name: `windows-launcher` · Location: **Start menu → DeepSeek Harness Launcher**
+`windows-launcher` · **Start → DeepSeek Harness Launcher** · Windows 10+
 
-Launcher is a Windows companion completely outside Cordis. Its redesigned control center provides a Web status card; start, open, restart, and stop actions; port and browser options; one-shot Headless tasks; background Profiles; merged logs; environment diagnostics; and a dedicated **DSH Source** page. The layout reflows into wider card columns when the window is maximized, and the executable, window, tray, and sidebar share the official DeepSeek whale mark. On Windows 10 and 11, Per-Monitor V2 DPI awareness keeps the window inside the current screen's working area. At low resolutions or 125%–200% scaling, the UI switches to a compact sidebar, wrapped actions, multi-row settings, and scrollable pages; custom-painted controls and spacing scale with the current monitor DPI as well. Coalesced resize layout and background service sampling keep interaction responsive. Closing the window stops foreground polling and keeps Launcher available in the system tray.
+![DeepSeek Harness Windows Launcher overview](assets/readme/windows-launcher.png)
 
-Launcher stops only DSH process trees that it started. The control center has no exit buttons. Its tray context menu lists **Exit Launcher Only**, which leaves DSH running, followed by **Exit Launcher**, which requests a safe DSH stop and exits only after the service has ended. An external service or stop timeout cancels **Exit Launcher** and reports the reason. A listener on the configured port without a live launcher-owned supervisor is labelled an external Web service: the page can be opened, but Launcher refuses to adopt, restart, or terminate it. Tasks and Profiles run without console windows; arbitrary task text travels through a UTF-8 request file, while Headless results and Profile/Web logs are also transported and stored as UTF-8. The runtime prefers npm's `dsh.ps1` shim instead of interpolating user text into `cmd.exe`. Login startup is off by default. The Overview page offers two mutually exclusive modes: start only Launcher in the tray, or start Launcher and then launch DSH Web in the background after a 30-second initialization delay. Either mode can also be disabled.
+A Windows control center outside the Cordis plugin tree for local DSH users who do not want to keep a terminal open.
 
-Versioned deployment keeps Start-menu and the selected login-startup mode stable across upgrades without depending on a profile's `node_modules`. The installer preserves an explicitly configured DSH command; when installing through a local DSH checkout, it instead generates and validates a safe direct entry to that checkout's CLI and records that checkout as the only allowed source-build root. The **DSH Source** page has one confirmed update-and-build action: it runs `git pull --ff-only` in a hidden background process and starts `pnpm run build` only after the update succeeds. If Git is unavailable, the confirmation explicitly offers a build-only fallback. The log area below the button refreshes while the operation runs, and complete UTF-8 output is also written to `dsh-build.log`; installations that only expose a global `dsh` command do not enable this action. No additional global `dsh` install is required, and task working directories remain intact. Runtime state, logs, and settings live under `%LOCALAPPDATA%\DeepSeekHarness\Launcher`.
+- **Web control:** inspect status, start, open, restart, or stop Web; identify services already bound to the port without taking ownership of them.
+- **Tasks and profiles:** run one-shot Headless tasks and background profiles with unified UTF-8 results and logs.
+- **Source maintenance:** run `git pull --ff-only` against the bound DSH checkout and only run `pnpm run build` after a successful update; explicitly allow build-only operation when Git is unavailable.
+- **Diagnostics:** collect command, port, working directory, status, and log information, with a dedicated DSH Source page.
+- **Desktop behavior:** system tray, optional login startup, wide split layouts, compact layouts, per-monitor DPI scaling, and multi-monitor bounds protection.
 
-### Desktop alerts & pet
+<details>
+<summary><strong>Process ownership, exit, and background behavior</strong></summary>
 
-Install name: `notification` · Location: **Settings → Desktop Pet**
+Launcher only stops DSH process trees that it started. A service already using the configured port is shown as an external Web service: the page can be opened, but Launcher will not take it over, restart it, or terminate it.
+
+The tray exposes two exit paths. “Exit Launcher Only” leaves DSH running; “Exit Launcher” first requests a safe stop of Launcher-owned services. If the service is external or the stop times out, exit is cancelled with a reason.
+
+Tasks and profiles run in no-console child processes. User task content travels through a UTF-8 request file to the PowerShell command engine and is never concatenated into `cmd.exe`. Hiding the main window stops foreground polling while the tray and background services continue running.
+
+</details>
+
+<details>
+<summary><strong>Login startup, deployment, and source binding</strong></summary>
+
+Login startup is off by default. You can start Launcher in the tray only, or start Launcher and launch DSH Web in the background after a 30-second initialization delay. The modes are mutually exclusive and can both remain disabled.
+
+Versioned deployment directories keep Start menu and login-startup entries pointed at the current release without depending on profile `node_modules`. The installer preserves an explicitly configured DSH command. For a local DSH checkout, it generates and verifies a safe direct CLI entry and records that checkout as the only permitted source-build root.
+
+Settings, runtime state, and logs live under `%LOCALAPPDATA%\DeepSeekHarness\Launcher`. Deselecting `windows-launcher` stops the tray and removes program files, startup entries, and shortcuts while preserving logs and user settings.
+
+</details>
+
+### 2. Desktop alerts and pet
+
+`notification` · **Settings → Desktop Pet** · Sounds and pet require Windows 10+
 
 ![Desktop alerts, custom sound library, and pet settings](assets/readme/desktop-notifications.png)
 
-Sounds cover three event families: confirmation needed, task completed, and task blocked. Each can independently use off, one of two built-in sounds, or a WAV from the shared library. Changing a playable option previews it automatically, and the Preview button plays it again. A shared 0–100% gain reaches about +6 dB at 100% and softly limits near-peak PCM / IEEE Float WAV files. Each file may be up to 2 MiB; the profile-local library holds up to 64 files.
+- Confirmation, completion, and blocked events can each be disabled or mapped to two built-in sounds or a custom WAV.
+- Changing a sound previews it automatically, with a manual preview button as well. Shared gain ranges from 0–100%; 100% is approximately +6 dB, with soft limiting for near-peak PCM / IEEE Float WAV files.
+- Each file is limited to 2 MiB and the shared library to 64 files, all stored in the current DSH profile.
+- The pet switches live between the Flat Whale, 3D Whale, and Whale Girl characters.
 
-Enabling the desktop pet shows a native DeepSeek mascot outside the browser. Pet Style switches live among Flat Whale, 3D Whale, and the anime-style Whale Girl; Flat Whale remains the default. It aggregates all sessions into these states:
+| Aggregate state | Pet behavior |
+| --- | --- |
+| Idle | Sleeping loop; mouse contact or dragging triggers an interaction, with optional non-topmost idle mode |
+| Working | Focused swimming or operating a task panel |
+| Confirmation | Surprise, head turn, or question-mark cue; highest priority |
+| Completed | A short celebration for top-level tasks only |
+| Blocked | A short tired or concerned response for top-level tasks only |
 
-- **Idle:** sleeps in a continuous low-amplitude breathing loop with drifting `Zzz`; hovering or dragging switches it to a compact, eager-to-play anticipation loop, and leaving it restores sleep. Idle topmost behavior is configurable.
-- **Working:** Flat Whale uses its five-frame focused swim; 3D Whale uses forceful side swimming; Whale Girl operates a compact cyan task panel with focused eyes, two-handed taps, flowing hair, and tail motion. The two newer styles do not use an external progress ring.
-- **Confirmation needed:** Flat Whale uses its five-frame surprised alert and pulse ring; 3D Whale turns and raises a fin; Whale Girl leans closer, listens, and points toward a softly moving question mark. This state has the highest priority, and the two newer styles have no outer ring.
-- **Completed:** briefly plays a joyful fin-wave/spatial roll for the whales or a hop-and-clap sparkle sequence for Whale Girl, for the top-level task only.
-- **Blocked:** briefly plays a tired/frustrated whale sequence or Whale Girl's concerned error-signal reaction, for the top-level task only.
+The pet can be dragged across monitors and stores normalized per-monitor positions. Resolution, scale, work-area, or display-topology changes remap it into a visible area; changing the startup corner clears the drag record. Windows “Show animations” accessibility preferences reduce every state to a representative still frame when animations are disabled.
 
-Flat Whale keeps its existing five-frame task and idle-interaction sheets. 3D Whale has twenty-four transparent frames for each of six animations: sleep, pointer interaction, working, confirmation, completed, and blocked. Its viewpoints stay on front, three-quarter, and side poses; pointer interaction is an in-place anticipation loop, while working uses faster side swimming and a wake. Whale Girl uses thirty-two transparent source frames for each of the same six animations. Playback omits blurred transition frames; working and blocked reactions also use only consistently scaled takes on a normalized foot baseline, preventing leg-length jitter. Working frames retain a narrow transparent slot between touching stockings, while upright pointer-interaction, confirmation, completed, and blocked frames remove the source's painted white wedge between the legs; raised-leg silhouettes are left intact. Her idle interaction stays front-facing with small hops and a wave, while working uses the task panel, so the two states remain visibly distinct. Hair, limbs, expression, clothing, and the lower-back whale tail all move in fine increments instead of shaking a static image. The pet can be dragged freely across monitors and beyond desktop edges. On release, it snaps fully into the work area with the greatest overlap, or the nearest screen edge when released in a gap between displays. It stores a normalized position per display and remaps it into the visible work area after resolution, scaling, work-area, or monitor-connectivity changes. Changing Startup Position clears dragged positions and returns it to the selected corner. Windows “Show animations” accessibility preferences automatically select a representative static frame for each state and idle interaction phase when animations are reduced.
+Both the resident pet and short-lived sound processes are owned by the DSH subprocess service and exit cooperatively when disabled. A known retired pet ID is migrated to Flat Whale on the next launch; other unknown values continue to fail validation.
 
-Settings apply live. The resident pet and short-lived sound processes are managed through the DSH subprocess service and exit cooperatively without leaving helper processes behind.
+### 3. Plugin Community
 
-When a previously installed build stored a pet style that was later retired, the notification plugin migrates that known retired id to Flat Whale during its next startup. Unknown values still fail validation instead of being silently accepted.
-
-### Plugin Community
-
-Install name: `plugin-market` · Location: **Settings → Plugin Community**
+`plugin-market` · **Settings → Plugin Community**
 
 ![Plugin Community page](assets/readme/plugin-community.png)
 
-1. The first visit uses the bundled plugin snapshot; **Sync latest index** downloads the schema-validated snapshot generated by GitHub Actions every six hours and published to the `market-index` branch, with ETag caching. Transient 429/502/503/504 failures are retried and never replace the last-good snapshot.
-2. Search by repository, package, description, or topic. **Check install method** performs a live preflight: only a repository-matched npm bundle without install lifecycle scripts receives **One-click install**.
-3. A root DSH bundle without build scripts can be installed only after **Confirm source install**, pinned to the inspected commit. Plugins requiring build approval, a monorepo subdirectory, custom dependencies, or another unverifiable path show **View install instructions** instead.
-4. Install and removal run as cancellable background jobs, so the HTTP request does not remain open behind a proxy. A completed install is checked against the target profile, bundle patch, and profile composition; a failed validation is rolled back.
-5. The Installed tab shows every installed target-profile dependency that can be correlated with the channel. Only items installed and recorded by Plugin Community can be removed here; profile- or externally-managed items remain read-only. Restart the current Web profile when prompted after a mutation.
+1. The first visit uses a bundled snapshot. “Sync latest index” uses ETags to fetch a schema-validated snapshot published by GitHub Actions every six hours, retrying temporary 429/502/503/504 responses.
+2. Search by repository, package, description, or topic. A live preflight checks repository identity, commit, and distribution shape before installation.
+3. One-click install is offered only for matching npm bundles with no install lifecycle scripts. Verifiable build-free source bundles can be installed at a pinned commit after confirmation; every other path links to its installation guide.
+4. Install and uninstall run as cancellable background jobs. The target profile, bundle patch, and composition are verified afterward, with automatic rollback on failure.
+5. The Installed tab separates market-managed plugins from externally managed ones. Only the former can be removed from this page.
 
-The marketplace's own `sky-unicorn/dsh-enhanced-plugins` repository is a built-in verified channel contribution. It stays searchable even when the remote mirror predates the repository, and is de-duplicated once the mirror includes it.
+<details>
+<summary><strong>Index publishing, network proxies, and credentials</strong></summary>
 
-Index production is owned by [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml). The indexer fully enumerates the topic, reuses validation for unchanged repositories, and reads the root `package.json` only for new or changed repositories. Pushing the workflow or indexer creates the `market-index` branch automatically; scheduled updates then run without a resident service or personal token, while generation failures and unexpected large shrinkage leave the last index untouched.
+The [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) workflow publishes the `market-index` branch. It enumerates the complete topic, revalidates only new or changed repositories, and refuses to overwrite the last result after an abnormal shrink or failed build. This project is also a built-in verified channel contribution, so it remains discoverable before the remote mirror catches up and is not duplicated afterward.
 
-The bundled snapshot and automated index sync work without an end-user GitHub token. Host-side downloads honor `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` (including their lowercase forms), so the marketplace follows the same network route as command-line download tools instead of silently attempting a direct GitHub connection. Live install preflight reads repository and commit metadata from GitHub; if that API is rate-limited, save a read-only, short-lived fine-grained token under Configure. The token is sent only to the local DSH Host and stored by the credentials service. The page shows the index generation time and warns after 24 hours without a fresh publication while retaining the last-good snapshot.
+Neither the bundled snapshot nor automated index sync requires a GitHub token. The Host recognizes `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY`, including lowercase variants. If install preflight hits GitHub API limits, Settings can store a read-only, short-lived fine-grained token. It is sent only to the local DSH Host and stored through the credentials service.
 
-### MCP server manager
+The page displays index generation time. An index older than 24 hours receives an explicit warning while the last usable snapshot remains available.
 
-Install name: `mcp-server-manager` · Location: **Settings → Plugins → Plugin configuration → MCP Servers**
+</details>
+
+### 4. MCP server manager
+
+`mcp-server-manager` · **Settings → Plugins → Plugin configuration → MCP Servers**
 
 ![MCP server manager](assets/readme/mcp-server-manager.png)
 
-1. Choose Add server, give it a unique name, and select `stdio` or Streamable HTTP.
-2. Configure command, arguments, working directory, and environment variables for `stdio`; configure an HTTP(S) URL and headers for HTTP.
-3. Import Claude Code and Codex configurations in one step if desired. The Host skips duplicate names or content and explains entries it cannot convert safely.
-4. Review the format audit at the top of the card, then save. The Host starts, updates, or removes each server connection independently.
+1. Add a unique name and choose `stdio` or Streamable HTTP.
+2. Configure command, arguments, working directory, and environment for `stdio`; configure an HTTP(S) URL and headers for HTTP.
+3. The Host can import local Claude Code and Codex configurations in one pass. Duplicates are skipped and unsafe conversions report a reason.
+4. Review the format audit at the top of the card and save. The Host starts, updates, or unloads each connection independently.
 
-Environment-variable and header values are masked when the browser reads existing servers. Unchanged secrets are never reconstructed from a redacted snapshot or overwritten.
+Environment and header values are masked when existing servers reach the browser. Unchanged secrets are not reconstructed from, or overwritten by, redacted snapshots.
 
-### pi-ai model request types
+### 5. pi-ai model request types
 
-Install name: `model-input-types` · Location: **Settings → Plugins → Plugin configuration → pi-ai model request types**
+`model-input-types` · **Settings → Plugins → Plugin configuration → pi-ai model request types**
 
-![pi-ai model request types](assets/readme/model-input-types.png)
+![pi-ai model request type settings](assets/readme/model-input-types.png)
 
 Add pi-ai model overrides on the DSH Models page or in `settings.yaml`, then choose Provider default, Text only, or Text and images for each model. Changes save immediately.
 
-The card appears only while the official `llm-pi-ai` settings namespace is available. It stores a capability declaration and does not probe the endpoint; verify provider support before declaring Text and images.
+The card appears only when the official `llm-pi-ai` settings namespace is available. It stores a capability declaration and does not probe the endpoint; verify that the provider truly accepts images before declaring Text and images.
 
-### Edit last message
+### 6. Edit last message
 
-Install name: `edit-last-message` · Location: **the latest editable user-message bubble in the current conversation**
+`edit-last-message` · **Latest editable user-message bubble in the current session**
 
-![Editing and resending the latest message](assets/readme/edit-last-message.png)
+![Edit and resend the latest user message](assets/readme/edit-last-message.png)
 
-1. Wait for the current run to finish, or stop it first.
-2. Choose Edit last message and update the text in place.
-3. Choose Resend or press `Ctrl/⌘ + Enter`; press `Esc` or Cancel to exit editing.
+1. Wait for the current session to finish, or stop it first.
+2. Select Edit last message and change the text inline.
+3. Select Resend or press `Ctrl/⌘ + Enter`; press `Esc` or Cancel to leave edit mode.
 
-Resending stays in the current session. The plugin replaces model context from the edited user message onward, then runs the same AgentLoop again. The DSH Session log remains an append-only audit record, and external side effects from already-executed tools are not rolled back. Messages containing images or other non-text blocks do not expose the editor, which avoids silently dropping content.
+Resend stays inside the current session: the plugin replaces model context starting at the edited user message, then generates through the same AgentLoop. The DSH Session log remains an append-only audit record, and side effects from tools that already ran are not rolled back. Messages containing images or other non-text blocks do not expose the editor, preventing silent data loss.
 
-### Product subagents
+### 7. Product subagents
 
-Install name: `sub-agent` · Location: **Settings → Subagents**
+`sub-agent` · **Settings → Subagents**
 
 ![Claude Code and Codex subagent toggles](assets/readme/subagent-toggles.png)
 
-Enable Claude Code or Codex and the change applies immediately to Agent presets that load this controller, including running sessions; no profile restart is needed. Disabling a toggle removes the corresponding tool live. The matching local product and official DSH provider must still be available.
+Enabling Claude Code or Codex applies immediately to every Agent preset carrying this controller, including running sessions. Disabling a toggle removes the matching tool in real time. The corresponding product and its official DSH provider must still be installed locally.
 
-Both toggles default to off. Writes use path-addressed operations and a settings revision fence, so they do not replace unrelated changes from another page or external editor with a stale or redacted snapshot.
+Both toggles default to off. Writes use path-addressed operations and settings revisions, so a redacted or stale snapshot cannot overwrite changes from another page or an external editor.
 
-## Configuration reference
+## Compatibility and migration
 
-The default composition lives in [`cordis.patch.yml`](cordis.patch.yml). A later profile patch replaces an entire Loader row’s `config`; repeat every field that must be preserved when overriding one.
+- **Verified baseline:** DSH `0.1.1-rc.2`, commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+- **Architecture boundary:** Web features extend public Services, events, slots, and settings. Windows Launcher is an independent companion and never joins the Cordis plugin tree.
+- **File reference retired:** current DSH provides native [`@` file references](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference). Type `@` in the composer, or `@"` for paths containing spaces. The old `referenced-file` feature ID and `#` snapshot syntax are no longer provided.
+- **Automatic cleanup:** `-Features referenced-file` is rejected explicitly. A normal installer run removes the historical selective package or the feature carried by an older aggregate install.
+
+## Configuration
+
+The default composition lives in [`cordis.patch.yml`](cordis.patch.yml). A later profile patch replaces the target Loader row's entire `config`, so an override must restate every field that row still needs.
 
 <details>
-<summary>Desktop-alert defaults</summary>
+<summary><strong>Desktop alert defaults</strong></summary>
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `completionSound` | `subtle` | `off`, `subtle`, `prominent`, or uploaded `custom` completion sound |
-| `confirmationSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` attention sound |
-| `blockedSound` | `prominent` | `off`, `subtle`, `prominent`, or uploaded `custom` blocked-task sound |
-| `soundGain` | `0` | Shared 0–100% positive gain; 100 is about +6 dB |
+| `completionSound` | `subtle` | Completion sound: `off`, `subtle`, `prominent`, or uploaded `custom` |
+| `confirmationSound` | `prominent` | Attention sound: `off`, `subtle`, `prominent`, or uploaded `custom` |
+| `blockedSound` | `prominent` | Blocked sound: `off`, `subtle`, `prominent`, or uploaded `custom` |
+| `soundGain` | `0` | Shared 0–100% positive gain; 100 is approximately +6 dB |
 | `petEnabled` | `false` | Show the native global desktop pet |
-| `petCharacter` | `classic` | Pet style: `classic` (Flat Whale), `multiview` (3D Whale), or `whale-girl` (Whale Girl) |
-| `petIdleTopmost` | `true` | Keep the pet above other windows while idle |
-| `petSize` | `112` | Pet size: `80`, `112`, `144`, or `176` device-independent pixels |
-| `petPosition` | `bottom-right` | Fallback/reset corner: `top-left`, `top-right`, `bottom-left`, or `bottom-right` |
+| `petCharacter` | `classic` | `classic` (Flat Whale), `multiview` (3D Whale), or `whale-girl` |
+| `petIdleTopmost` | `true` | Keep the idle pet topmost |
+| `petSize` | `112` | `80`, `112`, `144`, or `176` device-independent pixels |
+| `petPosition` | `bottom-right` | `top-left`, `top-right`, `bottom-left`, or `bottom-right` |
 
-The six `*CustomSoundFile` / `*CustomSoundName` fields are Host-owned references for the three sound selections. The shared catalog is stored at `desktop-notifications/sound-library.json` below the profile; upload and select custom sounds through Settings instead of editing these fields manually.
+Six `*CustomSoundFile` / `*CustomSoundName` fields are Host-owned selection references for the three events. The shared catalog is stored at `desktop-notifications/sound-library.json` inside the profile. Upload and choose sounds through Settings instead of editing these fields manually.
 
 </details>
 
 <details>
-<summary>Plugin Community Host configuration</summary>
+<summary><strong>Plugin Community Host configuration</strong></summary>
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `profile` | `web` | Target profile for installs and removals |
-| `topic` | `dsh-plugin` | Required topic identity in the validated channel document |
-| `channelUrl` | HTTPS snapshot on the `market-index` branch | Actions-published source used by Sync latest index |
-| `pageSize` | `12` | Plugins per catalog page |
-| `operationTimeoutMs` | `120000` | Install and removal timeout |
+| `profile` | `web` | Target profile for install and uninstall |
+| `topic` | `dsh-plugin` | Topic required by validated channel entries |
+| `channelUrl` | HTTPS snapshot on `market-index` | Publication used by Sync latest index |
+| `pageSize` | `12` | Plugins per page |
+| `operationTimeoutMs` | `120000` | Install and uninstall timeout |
 | `githubTokenEnv` | `GITHUB_TOKEN` | Credentials reference name |
 | `cliPath` | empty | Optional absolute DSH executable path |
 
-The bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is a read-only bootstrap snapshot and the incremental-validation seed for the indexer's first run. Synchronized cache data, its ETag, background task state, and installation records are owned by the Host; durable cache and records are stored in the marketplace data directory below DSH home. The marketplace never parses README shell commands or enables `dangerouslyAllowAllBuilds`.
+Bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is a read-only bootstrap snapshot and the incremental-validation seed for the first automated index run. The Host owns cached snapshots, ETags, background tasks, and installation records under DSH home. Plugin Community never parses shell commands out of READMEs and never enables `dangerouslyAllowAllBuilds`.
 
 </details>
 
-To expose product-subagent tools only to selected Agent presets, disable or remove the root `subagent-product-toggle-tools` row and mount the matching entry only inside those preset compositions: use `dsh-enhanced-plugins/sub-agent/preset` for the aggregate package or `dsh-enhanced-sub-agent/preset` for the independent package. Do not mount both layouts in the same scope.
+To expose product-subagent tools to selected Agent presets only, disable or remove the root `subagent-product-toggle-tools` row and mount the appropriate entry inside each target preset:
+
+- Aggregate package: `dsh-enhanced-plugins/sub-agent/preset`
+- Selective package: `dsh-enhanced-sub-agent/preset`
+
+Do not mount both layouts in the same scope.
 
 ## Development and verification
 
-The repository uses this read-only sibling checkout as the DSH API, type, and real Web assembly baseline:
+This repository uses the following read-only sibling checkout as its DSH API, type, and assembled Web UI baseline:
 
 ```text
 D:\work\workspace\github\deepseek-harness
 ```
 
-Standard verification commands:
+Regular verification commands:
 
 ```powershell
 npm install
@@ -239,7 +301,7 @@ npm run pack:dry-run
 git diff --check
 ```
 
-The browser bundle uses CSS Modules and only DSH `--dsw-alias-*` semantic theme tokens, so it follows light, dark, and system appearance automatically.
+Browser bundles use CSS Modules and consume only DSH `--dsw-alias-*` semantic theme tokens, so they follow light, dark, and system appearance automatically. See the [DSH plugin development guide](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) and [architecture reference](https://deepseek-harness.github.io/deepseek-harness/reference/) for public extension points.
 
 ## License
 

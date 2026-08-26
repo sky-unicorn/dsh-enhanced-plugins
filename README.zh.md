@@ -1,39 +1,42 @@
 # dsh-enhanced-plugins
 
-[English](README.md) | 中文
+中文 | [English](README.md)
 
-`dsh-enhanced-plugins` 是面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能集合。一次安装可获得全部 7 项功能，也可以只保留需要的独立 bundle 或 Windows Companion。
+面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能套件：**6 个可独立安装的 Cordis bundle + 1 个 Windows Companion**。
 
-项目不修改 DSH 核心。Web 功能只使用公开插件扩展点；Windows Launcher 是由本项目安装器管理的独立桌面 Companion，不进入 Cordis 插件树。每项功能均可独立构建、安装和卸载。
+- 不修改 DSH 核心，只使用公开插件扩展点。
+- 可一次安装全部功能，也可只保留选中的独立功能。
+- Host、Web Client 与 Windows Companion 各自保持清晰的生命周期和安全边界。
 
-[功能一览](#功能一览) · [快速安装](#快速安装) · [功能指南](#功能指南) · [配置参考](#配置参考) · [开发与验证](#开发与验证)
+[功能一览](#功能一览) · [快速开始](#快速开始) · [功能指南](#功能指南) · [兼容性与迁移](#兼容性与迁移) · [配置参考](#配置参考) · [开发与验证](#开发与验证)
 
 ## 功能一览
 
-“安装名称”用于安装脚本的 `-Features` 参数，也是按需安装时唯一需要记住的标识。
+安装脚本只需要“安装名称”；每项功能也都有自包含的独立发布包。
 
-| 功能 | 安装名称 | 使用位置 | 主要用途 |
-| --- | --- | --- | --- |
-| [Windows Launcher](#windows-launcher) | `windows-launcher` | 开始菜单 → DeepSeek Harness Launcher | 托盘、Web 生命周期、Headless、Profile 与日志诊断控制中心 |
-| [桌面提示与宠物](#桌面提示与宠物) | `notification` | 设置 → 桌面宠物 | 任务提示音、自定义 WAV 音效库与原生动态 DeepSeek 鱼宠物 |
-| [插件社区](#插件社区) | `plugin-market` | 设置 → 插件社区 | 搜索、安装和卸载社区 DSH 插件 |
-| [MCP 服务器管理](#mcp-服务器管理) | `mcp-server-manager` | 设置 → 插件 → 插件配置 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
-| [pi-ai 模型请求类型](#pi-ai-模型请求类型) | `model-input-types` | 设置 → 插件 → 插件配置 | 声明模型接受纯文本还是图片请求 |
-| [编辑上一条消息](#编辑上一条消息) | `edit-last-message` | 最后一条用户消息气泡 | 修改该轮内容并在当前会话重新生成 |
-| [产品子智能体](#产品子智能体) | `sub-agent` | 设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
+| 功能 | 安装名称 | 独立包 | 平台与入口 | 解决什么问题 |
+| --- | --- | --- | --- | --- |
+| [Windows Launcher](#1-windows-launcher) | `windows-launcher` | `dsh-enhanced-windows-launcher` | Windows 开始菜单 | 用托盘控制 Web、Headless、Profile、源码构建与诊断 |
+| [桌面提示与宠物](#2-桌面提示与宠物) | `notification` | `dsh-enhanced-notification` | Windows；设置 → 桌面宠物 | 任务提示音、自定义 WAV 音效库和原生动态桌宠 |
+| [插件社区](#3-插件社区) | `plugin-market` | `dsh-enhanced-plugin-market` | Web；设置 → 插件社区 | 搜索、安全预检、安装和卸载社区插件 |
+| [MCP 服务器管理](#4-mcp-服务器管理) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web；设置 → 插件 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
+| [pi-ai 模型请求类型](#5-pi-ai-模型请求类型) | `model-input-types` | `dsh-enhanced-model-input-types` | Web；设置 → 插件 | 声明模型接受纯文本还是图片请求 |
+| [编辑上一条消息](#6-编辑上一条消息) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web；最后一条用户消息 | 修改该轮内容并在当前会话重新生成 |
+| [产品子智能体](#7-产品子智能体) | `sub-agent` | `dsh-enhanced-sub-agent` | Web；设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
 
-> [!NOTE]
-> 工作区文件引用不再作为本仓库的增强插件功能提供。最新版官方 DSH 已原生支持 [`@` 文件引用](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference)：在会话输入框输入 `@`（含空格路径可输入 `@"`）并选择工作区路径。原 `referenced-file` 安装名称及其 `#` 快照语法已经退役；全量 bundle 不再包含它，`-Features referenced-file` 会被拒绝，正常执行安装脚本还会清理历史独立包或旧版全量安装中携带的该功能。
+聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 7 项；选择功能时只安装对应独立包或 Companion。
 
-## 快速安装
+## 快速开始
 
-### 开始前
+### 前置条件
 
-- Node.js 22.19 或更高版本。
-- 最新的 DSH Web profile。本仓库针对 DSH `0.1.1-rc.2` 验证，本地基准 commit 为 `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`。
+- Node.js 22.19.x，或 Node.js 24 及更高版本。
+- 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
+- 本仓库针对 DSH [`0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e) 验证，本地 ABI 基准 commit 为 `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`。
 - Windows Launcher、原生提示音和桌面宠物需要 Windows 10 或更高版本及 Windows PowerShell 5.1；其余功能可跨平台使用。
 
-DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH 后若遇到问题，请先核对上述 ABI 版本。
+> [!IMPORTANT]
+> DSH 仍处于开发者预览阶段。升级 DSH 后若出现兼容问题，请先核对上面的实测版本和 commit。
 
 > [!CAUTION]
 > **先确认 DSH 与插件仓库的目录关系，再复制安装命令：**
@@ -43,7 +46,7 @@ DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH �
 
 ### 安装全部功能
 
-**同目录安装**：当 `deepseek-harness` 与本仓库位于同一父目录时，在本仓库根目录运行：
+当两个仓库位于同一父目录时，在本仓库根目录运行：
 
 ```text
 <工作目录>/
@@ -55,110 +58,157 @@ DSH 仍处于开发者预览阶段并可能产生不兼容变更。升级 DSH �
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-省略 `-Features` 或传入 `-Features all` 会安装 6 项 Cordis 增强和独立的 Windows Launcher Companion，不会安装已经退役的文件引用插件。Launcher 文件安装到 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，并创建开始菜单快捷方式；只有传入 `-CreateLauncherDesktopShortcut` 才会额外创建桌面快捷方式。
+省略 `-Features` 或传入 `-Features all` 会安装 6 个 Cordis 增强和 Windows Launcher。Launcher 位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，默认只创建开始菜单快捷方式；需要桌面快捷方式时添加 `-CreateLauncherDesktopShortcut`。
+
+如果 DSH checkout 不在同级目录，显式指定它：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 `
+  -DshCheckout "E:\projects\deepseek-harness"
+```
 
 ### 按需安装
 
-先列出当前版本提供的功能：
+先查看当前版本提供的稳定安装名称：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -ListFeatures
 ```
 
-再用逗号分隔“功能一览”中的安装名称，例如只保留桌面提示、MCP 管理和编辑上一条消息：
+再传入最终希望保留的功能集合。例如，只安装桌面提示、MCP 管理和编辑消息：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features notification,mcp-server-manager,edit-last-message
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 `
+  -Features notification,mcp-server-manager,edit-last-message
 ```
 
-`-Features` 表示目标 profile 和本机 **最终保留的增强功能集合**。脚本会先成功构建并安装全部所选 bundle/Companion，再移除聚合包、未选择的同仓库功能及冲突旧包。取消选择 `windows-launcher` 会停止托盘、移除程序文件、自启项和快捷方式，但保留 Launcher 日志与用户设置。脚本还会检测并卸载历史文件引用功能；安装失败时不会提前破坏原有可用组合。
+常见组合可直接替换命令中的 `-Features` 值：
 
-**非同目录安装**：如果 DSH checkout 不在同级目录，通过 `-DshCheckout` 指定位置：
+| 目标 | 功能集合 |
+| --- | --- |
+| Windows 桌面体验 | `windows-launcher,notification` |
+| Agent 与模型增强 | `mcp-server-manager,model-input-types,edit-last-message,sub-agent` |
+| 插件发现与集成管理 | `plugin-market,mcp-server-manager` |
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -DshCheckout "E:\projects\deepseek-harness"
-```
+`-Features` 不是“额外添加列表”，而是目标 profile 与本机**最终保留的增强功能集合**。脚本会：
 
-安装脚本会完成依赖安装、构建、`web` profile 安装与加载验证。成功后若 DSH 正在运行，重启一次即可使用。
+1. 安装依赖并构建全部所选功能。
+2. 安装并验证所选 bundle / Companion 能否加载。
+3. 成功后再移除聚合包、未选择的同仓库功能和已声明冲突的旧包。
+4. 检测并清理已经退役的文件引用插件。
+
+任何前置步骤失败时，脚本都不会提前破坏原有可用组合。安装成功后如果 DSH 正在运行，重启当前 Web profile 一次。
 
 ## 功能指南
 
-### Windows Launcher
+### 1. Windows Launcher
 
-安装名称：`windows-launcher` · 位置：**开始菜单 → DeepSeek Harness Launcher**
+`windows-launcher` · **开始菜单 → DeepSeek Harness Launcher** · Windows 10+
 
-Launcher 是完全独立于 Cordis 的 Windows Companion。现代化控制面板包含 Web 状态卡、启动/打开/重启/停止快捷操作、端口与浏览器选项、Headless 单次任务、后台 Profile、合并日志、环境诊断和独立的“DSH 源码”页。窗口最大化时，卡片会自动重排为宽屏分栏；EXE、窗口、托盘和侧栏统一使用 DeepSeek 官方鲸鱼标识。针对 Windows 10/11，程序使用逐显示器 Per-Monitor V2 DPI 感知，窗口会自动限制在当前屏幕工作区内；低分辨率或 125%–200% 缩放下会启用紧凑侧栏、按钮换行、设置分行和页面滚动，自绘控件及其间距也会随当前显示器 DPI 一起缩放。合并缩放布局和后台服务采样可降低交互卡顿；窗口隐藏后停止前台轮询，同时继续驻留系统托盘。
+![DeepSeek Harness Windows Launcher 概览](assets/readme/windows-launcher.png)
 
-Launcher 只停止自己启动的 DSH 进程树。控制中心不显示退出按钮；系统托盘右键菜单依次提供“仅退出 Launcher”与“退出 Launcher”：前者保留 DSH 服务并只退出 Launcher，后者发送安全停止请求并确认 DSH 服务结束后再退出。检测到外部服务或等待停止超时时，“退出 Launcher”会取消退出并显示原因。端口上出现外部服务时会显示“外部 Web 服务”，允许打开页面但拒绝接管、重启或终止。任务与 Profile 都通过无控制台窗口的子进程运行；任意任务内容通过 UTF-8 请求文件交给 PowerShell 命令引擎，Headless 结果和 Profile/Web 日志也统一按 UTF-8 传递与保存。运行时优先选择 npm 生成的 `dsh.ps1`，不把用户文本拼入 `cmd.exe`。登录启动默认关闭；概览页提供两个互斥选项：登录后仅在托盘启动 Launcher，或者先启动 Launcher、等待 30 秒初始化后再在后台启动 DSH Web。两个模式也可以全部关闭。
+独立于 Cordis 插件树的 Windows 控制中心，适合不想长期守着终端的本地 DSH 用户。
 
-程序使用版本化目录部署，开始菜单和已选择的登录启动模式在升级后都会指向新版本，因此不会依赖 profile 的 `node_modules`。安装器会保留用户显式配置的 DSH 命令；使用本地 DSH checkout 安装时，则生成并验证一个直接调用该 checkout CLI 的安全入口，同时记录该 checkout 作为唯一允许的源码构建根目录。“DSH 源码”页用一个按钮完成更新与构建：确认后先后台无窗口执行 `git pull --ff-only`，成功后再执行 `pnpm run build`；Git 更新失败时不会继续构建。系统没有 Git 时，确认框会明确提示跳过更新并允许仅 build。按钮下方的日志区在运行中自动刷新，完整 UTF-8 输出同时写入 `dsh-build.log`；使用全局 `dsh` 且没有本地 checkout 的安装不会启用此按钮。因此无需额外全局安装 `dsh`，也不会改变任务的工作目录。运行状态、日志和设置统一保存在 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。
+- **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。
+- **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
+- **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后再运行 `pnpm run build`；无 Git 时可明确选择仅构建。
+- **诊断：** 汇总命令、端口、工作目录、运行状态和日志，并提供独立的 DSH 源码页。
+- **桌面体验：** 系统托盘、可选登录启动、宽屏分栏、紧凑布局、逐显示器 DPI 缩放与多显示器边界保护。
 
-### 桌面提示与宠物
+<details>
+<summary><strong>进程所有权、退出与后台行为</strong></summary>
 
-安装名称：`notification` · 位置：**设置 → 桌面宠物**
+Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服务时会显示“外部 Web 服务”，允许打开页面，但不会接管、重启或终止它。
+
+系统托盘提供两个退出动作：“仅退出 Launcher”会保留 DSH 服务；“退出 Launcher”会先请求安全停止 Launcher 自己管理的服务。若检测到外部服务或停止超时，退出会被取消并说明原因。
+
+任务与 Profile 均通过无控制台窗口的子进程运行。用户任务经 UTF-8 请求文件传给 PowerShell 命令引擎，不会拼接进 `cmd.exe`；隐藏主窗口后会停止前台轮询，但托盘和后台服务仍继续工作。
+
+</details>
+
+<details>
+<summary><strong>登录启动、部署与源码绑定</strong></summary>
+
+登录启动默认关闭。可选择“只启动 Launcher 到托盘”或“先启动 Launcher，等待 30 秒后再在后台启动 DSH Web”，两种模式互斥，也可以全部关闭。
+
+程序使用版本化目录部署，开始菜单和登录启动项在升级后都会指向新版本，不依赖 profile 内的 `node_modules`。安装器保留用户显式配置的 DSH 命令；使用本地 DSH checkout 安装时，则生成并验证直接调用该 checkout CLI 的安全入口，并将它记录为唯一允许执行源码构建的根目录。
+
+设置、运行状态与日志统一位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。取消选择 `windows-launcher` 会停止托盘、移除程序文件、自启项和快捷方式，但保留日志与用户设置。
+
+</details>
+
+### 2. 桌面提示与宠物
+
+`notification` · **设置 → 桌面宠物** · 提示音与宠物仅支持 Windows 10+
 
 ![桌面提示、自定义音效库与宠物设置](assets/readme/desktop-notifications.png)
 
-提示音支持“需要确认”“任务完成”“任务受阻”三类事件。每类可分别选择关闭、两档内置默认音或公共音效库中的自定义 WAV；切换选项会自动试听，也可手动点击“试听”。共享增益范围为 0–100%，100% 约为 +6 dB，并对接近峰值的 PCM / IEEE Float WAV 软限幅。单文件最多 2 MiB，音效库最多 64 个文件，全部保存在当前 DSH profile 中。
+- “需要确认”“任务完成”“任务受阻”三类事件可分别关闭，或选择两档默认音 / 自定义 WAV。
+- 切换音效会自动试听，也可手动试听；共享增益为 0–100%，100% 约为 +6 dB，并对接近峰值的 PCM / IEEE Float WAV 软限幅。
+- 单文件最多 2 MiB，公共音效库最多 64 个文件，全部保存在当前 DSH profile 中。
+- 桌宠可选“平面小鲸”“立体小鲸”或“鲸鱼娘”，设置实时生效。
 
-打开“启用桌面宠物”后，浏览器之外会显示原生 DeepSeek 角色。“宠物样式”可在“平面小鲸”“立体小鲸”和二次元风格的“鲸鱼娘”之间实时切换，默认仍为平面小鲸。它会根据所有会话汇总为以下状态：
+| 汇总状态 | 桌宠表现 |
+| --- | --- |
+| 空闲 | 睡眠循环；鼠标接触或拖动时切换为互动动作，可选择空闲时不置顶 |
+| 任务中 | 专注游动或操作任务面板 |
+| 需要确认 | 惊讶、转头或问号提醒，优先级最高 |
+| 已完成 | 仅为顶层任务短暂播放庆祝动作 |
+| 任务受阻 | 仅为顶层任务短暂播放疲惫或担心动作 |
 
-- **空闲**：持续播放轻微呼吸和 `Zzz` 漂浮的睡眠循环；鼠标接触或拖动时切换为蓄势待玩的“跃跃欲试”循环，鼠标离开后恢复睡眠；可选择空闲时不置顶。
-- **任务中**：平面小鲸播放五帧专注游动；立体小鲸侧向强力游动；鲸鱼娘以专注眼神、双手操作青色任务面板并配合头发和尾巴摆动。后两种样式不使用外部进度环。
-- **需要确认**：平面小鲸播放五帧惊讶提醒和脉冲环；立体小鲸转头、抬鳍；鲸鱼娘靠近倾听并指向轻轻浮动的问号。该状态优先级最高，后两种样式不使用外圈。
-- **已完成**：仅为顶层任务短暂播放小鲸翻身／挥鳍，或鲸鱼娘跳起、拍手与闪光动作。
-- **任务受阻**：仅为顶层任务短暂播放小鲸疲惫／沮丧，或鲸鱼娘担心错误信号的动作。
+桌宠可跨显示器拖动，并按显示器保存归一化位置；分辨率、缩放、工作区或显示器连接变化后会重新换算到可见区域。修改启动角落会清除拖动记录。Windows 开启“减弱动画”后，每种状态会使用代表静态帧。
 
-平面小鲸继续使用原有的五帧任务与空闲交互精灵图。立体小鲸的睡眠、鼠标交互、任务中、需要确认、已完成和任务受阻六组动画各有二十四张透明帧；镜头集中在正面、斜侧和侧面，鼠标交互是原地蓄势，任务中则使用更快的侧向游动和尾流。鲸鱼娘的同六组动画各有三十二张透明源帧；播放时会排除模糊过渡帧，任务中和任务受阻还只使用比例一致的片段并统一脚底基线，避免腿部忽长忽短。任务态会在相贴的长袜之间保留窄透明缝；鼠标交互、需要确认、已完成和任务受阻中的直立帧则会去掉原素材残留在两腿间的白色背景楔形，抬腿帧的非对称轮廓保持不变。鼠标交互保持正面的小幅弹跳和招手，任务中使用任务面板，两种状态在姿态和节奏上清晰区分。头发、四肢、表情、服装和背部鲸尾均以细微递进姿势运动，不靠静态图片抖动。宠物可跨显示器自由拖动，拖动过程中允许越过桌面边缘；松开鼠标后，会优先完整吸附到重叠面积最大的显示器工作区，若停在显示器之间的空隙，则吸附到边缘距离最近的显示器。插件会按显示器保存归一化位置，并在分辨率、缩放、工作区或显示器连接状态变化后重新换算到可见区域。修改“启动位置”会清除拖动记录并恢复到所选角落。Windows 开启“减弱动画”后会自动使用每种任务状态和空闲交互阶段的代表静态帧。
+常驻宠物和短生命周期提示音进程都由 DSH subprocess service 管理，关闭功能时会协作式退出。若旧配置保存了已经退役的已知桌宠 ID，下次启动会迁移为“平面小鲸”；其他未知值仍会校验失败。
 
-设置实时生效。常驻宠物及短生命周期提示音进程均由 DSH subprocess service 管理；关闭功能时会协作式退出，不遗留 helper 进程。
+### 3. 插件社区
 
-如果先前安装的版本保存了后来退役的桌宠样式，通知插件会在下次启动时把已知的退役 ID 迁移为“平面小鲸”。其他未知值仍会校验失败，不会被静默接受。
-
-### 插件社区
-
-安装名称：`plugin-market` · 位置：**设置 → 插件社区**
+`plugin-market` · **设置 → 插件社区**
 
 ![插件社区页面](assets/readme/plugin-community.png)
 
-1. 首次打开使用内置插件快照；点击“同步最新索引”会下载 GitHub Actions 每 6 小时自动生成、经过 schema 校验并发布到 `market-index` 分支的快照，同时使用 ETag 缓存。短暂的 429/502/503/504 会自动重试，失败时不会覆盖上次可用快照。
-2. 按仓库名、包名、描述或 topic 搜索。点击“检查安装方式”会实时预检；只有仓库身份匹配、且不包含安装生命周期脚本的 npm bundle 才显示“一键安装”。
-3. 仓库根目录是 DSH bundle 且无需构建脚本时，只能通过“确认并安装源码”安装，并固定到预检过的 commit。需要 build approval、monorepo 子目录、自定义依赖或其他无法验证路径的插件只显示“查看安装说明”。
-4. 安装与卸载以可取消的后台任务运行，HTTP 请求不会长时间挂在代理后面。安装完成后会检查目标 profile、bundle patch 和 profile 组合；验证失败会自动回滚。
-5. “已安装”标签页展示目标 profile 中所有能与渠道关联的已安装插件；只有由插件社区安装并记录的项目可以在此卸载。通过 profile 配置或外部安装脚本管理的项目只显示“已安装”，操作完成后按提示重启当前 Web profile。
+1. 首次打开使用内置快照；“同步最新索引”通过 ETag 获取 GitHub Actions 每 6 小时发布的校验快照，短暂的 429/502/503/504 会自动重试。
+2. 可按仓库名、包名、描述或 topic 搜索；安装前先实时预检仓库身份、commit 和发布结构。
+3. 只有身份匹配且不含安装生命周期脚本的 npm bundle 才提供“一键安装”。可验证的无构建源码 bundle 可在确认后固定 commit 安装；其他情况只显示安装说明。
+4. 安装与卸载作为可取消后台任务执行；完成后验证目标 profile、bundle patch 和组合，失败自动回滚。
+5. “已安装”页会区分市场管理的插件和外部管理的插件；只有前者可以从此页卸载。
 
-插件市场自身的 `sky-unicorn/dsh-enhanced-plugins` 是内置的已验证渠道贡献；即使远程镜像生成时间早于本仓库，它仍会出现在搜索结果中，远程镜像后续收录时也不会重复。
+<details>
+<summary><strong>索引发布、网络代理与凭据</strong></summary>
 
-索引生产由 [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) 负责：索引器先完整枚举 topic，再复用未变化仓库的既有验证结果，只读取新增或已变化仓库的根 `package.json`。首次推送工作流或索引脚本时会自动建立 `market-index` 分支，此后定时更新，也可从 Actions 页面手动执行；不需要部署常驻服务或配置个人 Token。异常缩水或生成失败不会发布并覆盖上次索引。
+索引由 [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) 生成到 `market-index` 分支：完整枚举 topic，只重新验证新增或变化的仓库；异常缩水或生成失败不会覆盖上次结果。插件市场自身是内置的已验证渠道贡献，即使远程镜像尚未收录也会出现，后续不会重复。
 
-内置快照与自动索引同步都不需要用户的 GitHub Token。Host 下载会识别 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 与 `NO_PROXY`（也支持对应的小写变量），让插件市场沿用命令行下载工具的网络路径，而不是静默尝试直连 GitHub。安装预检需要读取 GitHub 仓库和 commit 元数据；若该 API 触发限流，可在“配置”中保存只读、短有效期的 Fine-grained Token。Token 只发送到本机 DSH Host，并由 credentials 服务保存。页面会显示索引生成时间；超过 24 小时没有新索引时会明确提示，但仍保留上次可用快照。
+内置快照和自动索引同步都不需要 GitHub Token。Host 会识别 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 与 `NO_PROXY`（包括小写变量）。安装预检若遇到 GitHub API 限流，可在“配置”中保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并由 credentials 服务保存。
 
-### MCP 服务器管理
+页面会显示索引生成时间；超过 24 小时未更新时明确提示，同时继续保留上次可用快照。
 
-安装名称：`mcp-server-manager` · 位置：**设置 → 插件 → 插件配置 → MCP 服务器**
+</details>
+
+### 4. MCP 服务器管理
+
+`mcp-server-manager` · **设置 → 插件 → 插件配置 → MCP 服务器**
 
 ![MCP 服务器管理](assets/readme/mcp-server-manager.png)
 
-1. 点击“添加服务器”，填写唯一名称并选择 `stdio` 或 Streamable HTTP。
+1. 添加唯一名称，选择 `stdio` 或 Streamable HTTP。
 2. `stdio` 配置命令、参数、工作目录和环境变量；HTTP 配置 HTTP(S) URL 与请求头。
-3. 也可以“一键导入 Claude Code 与 Codex”，由 Host 读取本机已有配置；重复项会跳过，无法安全转换的项目会说明原因。
-4. 检查卡片顶部的格式审计结果后保存。Host 会按服务器分别启动、更新或卸载连接。
+3. 也可由 Host 一键导入本机 Claude Code 与 Codex 配置；重复项会跳过，无法安全转换的项目会说明原因。
+4. 检查卡片顶部的格式审计后保存；Host 按服务器分别启动、更新或卸载连接。
 
-浏览器读取已有服务器时会掩码环境变量和请求头的值；未修改的机密不会从脱敏快照重建或覆盖。
+浏览器读取已有服务器时会掩码环境变量与请求头；未修改的机密不会从脱敏快照重建或覆盖。
 
-### pi-ai 模型请求类型
+### 5. pi-ai 模型请求类型
 
-安装名称：`model-input-types` · 位置：**设置 → 插件 → 插件配置 → pi-ai 模型请求类型**
+`model-input-types` · **设置 → 插件 → 插件配置 → pi-ai 模型请求类型**
 
 ![pi-ai 模型请求类型](assets/readme/model-input-types.png)
 
-先在 DSH“模型”页或 `settings.yaml` 中添加 pi-ai 模型覆盖，再为每个模型选择“提供方默认”“仅文本”或“文本与图片”。选择会立即保存。
+先在 DSH“模型”页或 `settings.yaml` 中添加 pi-ai 模型覆盖，再为每个模型选择“提供方默认”“仅文本”或“文本与图片”；选择会立即保存。
 
-只有官方 `llm-pi-ai` settings namespace 可用时才显示此卡片。这里保存的是能力声明，不会探测实际端点；声明“文本与图片”前请确认提供方确实接受图片请求。
+只有官方 `llm-pi-ai` settings namespace 可用时才显示此卡片。它保存的是能力声明，不会探测实际端点；声明“文本与图片”前请确认提供方确实接受图片请求。
 
-### 编辑上一条消息
+### 6. 编辑上一条消息
 
-安装名称：`edit-last-message` · 位置：**当前会话最后一条可编辑的用户消息气泡**
+`edit-last-message` · **当前会话最后一条可编辑的用户消息气泡**
 
 ![编辑上一条消息并重新发送](assets/readme/edit-last-message.png)
 
@@ -166,24 +216,31 @@ Launcher 只停止自己启动的 DSH 进程树。控制中心不显示退出按
 2. 点击“编辑上一条消息”，在气泡内修改文本。
 3. 点击“重新发送”或按 `Ctrl/⌘ + Enter`；按 `Esc` 或“取消”退出编辑。
 
-重新发送仍在当前会话内完成：插件从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH Session 日志保持追加式审计记录，已执行工具的外部副作用不会回滚。包含图片或其他非文本块的消息不提供编辑入口，避免静默丢失内容。
+重新发送仍在当前会话内完成：插件从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH Session 日志保持追加式审计记录，已经执行的工具副作用不会回滚。包含图片或其他非文本块的消息不会提供编辑入口，以免静默丢失内容。
 
-### 产品子智能体
+### 7. 产品子智能体
 
-安装名称：`sub-agent` · 位置：**设置 → 子智能体**
+`sub-agent` · **设置 → 子智能体**
 
 ![Claude Code 与 Codex 子智能体开关](assets/readme/subagent-toggles.png)
 
-打开 Claude Code 或 Codex 后，变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话，无需重启 profile；关闭开关会实时移除对应工具。本机仍需安装对应产品及其官方 DSH provider。
+打开 Claude Code 或 Codex 后，变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话；关闭开关会实时移除对应工具。本机仍需安装对应产品及其官方 DSH provider。
 
 两个开关默认关闭。写入使用 path-addressed 操作和设置修订号，不会用脱敏或过期快照覆盖其他页面及外部编辑产生的新值。
 
+## 兼容性与迁移
+
+- **实测基线：** DSH `0.1.1-rc.2`，commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`。
+- **架构边界：** Web 功能通过公开 Service、event、slot 和 settings 扩展；Windows Launcher 是独立 Companion，不进入 Cordis 插件树。
+- **文件引用已退役：** 最新官方 DSH 已原生支持 [`@` 文件引用](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference)。在输入框键入 `@`，含空格路径可键入 `@"`。旧 `referenced-file` 安装名称和 `#` 快照语法不再提供。
+- **自动清理：** `-Features referenced-file` 会被明确拒绝；正常运行安装脚本会清理历史独立包或旧版聚合包中携带的该功能。
+
 ## 配置参考
 
-默认组合位于 [`cordis.patch.yml`](cordis.patch.yml)。后应用的 profile patch 会整体替换目标 Loader 行的 `config`；覆盖时需要重述该行必须保留的全部字段。
+默认组合位于 [`cordis.patch.yml`](cordis.patch.yml)。后应用的 profile patch 会整体替换目标 Loader 行的 `config`，因此覆盖时必须重述该行需要保留的全部字段。
 
 <details>
-<summary>桌面提示默认配置</summary>
+<summary><strong>桌面提示默认配置</strong></summary>
 
 | 字段 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -192,37 +249,42 @@ Launcher 只停止自己启动的 DSH 进程树。控制中心不显示退出按
 | `blockedSound` | `prominent` | 任务受阻提示音：`off`、`subtle`、`prominent` 或上传的 `custom` |
 | `soundGain` | `0` | 默认音和自定义音共用的 0–100% 正向增益；100 约为 +6 dB |
 | `petEnabled` | `false` | 是否显示原生全局桌面宠物 |
-| `petCharacter` | `classic` | 宠物样式：`classic`（平面小鲸）、`multiview`（立体小鲸）或 `whale-girl`（鲸鱼娘） |
+| `petCharacter` | `classic` | `classic`（平面小鲸）、`multiview`（立体小鲸）或 `whale-girl`（鲸鱼娘） |
 | `petIdleTopmost` | `true` | 空闲状态是否仍保持置顶 |
-| `petSize` | `112` | 宠物尺寸：`80`、`112`、`144` 或 `176` 设备无关像素 |
-| `petPosition` | `bottom-right` | 回退/重置角落：`top-left`、`top-right`、`bottom-left` 或 `bottom-right` |
+| `petSize` | `112` | `80`、`112`、`144` 或 `176` 设备无关像素 |
+| `petPosition` | `bottom-right` | `top-left`、`top-right`、`bottom-left` 或 `bottom-right` |
 
 六个 `*CustomSoundFile` / `*CustomSoundName` 字段由 Host 管理三类提示音的选择引用。共享目录保存在 profile 内的 `desktop-notifications/sound-library.json`；请通过设置页面上传和选择自定义音，不要手工编辑这些字段。
 
 </details>
 
 <details>
-<summary>插件社区 Host 配置</summary>
+<summary><strong>插件社区 Host 配置</strong></summary>
 
 | 字段 | 默认值 | 作用 |
 | --- | --- | --- |
-| `profile` | `web` | 安装和卸载的目标 profile |
-| `topic` | `dsh-plugin` | 已校验渠道文档必须匹配的 topic 标识 |
-| `channelUrl` | `market-index` 分支中的 HTTPS 快照 | “同步最新索引”使用的 Actions 自动发布地址 |
+| `profile` | `web` | 安装和卸载目标 profile |
+| `topic` | `dsh-plugin` | 已校验渠道文档必须匹配的 topic |
+| `channelUrl` | `market-index` 分支 HTTPS 快照 | “同步最新索引”使用的发布地址 |
 | `pageSize` | `12` | 每页插件数 |
 | `operationTimeoutMs` | `120000` | 安装和卸载超时 |
 | `githubTokenEnv` | `GITHUB_TOKEN` | credentials 引用名 |
 | `cliPath` | 空 | 可选 DSH 可执行文件绝对路径 |
 
-内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读引导快照，也作为自动索引首次运行时的增量校验种子。同步缓存、ETag、后台任务状态和安装记录由 Host 管理；需要持久化的缓存与记录保存在 DSH home 的插件市场数据目录。插件市场不会解析 README 中的 shell 命令，也不会启用 `dangerouslyAllowAllBuilds`。
+内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读引导快照，也是自动索引首次运行的增量校验种子。缓存、ETag、后台任务和安装记录由 Host 管理并保存到 DSH home。插件社区不会解析 README 中的 shell 命令，也不会启用 `dangerouslyAllowAllBuilds`。
 
 </details>
 
-若只想让部分 Agent preset 获得产品子智能体工具，请禁用或移除根层的 `subagent-product-toggle-tools` 行，并只在目标 preset 中挂载对应入口：聚合包使用 `dsh-enhanced-plugins/sub-agent/preset`，独立包使用 `dsh-enhanced-sub-agent/preset`。同一 scope 不要同时挂载两种布局。
+若只想让部分 Agent preset 获得产品子智能体工具，请禁用或移除根层 `subagent-product-toggle-tools` 行，再只在目标 preset 中挂载对应入口：
+
+- 聚合包：`dsh-enhanced-plugins/sub-agent/preset`
+- 独立包：`dsh-enhanced-sub-agent/preset`
+
+同一 scope 不要同时挂载两种布局。
 
 ## 开发与验证
 
-仓库使用以下只读 sibling checkout 作为 DSH API、类型和真实 Web 组装基准：
+本仓库以只读 sibling checkout 作为 DSH API、类型和真实 Web 组装基准：
 
 ```text
 D:\work\workspace\github\deepseek-harness
@@ -239,7 +301,7 @@ npm run pack:dry-run
 git diff --check
 ```
 
-浏览器 bundle 使用 CSS Modules，并且只消费 DSH 的 `--dsw-alias-*` 语义主题 token，因此会自动跟随 light、dark 和 system 外观。
+浏览器 bundle 使用 CSS Modules，并且只消费 DSH 的 `--dsw-alias-*` 语义主题 token，会自动跟随 light、dark 与 system 外观。插件架构与公开扩展点可参考 [DSH 插件开发文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 和 [架构参考](https://deepseek-harness.github.io/deepseek-harness/reference/)。
 
 ## License
 
