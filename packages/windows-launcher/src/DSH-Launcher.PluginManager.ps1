@@ -675,12 +675,73 @@ function New-CurrentSourceSnapshot {
 
 function New-BuildWorkspace {
   param([string] $SnapshotRoot, [string] $LauncherRoot, [string] $RequestId)
-  $target = Join-Path (Join-Path (Join-Path $LauncherRoot 'updates') $RequestId) 'build-source'
+  $revision = (Get-Catalog $SnapshotRoot).sourceRevision
+  if ($revision -notmatch '^(?:[0-9a-fA-F]{40}|local-[0-9a-fA-F]{64})$') {
+    throw '不能为无效源码 revision 创建运行时快照。'
+  }
+  $revisionHash = if ($revision.StartsWith('local-', [System.StringComparison]::OrdinalIgnoreCase)) {
+    $revision.Substring(6)
+  } else { $revision }
+  $revisionToken = $revisionHash.Substring(0, 16).ToLowerInvariant()
+  $requestToken = $RequestId.Replace('-', '').Substring(0, 8).ToLowerInvariant()
+  $sourcesRoot = Join-Path $LauncherRoot 'sources'
+  # Keep this path short enough for the inbox Win10/Win11 C# compiler, whose
+  # temporary-file handling can still fail on deeply nested long paths.
+  $target = Join-Path $sourcesRoot ("runtime-$revisionToken-$requestToken")
   [void](Assert-OwnedPath $target $LauncherRoot)
   if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+  [void](New-Item -ItemType Directory -Force -Path $sourcesRoot)
   [void](Copy-SafeSourceTree $SnapshotRoot $target)
   [void](Resolve-RepositoryRoot $target $null)
   $target
+}
+
+function Remove-UnreferencedRuntimeSources {
+  param([string] $LauncherRoot, [string] $CurrentRuntimeRoot)
+  $sourcesRoot = [System.IO.Path]::GetFullPath((Join-Path $LauncherRoot 'sources')).TrimEnd('\')
+  if (-not (Test-Path -LiteralPath $sourcesRoot -PathType Container)) { return }
+  $retained = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  [void]$retained.Add([System.IO.Path]::GetFullPath($CurrentRuntimeRoot).TrimEnd('\'))
+  $profilesRoot = Join-Path (Get-DshHome) 'profiles'
+  if (Test-Path -LiteralPath $profilesRoot -PathType Container) {
+    foreach ($manifestPath in @(Get-ChildItem -LiteralPath $profilesRoot -Filter package.json -File -Recurse)) {
+      $manifest = Read-JsonFile $manifestPath.FullName
+      $dependencies = if ($null -eq $manifest) { $null } else { $manifest.PSObject.Properties['dependencies'] }
+      if ($null -eq $dependencies) { continue }
+      foreach ($dependency in @($dependencies.Value.PSObject.Properties)) {
+        $specification = [string]$dependency.Value
+        if (-not $specification.StartsWith('link:', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+        try {
+          $linkedPath = [System.IO.Path]::GetFullPath(
+            $specification.Substring(5).Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+        } catch { continue }
+        if (-not $linkedPath.StartsWith($sourcesRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+        $relative = $linkedPath.Substring($sourcesRoot.Length + 1)
+        $runtimeDirectoryName = @($relative.Split('\'))[0]
+        if ($runtimeDirectoryName -like 'runtime-*') {
+          [void]$retained.Add((Join-Path $sourcesRoot $runtimeDirectoryName))
+        }
+      }
+    }
+  }
+  foreach ($directory in @(Get-ChildItem -LiteralPath $sourcesRoot -Directory -Filter 'runtime-*')) {
+    $candidate = [System.IO.Path]::GetFullPath($directory.FullName).TrimEnd('\')
+    if ($retained.Contains($candidate)) { continue }
+    if (-not $candidate.StartsWith($sourcesRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "拒绝清理 sources 目录外的运行时快照：'$candidate'。"
+    }
+    [void](Assert-OwnedPath $candidate $LauncherRoot)
+    try { Remove-Item -LiteralPath $candidate -Recurse -Force }
+    catch {
+      # Windows PowerShell 5.1 can fail partway through deeply nested
+      # node_modules trees. The validated extended path keeps cleanup inside
+      # the Launcher-owned sources directory while bypassing MAX_PATH.
+      $extendedPath = if ($candidate.StartsWith('\\')) {
+        '\\?\UNC\' + $candidate.Substring(2)
+      } else { '\\?\' + $candidate }
+      [System.IO.Directory]::Delete($extendedPath, $true)
+    }
+  }
 }
 
 function New-GitSnapshot {
@@ -861,9 +922,9 @@ function Stop-LauncherOwnedDsh {
   $webState = Read-JsonFile $statePath
   $owned = $false
   if ($null -ne $webState) {
-    $pid = [int](Get-OptionalProperty $webState 'supervisorPid' 0)
-    if ($pid -gt 0) {
-      $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $supervisorProcessId = [int](Get-OptionalProperty $webState 'supervisorPid' 0)
+    if ($supervisorProcessId -gt 0) {
+      $process = Get-Process -Id $supervisorProcessId -ErrorAction SilentlyContinue
       $owned = $null -ne $process -and $process.ProcessName -eq 'powershell'
     }
   }
@@ -886,6 +947,30 @@ function Stop-LauncherOwnedDsh {
   [pscustomobject]@{ wasRunning = $true; port = $port }
 }
 
+function Release-PluginManagementLock {
+  param([object] $LockState)
+  if ($null -eq $LockState -or -not [bool]$LockState.taken) { return }
+  $LockState.mutex.ReleaseMutex()
+  $LockState.taken = $false
+}
+
+function Wait-AutomationProcess {
+  param(
+    [System.Diagnostics.Process] $Process,
+    [int] $TimeoutMilliseconds,
+    [string] $Description
+  )
+  try {
+    if (-not $Process.WaitForExit($TimeoutMilliseconds)) {
+      try { $Process.Kill() } catch { }
+      throw "$Description 超时。"
+    }
+    $Process.ExitCode
+  } finally {
+    $Process.Dispose()
+  }
+}
+
 function Restore-LauncherOwnedDsh {
   param([string] $LauncherRoot, [object] $ServiceState, [string] $LogPath)
   if ($null -eq $ServiceState -or -not [bool]$ServiceState.wasRunning) { return $true }
@@ -897,16 +982,47 @@ function Restore-LauncherOwnedDsh {
   }
   $restoreResult = Join-Path (Split-Path -Parent $LogPath) 'restore-result.json'
   $process = Start-Process -FilePath $executable -ArgumentList @('--automation', 'start', ('"' + $restoreResult + '"')) `
-    -PassThru -Wait -WindowStyle Hidden
+    -PassThru -WindowStyle Hidden
+  $startExitCode = Wait-AutomationProcess $process 10000 '等待 DSH 恢复请求'
   $result = Read-JsonFile $restoreResult
-  $success = $process.ExitCode -eq 0 -and $null -ne $result -and [bool]$result.success
+  $startAccepted = $startExitCode -eq 0 -and $null -ne $result -and [bool]$result.success
+  $ownership = [string](Get-OptionalProperty $result 'ownership' '')
+  $success = $false
+  if ($startAccepted) {
+    $statusResult = Join-Path (Split-Path -Parent $LogPath) 'restore-status.json'
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    $ownedSince = $null
+    do {
+      $statusProcess = Start-Process -FilePath $executable `
+        -ArgumentList @('--automation', 'status', ('"' + $statusResult + '"')) `
+        -PassThru -WindowStyle Hidden
+      $statusExitCode = Wait-AutomationProcess $statusProcess 5000 '等待 DSH 恢复状态'
+      $status = Read-JsonFile $statusResult
+      $ownership = [string](Get-OptionalProperty $status 'ownership' '')
+      if ($statusExitCode -eq 0 -and $null -ne $status -and [bool]$status.success -and
+        $ownership -eq 'Owned') {
+        if ($null -eq $ownedSince) { $ownedSince = [DateTime]::UtcNow }
+        elseif (([DateTime]::UtcNow - $ownedSince).TotalSeconds -ge 15) {
+          $success = $true
+          break
+        }
+      } else { $ownedSince = $null }
+      Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+  }
   [System.IO.File]::AppendAllText($LogPath,
-    "[$([DateTime]::Now.ToString('s'))] DSH restore success=$success`r`n", $Utf8NoBom)
+    "[$([DateTime]::Now.ToString('s'))] DSH restore success=$success ownership=$ownership`r`n", $Utf8NoBom)
   $success
 }
 
 function Invoke-Apply {
-  param([object] $Request, [object] $State, [string] $InitialRoot, [string] $LauncherRoot)
+  param(
+    [object] $Request,
+    [object] $State,
+    [string] $InitialRoot,
+    [string] $LauncherRoot,
+    [object] $ManagementLock
+  )
   $requestId = [string](Get-OptionalProperty $Request 'requestId' ([Guid]::NewGuid().ToString('D')))
   if ($requestId -notmatch '^[0-9a-fA-F-]{36}$') { throw '请求 ID 无效。' }
   $profileName = [string](Get-OptionalProperty $Request 'profile' 'web')
@@ -1047,6 +1163,7 @@ function Invoke-Apply {
   [System.IO.File]::AppendAllText($logPath,
     "[$([DateTime]::Now.ToString('s'))] request=$requestId profile=$profileName source=$source revision=$($catalog.sourceRevision)`r`n", $Utf8NoBom)
   $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
+  $installerPowerShell = Get-Command -Name 'powershell.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
   Invoke-LoggedCommand $npm.Source @('ci', '--no-audit', '--no-fund', '--ignore-scripts=false') $source $logPath 'npm ci'
   # The repository tsconfig files intentionally resolve DSH types from the
   # sibling development checkout.  This request workspace is isolated under
@@ -1067,7 +1184,12 @@ function Invoke-Apply {
           else { $targetProfile.desired -join ',' }
         [System.IO.File]::AppendAllText($logPath,
           "[$([DateTime]::Now.ToString('s'))] APPLY profile=$($targetProfile.name) features=$targetFeatureArgument`r`n", $Utf8NoBom)
-        $installerArguments = @(
+        # Run the installer as a top-level script, matching the invocation that
+        # users run successfully. Calling it in this coordinator's script scope
+        # turns DSH's informational stderr into a terminating RemoteException.
+        $installerProcessArguments = @(
+          '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+          '-File', $installer,
           '-Profile', $targetProfile.name,
           '-DshCheckout', $dshCheckout,
           '-PluginPath', $source,
@@ -1075,20 +1197,38 @@ function Invoke-Apply {
           '-Features', $targetFeatureArgument,
           '-SkipBuild'
         )
-        if ($profileIndex -lt ($profileTargets.Count - 1)) { $installerArguments += '-SkipLauncherInstall' }
-        else { $installerArguments += '-RestartLauncherAfterUpdate' }
-        $lines = @(& $installer @installerArguments 2>&1)
-        $exitCode = $LASTEXITCODE
+        if ($profileIndex -lt ($profileTargets.Count - 1)) { $installerProcessArguments += '-SkipLauncherInstall' }
+        else { $installerProcessArguments += '-RestartLauncherAfterUpdate' }
+        $managerErrorActionPreference = $ErrorActionPreference
+        try {
+          # DSH writes its echoed native command line to stderr even when the
+          # command succeeds. Collect that diagnostic stream in the log and
+          # use the installer's real exit code as the success boundary.
+          $ErrorActionPreference = 'Continue'
+          $lines = @(& $installerPowerShell.Source @installerProcessArguments 2>&1)
+          $exitCode = $LASTEXITCODE
+        } finally {
+          $ErrorActionPreference = $managerErrorActionPreference
+        }
         [System.IO.File]::AppendAllText($logPath, (($lines | Out-String) + [Environment]::NewLine), $Utf8NoBom)
         if ($exitCode -ne 0) {
           throw "Profile '$($targetProfile.name)' 安装核心执行失败（退出码 $exitCode），请查看日志 '$logPath'。"
         }
+      }
+      try { Remove-UnreferencedRuntimeSources $LauncherRoot $source }
+      catch {
+        [System.IO.File]::AppendAllText($logPath,
+          ("Runtime source cleanup warning: " + $_.Exception.ToString() + [Environment]::NewLine), $Utf8NoBom)
       }
     } catch {
       [System.IO.File]::AppendAllText($logPath, ($_.Exception.ToString() + [Environment]::NewLine), $Utf8NoBom)
       throw
     }
   } finally {
+    # Starting DSH is intentionally blocked while the update mutex is held.
+    # Release it only after the Profile commit attempt has finished, then
+    # restore the service and wait until the new Launcher reports ownership.
+    Release-PluginManagementLock $ManagementLock
     try { $dshRestored = Restore-LauncherOwnedDsh $LauncherRoot $serviceState $logPath }
     catch {
       $dshRestored = $false
@@ -1097,10 +1237,6 @@ function Invoke-Apply {
     }
   }
   $nextState = Read-JsonFile (Join-Path $LauncherRoot 'install-state.json')
-  if (Test-Path -LiteralPath $source -PathType Container) {
-    [void](Assert-OwnedPath $source $LauncherRoot)
-    Remove-Item -LiteralPath $source -Recurse -Force
-  }
   [pscustomobject][ordered]@{
     protocolVersion = 1
     requestId = $requestId
@@ -1175,13 +1311,13 @@ try {
     } elseif ($Operation -eq 'Apply') {
       if ($null -eq $request) { throw 'Apply 操作缺少 RequestPath。' }
       $mutex = New-Object System.Threading.Mutex($false, 'Local\DSH.Enhanced.WindowsLauncher.PluginManagement')
-      $lockTaken = $false
+      $managementLock = [pscustomobject]@{ mutex = $mutex; taken = $false }
       try {
-        $lockTaken = $mutex.WaitOne(0)
-        if (-not $lockTaken) { throw '已有插件管理操作正在运行。' }
-        $result = Invoke-Apply $request $state $root $launcherRoot
+        $managementLock.taken = $mutex.WaitOne(0)
+        if (-not $managementLock.taken) { throw '已有插件管理操作正在运行。' }
+        $result = Invoke-Apply $request $state $root $launcherRoot $managementLock
       } finally {
-        if ($lockTaken) { $mutex.ReleaseMutex() }
+        Release-PluginManagementLock $managementLock
         $mutex.Dispose()
       }
     }

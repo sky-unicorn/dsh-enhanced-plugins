@@ -305,7 +305,6 @@ namespace DshEnhanced.WindowsLauncher
             bool opening = !form.Visible;
             if (opening) form.Show();
             if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
-            form.ShowInTaskbar = true;
             form.Activate();
             form.BringToFront();
             if (!opening) form.RefreshNow();
@@ -315,8 +314,10 @@ namespace DshEnhanced.WindowsLauncher
         {
             if (exiting) return;
             args.Cancel = true;
+            // A hidden form is removed from the taskbar automatically. Changing
+            // ShowInTaskbar recreates the native HWND; when the form is maximized,
+            // that handle recreation can make it visible again after Hide().
             form.Hide();
-            form.ShowInTaskbar = false;
             tray.ShowBalloonTip(1500, "Launcher 仍在运行", "可从系统托盘再次打开控制中心。", ToolTipIcon.Info);
         }
 
