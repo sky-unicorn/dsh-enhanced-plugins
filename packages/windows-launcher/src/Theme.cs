@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace DshEnhanced.WindowsLauncher
@@ -98,6 +100,579 @@ namespace DshEnhanced.WindowsLauncher
             using (GraphicsPath path = UiTheme.RoundedRectangle(new Rectangle(inset, inset,
                 Math.Max(1, Width - reduction), Math.Max(1, Height - reduction)), scaledRadius))
             using (Pen pen = new Pen(borderColor, UiTheme.Dip(this, 1f))) e.Graphics.DrawPath(pen, path);
+        }
+    }
+
+    internal sealed class ModernScrollBar : Control
+    {
+        private int maximum;
+        private int value;
+        private int viewportSize = 1;
+        private int smallChange;
+        private int largeChange;
+        private bool hovering;
+        private bool dragging;
+        private int dragOriginY;
+        private int dragOriginValue;
+
+        internal event EventHandler ValueChanged;
+
+        internal int Maximum
+        {
+            get { return maximum; }
+            set
+            {
+                int next = Math.Max(0, value);
+                if (maximum == next) return;
+                maximum = next;
+                SetValue(this.value);
+                Invalidate();
+            }
+        }
+
+        internal int Value
+        {
+            get { return value; }
+            set { SetValue(value); }
+        }
+
+        internal int ViewportSize
+        {
+            get { return viewportSize; }
+            set { viewportSize = Math.Max(1, value); Invalidate(); }
+        }
+
+        internal int SmallChange
+        {
+            get { return smallChange; }
+            set { smallChange = Math.Max(0, value); }
+        }
+
+        internal int LargeChange
+        {
+            get { return largeChange; }
+            set { largeChange = Math.Max(0, value); }
+        }
+
+        internal ModernScrollBar()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
+                | ControlStyles.Selectable | ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            Cursor = Cursors.Hand;
+            TabStop = true;
+            AccessibleRole = AccessibleRole.ScrollBar;
+            AccessibleName = "页面滚动条";
+        }
+
+        internal void ScrollBy(int amount)
+        {
+            SetValue(value + amount);
+        }
+
+        internal void ScrollPage(int direction)
+        {
+            int amount = largeChange > 0 ? largeChange
+                : Math.Max(UiTheme.Dip(this, 80), viewportSize - UiTheme.Dip(this, 48));
+            ScrollBy(direction * amount);
+        }
+
+        private void SetValue(int next)
+        {
+            next = Math.Max(0, Math.Min(maximum, next));
+            if (value == next) return;
+            value = next;
+            Invalidate();
+            EventHandler handler = ValueChanged;
+            if (handler != null) handler(this, EventArgs.Empty);
+        }
+
+        private Rectangle ThumbBounds()
+        {
+            int inset = UiTheme.Dip(this, 1);
+            int trackHeight = Math.Max(1, Height - (inset * 2));
+            int contentSize = Math.Max(1, maximum + viewportSize);
+            int thumbHeight = Math.Max(UiTheme.Dip(this, 34),
+                (int)Math.Round(trackHeight * (viewportSize / (double)contentSize)));
+            thumbHeight = Math.Min(trackHeight, thumbHeight);
+            int travel = Math.Max(0, trackHeight - thumbHeight);
+            int top = inset + (maximum == 0 ? 0
+                : (int)Math.Round(travel * (value / (double)maximum)));
+            return new Rectangle(inset, top, Math.Max(1, Width - (inset * 2)), thumbHeight);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            if (maximum <= 0) return;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            int trackWidth = Math.Max(UiTheme.Dip(this, 3), Width / 3);
+            Rectangle track = new Rectangle((Width - trackWidth) / 2, UiTheme.Dip(this, 1),
+                trackWidth, Math.Max(1, Height - UiTheme.Dip(this, 2)));
+            Rectangle thumb = ThumbBounds();
+            Color thumbColor = dragging ? UiTheme.PrimaryHover
+                : hovering || Focused ? UiTheme.Primary : Color.FromArgb(161, 174, 198);
+            using (GraphicsPath trackPath = UiTheme.RoundedRectangle(track, trackWidth / 2f))
+            using (SolidBrush trackBrush = new SolidBrush(Color.FromArgb(232, 236, 244)))
+            using (GraphicsPath thumbPath = UiTheme.RoundedRectangle(thumb, Math.Max(1f, thumb.Width / 2f)))
+            using (SolidBrush thumbBrush = new SolidBrush(thumbColor))
+            {
+                e.Graphics.FillPath(trackBrush, trackPath);
+                e.Graphics.FillPath(thumbBrush, thumbPath);
+            }
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            hovering = true;
+            Invalidate();
+            base.OnMouseEnter(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            hovering = false;
+            if (!dragging) Invalidate();
+            base.OnMouseLeave(e);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            Focus();
+            Rectangle thumb = ThumbBounds();
+            if (e.Button == MouseButtons.Left && thumb.Contains(e.Location))
+            {
+                dragging = true;
+                dragOriginY = e.Y;
+                dragOriginValue = value;
+                Capture = true;
+                Invalidate();
+            }
+            else if (e.Button == MouseButtons.Left)
+            {
+                ScrollPage(e.Y < thumb.Top ? -1 : 1);
+            }
+            base.OnMouseDown(e);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (dragging)
+            {
+                Rectangle thumb = ThumbBounds();
+                int travel = Math.Max(1, Height - UiTheme.Dip(this, 2) - thumb.Height);
+                SetValue(dragOriginValue + (int)Math.Round((e.Y - dragOriginY) * (maximum / (double)travel)));
+            }
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            if (dragging)
+            {
+                dragging = false;
+                Capture = false;
+                Invalidate();
+            }
+            base.OnMouseUp(e);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            int step = smallChange > 0 ? smallChange : UiTheme.Dip(this, 48);
+            if (e.KeyCode == Keys.Up) ScrollBy(-step);
+            else if (e.KeyCode == Keys.Down) ScrollBy(step);
+            else if (e.KeyCode == Keys.PageUp) ScrollPage(-1);
+            else if (e.KeyCode == Keys.PageDown) ScrollPage(1);
+            else if (e.KeyCode == Keys.Home) Value = 0;
+            else if (e.KeyCode == Keys.End) Value = maximum;
+            else { base.OnKeyDown(e); return; }
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+
+        protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+    }
+
+    internal sealed class ModernScrollPage : UserControl, IMessageFilter
+    {
+        private const int WmMouseWheel = 0x020A;
+        private readonly Panel content;
+        private readonly ModernScrollBar scrollBar;
+        private readonly HashSet<Control> hookedControls = new HashSet<Control>();
+        private Size minimumContentSize;
+        private bool updatingMetrics;
+        private bool messageFilterInstalled;
+
+        internal Panel Content { get { return content; } }
+        internal int ViewportWidth { get { return content.ClientSize.Width; } }
+        internal int ScrollValue { get { return scrollBar.Value; } }
+        internal bool ScrollBarVisible { get { return scrollBar.Visible; } }
+
+        internal new Size AutoScrollMinSize
+        {
+            get { return minimumContentSize; }
+            set
+            {
+                Size next = new Size(Math.Max(0, value.Width), Math.Max(0, value.Height));
+                if (minimumContentSize == next) return;
+                minimumContentSize = next;
+                UpdateScrollMetrics();
+            }
+        }
+
+        internal new Point AutoScrollPosition
+        {
+            get { return new Point(0, -scrollBar.Value); }
+            set { scrollBar.Value = Math.Abs(value.Y); }
+        }
+
+        internal ModernScrollPage()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
+                | ControlStyles.Selectable, true);
+            AutoScroll = false;
+            TabStop = true;
+
+            content = new Panel();
+            content.BackColor = UiTheme.Background;
+            content.TabStop = false;
+            Controls.Add(content);
+
+            scrollBar = new ModernScrollBar();
+            scrollBar.Visible = false;
+            scrollBar.ValueChanged += delegate { ApplyScrollPosition(); };
+            Controls.Add(scrollBar);
+            scrollBar.BringToFront();
+
+            HookControlTree(content);
+        }
+
+        internal void ScrollBy(int amount)
+        {
+            scrollBar.ScrollBy(amount);
+        }
+
+        internal void ScrollToTop()
+        {
+            scrollBar.Value = 0;
+        }
+
+        internal static bool SelfTest()
+        {
+            using (ModernScrollPage page = new ModernScrollPage())
+            {
+                page.Size = new Size(320, 200);
+                page.CreateControl();
+                page.PerformLayout();
+                page.AutoScrollMinSize = new Size(0, 700);
+                page.ScrollBy(120);
+                bool scrolled = page.ScrollBarVisible && page.ScrollValue == 120
+                    && page.Content.Top == -120 && page.ViewportWidth < page.ClientSize.Width;
+                page.AutoScrollPosition = new Point(0, 5000);
+                bool clamped = page.ScrollValue == 500 && page.Content.Top == -500;
+                page.AutoScrollMinSize = new Size(0, 100);
+                bool reset = !page.ScrollBarVisible && page.ScrollValue == 0 && page.Content.Top == 0;
+                return scrolled && clamped && reset;
+            }
+        }
+
+        private void HookControlTree(Control control)
+        {
+            if (!hookedControls.Add(control)) return;
+            control.Enter += OnContentControlEnter;
+            control.ControlAdded += delegate(object sender, ControlEventArgs args) { HookControlTree(args.Control); };
+            foreach (Control child in control.Controls) HookControlTree(child);
+        }
+
+        public bool PreFilterMessage(ref Message message)
+        {
+            if (message.Msg != WmMouseWheel || !Visible || !scrollBar.Visible || IsDisposed) return false;
+            Point screenPoint = Control.MousePosition;
+            if (!RectangleToScreen(ClientRectangle).Contains(screenPoint)) return false;
+            Control hovered = DeepestControlAtPoint(this, screenPoint);
+            if (hovered is TextBoxBase || hovered is ListBox || hovered is ComboBox) return false;
+            int delta = (short)(((long)message.WParam >> 16) & 0xffff);
+            if (delta == 0) return false;
+            int lines = SystemInformation.MouseWheelScrollLines;
+            int distance = lines < 0 ? Math.Max(1, ClientSize.Height - UiTheme.Dip(this, 48))
+                : UiTheme.Dip(this, Math.Max(1, lines) * 42);
+            scrollBar.ScrollBy(-(int)Math.Round(delta * (distance / 120d)));
+            return true;
+        }
+
+        private static Control DeepestControlAtPoint(Control root, Point screenPoint)
+        {
+            Control current = root;
+            while (current != null && current.HasChildren)
+            {
+                Point clientPoint = current.PointToClient(screenPoint);
+                Control child = current.GetChildAtPoint(clientPoint,
+                    GetChildAtPointSkip.Invisible | GetChildAtPointSkip.Disabled);
+                if (child == null) break;
+                current = child;
+            }
+            return current;
+        }
+
+        private void OnContentControlEnter(object sender, EventArgs e)
+        {
+            Control control = sender as Control;
+            if (control == null || control == content || !content.Contains(control)) return;
+            Rectangle visibleBounds = content.RectangleToClient(control.RectangleToScreen(control.ClientRectangle));
+            int margin = UiTheme.Dip(this, 16);
+            int viewportTop = scrollBar.Value;
+            int viewportBottom = viewportTop + ClientSize.Height;
+            if (visibleBounds.Top - margin < viewportTop)
+                scrollBar.Value = Math.Max(0, visibleBounds.Top - margin);
+            else if (visibleBounds.Bottom + margin > viewportBottom)
+                scrollBar.Value = visibleBounds.Bottom + margin - ClientSize.Height;
+        }
+
+        private void UpdateScrollMetrics()
+        {
+            if (updatingMetrics || IsDisposed || content == null || scrollBar == null) return;
+            updatingMetrics = true;
+            try
+            {
+                int gutter = UiTheme.Dip(this, 16);
+                int viewportWidth = Math.Max(1, ClientSize.Width - gutter);
+                int viewportHeight = Math.Max(1, ClientSize.Height);
+                int contentHeight = Math.Max(viewportHeight, minimumContentSize.Height);
+                scrollBar.ViewportSize = viewportHeight;
+                scrollBar.Maximum = Math.Max(0, contentHeight - viewportHeight);
+                scrollBar.Visible = scrollBar.Maximum > 0;
+                int barWidth = UiTheme.Dip(this, 9);
+                int barInset = UiTheme.Dip(this, 4);
+                scrollBar.SetBounds(Math.Max(0, ClientSize.Width - barWidth), barInset,
+                    barWidth, Math.Max(1, ClientSize.Height - (barInset * 2)));
+                content.SetBounds(0, -scrollBar.Value, viewportWidth, contentHeight);
+                scrollBar.BringToFront();
+            }
+            finally { updatingMetrics = false; }
+        }
+
+        private void ApplyScrollPosition()
+        {
+            if (content.Top != -scrollBar.Value) content.Top = -scrollBar.Value;
+        }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            UpdateScrollMetrics();
+        }
+
+        protected override void OnBackColorChanged(EventArgs e)
+        {
+            base.OnBackColorChanged(e);
+            if (content != null) content.BackColor = BackColor;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (!messageFilterInstalled)
+            {
+                Application.AddMessageFilter(this);
+                messageFilterInstalled = true;
+            }
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            if (messageFilterInstalled)
+            {
+                Application.RemoveMessageFilter(this);
+                messageFilterInstalled = false;
+            }
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            Keys key = keyData & Keys.KeyCode;
+            if ((keyData & Keys.Modifiers) == Keys.None && scrollBar.Visible)
+            {
+                if (key == Keys.PageUp) { scrollBar.ScrollPage(-1); return true; }
+                if (key == Keys.PageDown) { scrollBar.ScrollPage(1); return true; }
+                if (key == Keys.Home) { scrollBar.Value = 0; return true; }
+                if (key == Keys.End) { scrollBar.Value = scrollBar.Maximum; return true; }
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+    }
+
+    internal sealed class ModernRichTextBox : RichTextBox
+    {
+        internal event MouseEventHandler ThemedMouseWheel;
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            MouseEventHandler handler = ThemedMouseWheel;
+            if (handler != null)
+            {
+                handler(this, e);
+                return;
+            }
+            base.OnMouseWheel(e);
+        }
+    }
+
+    internal static class ModernTextAreaScroll
+    {
+        internal static void Attach(RoundedPanel shell, ModernRichTextBox editor)
+        {
+            if (shell == null) throw new ArgumentNullException("shell");
+            if (editor == null) throw new ArgumentNullException("editor");
+            new Binding(shell, editor);
+        }
+
+        internal static bool SelfTest()
+        {
+            using (RoundedPanel shell = new RoundedPanel())
+            using (ModernRichTextBox editor = new ModernRichTextBox())
+            {
+                shell.Size = new Size(320, 160);
+                shell.Padding = new Padding(12);
+                shell.Controls.Add(editor);
+                string content = "line 01";
+                for (int index = 2; index <= 80; index++)
+                    content += Environment.NewLine + "line " + index.ToString("D2", CultureInfo.InvariantCulture);
+                editor.Text = content;
+                Attach(shell, editor);
+                shell.CreateControl();
+                editor.CreateControl();
+                shell.PerformLayout();
+                ModernScrollBar themedBar = null;
+                foreach (Control child in shell.Controls)
+                {
+                    themedBar = child as ModernScrollBar;
+                    if (themedBar != null) break;
+                }
+                if (themedBar == null) return false;
+                themedBar.Value = Math.Min(4, themedBar.Maximum);
+                return themedBar.Visible
+                    && themedBar.Maximum > 0
+                    && themedBar.Value > 0
+                    && editor.ScrollBars == RichTextBoxScrollBars.None
+                    && editor.Dock == DockStyle.None
+                    && editor.Right <= themedBar.Left;
+            }
+        }
+
+        private sealed class Binding
+        {
+            private const int EmGetFirstVisibleLine = 0x00CE;
+            private const int EmGetLineCount = 0x00BA;
+            private const int EmLineScroll = 0x00B6;
+
+            [DllImport("user32.dll", CharSet = CharSet.Auto)]
+            private static extern IntPtr SendMessage(IntPtr handle, int message, IntPtr wParam, IntPtr lParam);
+
+            private readonly RoundedPanel shell;
+            private readonly ModernRichTextBox editor;
+            private readonly ModernScrollBar scrollBar;
+            private bool synchronizing;
+            private int wheelRemainder;
+
+            internal Binding(RoundedPanel shell, ModernRichTextBox editor)
+            {
+                this.shell = shell;
+                this.editor = editor;
+                scrollBar = new ModernScrollBar();
+                scrollBar.Visible = false;
+                scrollBar.AccessibleName = "内容滚动条";
+                scrollBar.SmallChange = 1;
+                shell.Controls.Add(scrollBar);
+                scrollBar.BringToFront();
+
+                editor.Dock = DockStyle.None;
+                editor.ScrollBars = RichTextBoxScrollBars.None;
+                editor.ThemedMouseWheel += OnEditorMouseWheel;
+                editor.TextChanged += delegate { SyncFromEditor(); };
+                editor.SelectionChanged += delegate { SyncFromEditor(); };
+                editor.VScroll += delegate { SyncFromEditor(); };
+                editor.Resize += delegate { SyncFromEditor(); };
+                editor.FontChanged += delegate { SyncFromEditor(); };
+                editor.HandleCreated += delegate { SyncFromEditor(); };
+                scrollBar.ValueChanged += OnScrollValueChanged;
+                shell.Layout += delegate { LayoutControls(); };
+                shell.Resize += delegate { LayoutControls(); };
+                LayoutControls();
+            }
+
+            private void LayoutControls()
+            {
+                if (shell.IsDisposed || editor.IsDisposed || scrollBar.IsDisposed) return;
+                int gutter = UiTheme.Dip(shell, 16);
+                int barWidth = UiTheme.Dip(shell, 9);
+                int left = shell.Padding.Left;
+                int top = shell.Padding.Top;
+                int height = Math.Max(1, shell.ClientSize.Height - shell.Padding.Vertical);
+                int width = Math.Max(1, shell.ClientSize.Width - shell.Padding.Horizontal - gutter);
+                editor.SetBounds(left, top, width, height);
+                scrollBar.SetBounds(Math.Max(left, shell.ClientSize.Width - shell.Padding.Right - barWidth),
+                    top, barWidth, height);
+                scrollBar.BringToFront();
+                SyncFromEditor();
+            }
+
+            private void SyncFromEditor()
+            {
+                if (synchronizing || !editor.IsHandleCreated || editor.IsDisposed) return;
+                synchronizing = true;
+                try
+                {
+                    int lineCount = Math.Max(1, SendMessage(editor.Handle, EmGetLineCount,
+                        IntPtr.Zero, IntPtr.Zero).ToInt32());
+                    int visibleLines = Math.Max(1, editor.ClientSize.Height / Math.Max(1, editor.Font.Height));
+                    int maximum = Math.Max(0, lineCount - visibleLines);
+                    int firstLine = Math.Max(0, SendMessage(editor.Handle, EmGetFirstVisibleLine,
+                        IntPtr.Zero, IntPtr.Zero).ToInt32());
+                    scrollBar.ViewportSize = visibleLines;
+                    scrollBar.LargeChange = Math.Max(1, visibleLines - 1);
+                    scrollBar.Maximum = maximum;
+                    scrollBar.Value = Math.Min(maximum, firstLine);
+                    scrollBar.Visible = maximum > 0;
+                    scrollBar.BringToFront();
+                }
+                finally { synchronizing = false; }
+            }
+
+            private void OnScrollValueChanged(object sender, EventArgs e)
+            {
+                if (synchronizing || !editor.IsHandleCreated || editor.IsDisposed) return;
+                int firstLine = Math.Max(0, SendMessage(editor.Handle, EmGetFirstVisibleLine,
+                    IntPtr.Zero, IntPtr.Zero).ToInt32());
+                int delta = scrollBar.Value - firstLine;
+                if (delta == 0) return;
+                synchronizing = true;
+                try
+                {
+                    SendMessage(editor.Handle, EmLineScroll, IntPtr.Zero, new IntPtr(delta));
+                    editor.Invalidate();
+                }
+                finally { synchronizing = false; }
+                SyncFromEditor();
+            }
+
+            private void OnEditorMouseWheel(object sender, MouseEventArgs e)
+            {
+                if (!scrollBar.Visible || e.Delta == 0) return;
+                wheelRemainder += e.Delta;
+                int notches = wheelRemainder / 120;
+                if (notches == 0) return;
+                wheelRemainder -= notches * 120;
+                int configuredLines = SystemInformation.MouseWheelScrollLines;
+                int step = configuredLines < 0
+                    ? Math.Max(1, scrollBar.ViewportSize - 1)
+                    : Math.Max(1, configuredLines);
+                scrollBar.ScrollBy(-notches * step);
+            }
         }
     }
 

@@ -85,7 +85,9 @@ namespace DshEnhanced.WindowsLauncher
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.PluginManager.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.exe.config"))
                     && StartupRegistration.SelfTest()
-                    && WindowPlacementGeometry.SelfTest();
+                    && WindowPlacementGeometry.SelfTest()
+                    && ModernScrollPage.SelfTest()
+                    && ModernTextAreaScroll.SelfTest();
                 File.WriteAllText(args[1], complete ? "SELF_TEST_OK" : "SELF_TEST_INCOMPLETE", new UTF8Encoding(false));
                 return complete ? 0 : 1;
             }
@@ -468,10 +470,10 @@ namespace DshEnhanced.WindowsLauncher
         private Label sidebarVersion;
         private readonly Panel pageHost;
         private readonly Panel header;
-        private readonly Panel overviewPage;
-        private readonly Panel tasksPage;
-        private readonly Panel diagnosticsPage;
-        private readonly Panel sourcePage;
+        private readonly ModernScrollPage overviewPage;
+        private readonly ModernScrollPage tasksPage;
+        private readonly ModernScrollPage diagnosticsPage;
+        private readonly ModernScrollPage sourcePage;
         private NavButton overviewNav;
         private NavButton tasksNav;
         private NavButton diagnosticsNav;
@@ -491,16 +493,16 @@ namespace DshEnhanced.WindowsLauncher
         private readonly ToggleSwitch noOpenToggle;
         private readonly ToggleSwitch launcherAutostartToggle;
         private readonly ToggleSwitch dshAutostartToggle;
-        private readonly RichTextBox taskInput;
-        private readonly RichTextBox taskOutput;
+        private readonly ModernRichTextBox taskInput;
+        private readonly ModernRichTextBox taskOutput;
         private readonly ModernButton taskRunButton;
         private readonly ModernComboBox profileInput;
         private Label taskInputLabel;
         private Label taskOutputLabel;
         private RoundedPanel taskInputShell;
         private RoundedPanel taskOutputShell;
-        private readonly RichTextBox diagnosticsOutput;
-        private readonly RichTextBox sourceOutput;
+        private readonly ModernRichTextBox diagnosticsOutput;
+        private readonly ModernRichTextBox sourceOutput;
         private readonly ModernButton buildDshButton;
         private readonly Label toast;
         private readonly System.Windows.Forms.Timer refreshTimer;
@@ -519,10 +521,11 @@ namespace DshEnhanced.WindowsLauncher
         private ModernButton runProfileButton;
         private RoundedPanel diagnosticsCard;
         private FlowLayoutPanel diagnosticsActions;
+        private RoundedPanel diagnosticsLogShell;
         private RoundedPanel sourceCard;
         private RoundedPanel sourceLogShell;
         private Label sourcePathLabel;
-        private Panel activePage;
+        private ModernScrollPage activePage;
         private bool loadingSettings;
         private bool layoutPending;
         private bool dshResolved;
@@ -599,26 +602,21 @@ namespace DshEnhanced.WindowsLauncher
             workspace.Controls.Add(pageHost);
             pageHost.BringToFront();
 
-            overviewPage = new Panel();
+            overviewPage = new ModernScrollPage();
             overviewPage.Dock = DockStyle.Fill;
             overviewPage.BackColor = UiTheme.Background;
-            overviewPage.AutoScroll = true;
-            tasksPage = new Panel();
+            tasksPage = new ModernScrollPage();
             tasksPage.Dock = DockStyle.Fill;
             tasksPage.BackColor = UiTheme.Background;
-            tasksPage.AutoScroll = true;
-            diagnosticsPage = new Panel();
+            diagnosticsPage = new ModernScrollPage();
             diagnosticsPage.Dock = DockStyle.Fill;
             diagnosticsPage.BackColor = UiTheme.Background;
-            diagnosticsPage.AutoScroll = true;
-            sourcePage = new Panel();
+            sourcePage = new ModernScrollPage();
             sourcePage.Dock = DockStyle.Fill;
             sourcePage.BackColor = UiTheme.Background;
-            sourcePage.AutoScroll = true;
-            pluginPage = new Panel();
+            pluginPage = new ModernScrollPage();
             pluginPage.Dock = DockStyle.Fill;
             pluginPage.BackColor = UiTheme.Background;
-            pluginPage.AutoScroll = true;
             pageHost.Controls.Add(overviewPage);
             pageHost.Controls.Add(tasksPage);
             pageHost.Controls.Add(diagnosticsPage);
@@ -640,15 +638,15 @@ namespace DshEnhanced.WindowsLauncher
             dshAutostartToggle = new ToggleSwitch();
             BuildOverviewPage();
 
-            taskInput = new RichTextBox();
-            taskOutput = new RichTextBox();
+            taskInput = new ModernRichTextBox();
+            taskOutput = new ModernRichTextBox();
             taskRunButton = NewButton("运行 Headless", ModernButtonKind.Primary, 144);
             profileInput = new ModernComboBox();
             BuildTasksPage();
 
-            diagnosticsOutput = new RichTextBox();
+            diagnosticsOutput = new ModernRichTextBox();
             BuildDiagnosticsPage();
-            sourceOutput = new RichTextBox();
+            sourceOutput = new ModernRichTextBox();
             buildDshButton = NewButton("拉取最新源码并构建", ModernButtonKind.Primary, 184);
             BuildSourcePage();
             BuildPluginManagerPage();
@@ -956,7 +954,7 @@ namespace DshEnhanced.WindowsLauncher
         {
             hero = new HeroPanel();
             hero.Size = new Size(780, 154);
-            overviewPage.Controls.Add(hero);
+            overviewPage.Content.Controls.Add(hero);
 
             statusDot.Location = new Point(30, 33);
             hero.Controls.Add(statusDot);
@@ -992,11 +990,11 @@ namespace DshEnhanced.WindowsLauncher
             overviewActions.Controls.Add(openButton);
             overviewActions.Controls.Add(restartButton);
             overviewActions.Controls.Add(stopButton);
-            overviewPage.Controls.Add(overviewActions);
+            overviewPage.Content.Controls.Add(overviewActions);
 
             settingsCard = new RoundedPanel();
             settingsCard.Size = new Size(780, 168);
-            overviewPage.Controls.Add(settingsCard);
+            overviewPage.Content.Controls.Add(settingsCard);
             AddCardTitle(settingsCard, "启动选项", "两种登录启动模式互斥；自动 DSH 会在 Launcher 就绪 30 秒后启动 Web");
 
             portLabel = NewLabel("服务端口", 9f, FontStyle.Regular, UiTheme.Muted);
@@ -1021,7 +1019,7 @@ namespace DshEnhanced.WindowsLauncher
 
             pathCard = new RoundedPanel();
             pathCard.Size = new Size(780, 112);
-            overviewPage.Controls.Add(pathCard);
+            overviewPage.Content.Controls.Add(pathCard);
             AddCardTitle(pathCard, "运行环境", "Launcher 会优先使用 dsh.ps1，避免批处理参数重新解释");
             dshPath.AutoEllipsis = true;
             dshPath.Font = UiTheme.Font(8.5f, FontStyle.Regular);
@@ -1033,7 +1031,7 @@ namespace DshEnhanced.WindowsLauncher
         {
             taskCard = new RoundedPanel();
             taskCard.Size = new Size(780, 320);
-            tasksPage.Controls.Add(taskCard);
+            tasksPage.Content.Controls.Add(taskCard);
             AddCardTitle(taskCard, "Headless 单次任务", "任务内容通过请求文件传递，不拼接到 shell 命令");
             taskInputLabel = NewLabel("任务内容", 8.8f, FontStyle.Regular, UiTheme.Muted);
             taskCard.Controls.Add(taskInputLabel);
@@ -1045,6 +1043,7 @@ namespace DshEnhanced.WindowsLauncher
             taskInput.ForeColor = UiTheme.Text;
             taskInput.Dock = DockStyle.Fill;
             taskInputShell.Controls.Add(taskInput);
+            ModernTextAreaScroll.Attach(taskInputShell, taskInput);
             taskCard.Controls.Add(taskRunButton);
             taskOutputLabel = NewLabel("运行输出", 8.8f, FontStyle.Regular, UiTheme.Muted);
             taskCard.Controls.Add(taskOutputLabel);
@@ -1057,10 +1056,11 @@ namespace DshEnhanced.WindowsLauncher
             taskOutput.Font = new Font("Consolas", 8.5f, FontStyle.Regular);
             taskOutput.Dock = DockStyle.Fill;
             taskOutputShell.Controls.Add(taskOutput);
+            ModernTextAreaScroll.Attach(taskOutputShell, taskOutput);
 
             profileCard = new RoundedPanel();
             profileCard.Size = new Size(780, 154);
-            tasksPage.Controls.Add(profileCard);
+            tasksPage.Content.Controls.Add(profileCard);
             AddCardTitle(profileCard, "启动其他 Profile", "后台无窗口运行，输出以 UTF-8 保存在日志目录");
             profileInput.SetItems(runtime.Profiles());
             if (profileInput.ItemCount > 0) profileInput.SelectedIndex = 0;
@@ -1073,7 +1073,7 @@ namespace DshEnhanced.WindowsLauncher
         private void BuildDiagnosticsPage()
         {
             diagnosticsCard = new RoundedPanel();
-            diagnosticsPage.Controls.Add(diagnosticsCard);
+            diagnosticsPage.Content.Controls.Add(diagnosticsCard);
             AddCardTitle(diagnosticsCard, "日志与环境诊断", "查看 Launcher 与 Web 运行记录，检查本机 DSH 环境");
             diagnosticsActions = new FlowLayoutPanel();
             diagnosticsActions.BackColor = UiTheme.Surface;
@@ -1094,13 +1094,16 @@ namespace DshEnhanced.WindowsLauncher
             diagnosticsOutput.ForeColor = UiTheme.Text;
             diagnosticsOutput.Font = new Font("Consolas", 8.5f, FontStyle.Regular);
             diagnosticsOutput.Text = runtime.RecentLogs();
-            diagnosticsCard.Controls.Add(diagnosticsOutput);
+            diagnosticsLogShell = NewEditorShell();
+            diagnosticsCard.Controls.Add(diagnosticsLogShell);
+            diagnosticsLogShell.Controls.Add(diagnosticsOutput);
+            ModernTextAreaScroll.Attach(diagnosticsLogShell, diagnosticsOutput);
         }
 
         private void BuildSourcePage()
         {
             sourceCard = new RoundedPanel();
-            sourcePage.Controls.Add(sourceCard);
+            sourcePage.Content.Controls.Add(sourceCard);
             AddCardTitle(sourceCard, "更新并构建 DSH", "先以安全快进方式拉取最新源码，再执行 pnpm run build");
 
             sourcePathLabel = NewLabel(String.Empty, 8.5f, FontStyle.Regular, UiTheme.Muted);
@@ -1122,6 +1125,7 @@ namespace DshEnhanced.WindowsLauncher
             sourceOutput.Dock = DockStyle.Fill;
             sourceOutput.Text = runtime.DshSourceBuildLog();
             sourceLogShell.Controls.Add(sourceOutput);
+            ModernTextAreaScroll.Attach(sourceLogShell, sourceOutput);
             UpdateSourcePath();
         }
 
@@ -1374,7 +1378,7 @@ namespace DshEnhanced.WindowsLauncher
             SetBoundsIfChanged(diagnosticsCard, left, 0, width, height);
             LayoutCardHeader(diagnosticsCard);
             SetBoundsIfChanged(diagnosticsActions, Dip(28), Dip(72), Math.Max(Dip(120), width - Dip(56)), actionsHeight);
-            SetBoundsIfChanged(diagnosticsOutput, Dip(28), outputTop, Math.Max(Dip(120), width - Dip(56)),
+            SetBoundsIfChanged(diagnosticsLogShell, Dip(28), outputTop, Math.Max(Dip(120), width - Dip(56)),
                 Math.Max(Dip(160), height - outputTop - Dip(28)));
             diagnosticsPage.AutoScrollMinSize = new Size(0, height);
         }
@@ -1399,8 +1403,10 @@ namespace DshEnhanced.WindowsLauncher
 
         private void GetContentBounds(Control page, out int left, out int width)
         {
-            width = Math.Min(Dip(1180), Math.Max(1, page.ClientSize.Width));
-            left = Math.Max(0, (page.ClientSize.Width - width) / 2);
+            ModernScrollPage scrollPage = page as ModernScrollPage;
+            int viewportWidth = scrollPage == null ? page.ClientSize.Width : scrollPage.ViewportWidth;
+            width = Math.Min(Dip(1180), Math.Max(1, viewportWidth));
+            left = Math.Max(0, (viewportWidth - width) / 2);
         }
 
         private int FlowLayoutHeight(FlowLayoutPanel panel, int availableWidth, int minimumHeight)
@@ -1609,16 +1615,23 @@ namespace DshEnhanced.WindowsLauncher
             if (!firstShow && String.Equals(page, "tasks", StringComparison.OrdinalIgnoreCase))
             {
                 ShowPage(tasksPage, tasksNav, "任务与 Profile");
+                if (captureMode)
+                {
+                    taskInput.Text = CaptureLogSample("Headless 任务内容");
+                    taskOutput.Text = CaptureLogSample("Headless 运行输出");
+                }
                 tasksNav.Focus();
             }
             else if (!firstShow && String.Equals(page, "diagnostics", StringComparison.OrdinalIgnoreCase))
             {
                 ShowPage(diagnosticsPage, diagnosticsNav, "日志与诊断");
+                if (captureMode) diagnosticsOutput.Text = CaptureLogSample("Launcher 诊断日志");
                 diagnosticsNav.Focus();
             }
             else if (!firstShow && String.Equals(page, "source", StringComparison.OrdinalIgnoreCase))
             {
                 ShowPage(sourcePage, sourceNav, "DSH 源码");
+                if (captureMode) sourceOutput.Text = CaptureLogSample("DSH 源码构建日志");
                 sourceNav.Focus();
             }
             else if (!firstShow && String.Equals(page, "plugins", StringComparison.OrdinalIgnoreCase))
@@ -1632,6 +1645,7 @@ namespace DshEnhanced.WindowsLauncher
                     Application.DoEvents();
                     Thread.Sleep(40);
                 }
+                if (captureMode) pluginLogOutput.Text = CaptureLogSample("插件管理运行日志");
                 if (pluginScrollStress)
                 {
                     LayoutPluginManager();
@@ -1671,12 +1685,30 @@ namespace DshEnhanced.WindowsLauncher
             Hide();
         }
 
+        private static string CaptureLogSample(string title)
+        {
+            StringBuilder sample = new StringBuilder();
+            for (int index = 1; index <= 60; index++)
+            {
+                sample.Append('[').Append(index.ToString("D2")).Append("] ")
+                    .Append(title).Append(" · 自绘滚动条视觉验证").AppendLine();
+            }
+            return sample.ToString();
+        }
+
         private void ValidateResponsiveLayout()
         {
             EnsureContained(header, pageTitle, "page title");
             EnsureContained(header, pageSubtitle, "page subtitle");
             if (pageTitle.Bottom > pageSubtitle.Top)
                 throw new InvalidOperationException("Page title and subtitle must not overlap at any DPI.");
+            if (activePage.AutoScroll)
+                throw new InvalidOperationException("Pages must not expose a system-native scrollbar.");
+            if (activePage.Content.Top != -activePage.ScrollValue)
+                throw new InvalidOperationException("The themed page scrollbar is out of sync with its content.");
+            if (activePage.AutoScrollMinSize.Height > activePage.ClientSize.Height
+                && !activePage.ScrollBarVisible)
+                throw new InvalidOperationException("The themed page scrollbar must be visible for overflowing content.");
             if (activePage == overviewPage)
             {
                 if (pathCard.Top <= settingsCard.Bottom)
@@ -1705,7 +1737,8 @@ namespace DshEnhanced.WindowsLauncher
             {
                 foreach (Control action in diagnosticsActions.Controls)
                     EnsureContained(diagnosticsActions, action, "diagnostics action");
-                EnsureContained(diagnosticsCard, diagnosticsOutput, "diagnostics output");
+                EnsureContained(diagnosticsCard, diagnosticsLogShell, "diagnostics output");
+                EnsureContained(diagnosticsLogShell, diagnosticsOutput, "diagnostics editor");
             }
             else if (activePage == sourcePage)
             {
@@ -1715,7 +1748,7 @@ namespace DshEnhanced.WindowsLauncher
             }
             else if (activePage == pluginPage)
             {
-                if (pluginSourceCard.Top != pluginPage.AutoScrollPosition.Y)
+                if (pluginSourceCard.Top != 0 || pluginPage.Content.Top != -pluginPage.ScrollValue)
                     throw new InvalidOperationException("Plugin scroll offset was not preserved during responsive layout.");
                 EnsureContained(pluginSourceCard, pluginSourcePath, "plugin source path");
                 EnsureContained(pluginFeaturesCard, pluginProfileInput, "plugin profile selector");
@@ -1886,7 +1919,7 @@ namespace DshEnhanced.WindowsLauncher
             toast.ForeColor = result.Success ? UiTheme.Success : UiTheme.Danger;
         }
 
-        private void ShowPage(Panel page, NavButton nav, string title)
+        private void ShowPage(ModernScrollPage page, NavButton nav, string title)
         {
             activePage = page;
             overviewPage.Visible = page == overviewPage;

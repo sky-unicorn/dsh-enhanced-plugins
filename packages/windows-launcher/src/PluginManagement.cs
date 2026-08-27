@@ -585,7 +585,7 @@ namespace DshEnhanced.WindowsLauncher
     internal sealed partial class MainForm
     {
         private readonly PluginManagerRuntime pluginRuntime;
-        private readonly Panel pluginPage;
+        private readonly ModernScrollPage pluginPage;
         private NavButton pluginNav;
         private RoundedPanel pluginSourceCard;
         private RoundedPanel pluginFeaturesCard;
@@ -609,7 +609,7 @@ namespace DshEnhanced.WindowsLauncher
         private Label pluginPlanHeading;
         private Label pluginPlanText;
         private ModernButton pluginApplyButton;
-        private RichTextBox pluginLogOutput;
+        private ModernRichTextBox pluginLogOutput;
         private ModernButton pluginOpenRequestButton;
         private ContextMenuStrip pluginSourceMenu;
         private PluginManagerSnapshot pluginSnapshot;
@@ -627,9 +627,9 @@ namespace DshEnhanced.WindowsLauncher
             pluginSourceCard = new RoundedPanel();
             pluginFeaturesCard = new RoundedPanel();
             pluginLogCard = new RoundedPanel();
-            pluginPage.Controls.Add(pluginSourceCard);
-            pluginPage.Controls.Add(pluginFeaturesCard);
-            pluginPage.Controls.Add(pluginLogCard);
+            pluginPage.Content.Controls.Add(pluginSourceCard);
+            pluginPage.Content.Controls.Add(pluginFeaturesCard);
+            pluginPage.Content.Controls.Add(pluginLogCard);
 
             AddCardTitle(pluginSourceCard, "项目源码", "绑定、检查并安全更新 dsh-enhanced-plugins 源码");
             pluginSourcePath = NewLabel("尚未读取源码绑定", 8.6f, FontStyle.Regular, UiTheme.Muted);
@@ -693,7 +693,7 @@ namespace DshEnhanced.WindowsLauncher
             AddCardTitle(pluginLogCard, "运行日志", "完整 UTF-8 日志保存在独立请求目录");
             RoundedPanel logShell = NewEditorShell();
             logShell.Tag = "plugin-log-shell";
-            pluginLogOutput = new RichTextBox();
+            pluginLogOutput = new ModernRichTextBox();
             pluginLogOutput.ReadOnly = true;
             pluginLogOutput.BorderStyle = BorderStyle.None;
             pluginLogOutput.BackColor = UiTheme.SurfaceSoft;
@@ -702,6 +702,7 @@ namespace DshEnhanced.WindowsLauncher
             pluginLogOutput.Dock = DockStyle.Fill;
             pluginLogOutput.Text = "插件管理操作将在这里显示。";
             logShell.Controls.Add(pluginLogOutput);
+            ModernTextAreaScroll.Attach(logShell, pluginLogOutput);
             pluginOpenRequestButton = NewButton("打开请求目录", ModernButtonKind.Secondary, 132);
             pluginLogCard.Controls.Add(logShell);
             pluginLogCard.Controls.Add(pluginOpenRequestButton);
@@ -1245,9 +1246,7 @@ namespace DshEnhanced.WindowsLauncher
             int width;
             GetContentBounds(pluginPage, out left, out width);
             if (width < 1) return;
-            Point scrollOffset = pluginPage.AutoScrollPosition;
-            left += scrollOffset.X;
-            int pageTop = scrollOffset.Y;
+            int pageTop = 0;
             int gap = Dip(18);
             bool compactSource = width < Dip(640);
             bool stackSourceActions = width < Dip(500);

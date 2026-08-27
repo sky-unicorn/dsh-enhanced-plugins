@@ -126,7 +126,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
 - **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后再运行 `pnpm run build`；无 Git 时可明确选择仅构建。
 - **诊断：** 汇总命令、端口、工作目录、运行状态和日志，并提供独立的 DSH 源码页。
-- **桌面体验：** 系统托盘、可选登录启动、各尺寸统一的居中纵向布局与逐显示器 DPI 缩放；Launcher 会记住最后使用的显示器和正常窗口位置，显示器拓扑或工作区变化后会自动收回可见区域。
+- **桌面体验：** 系统托盘、可选登录启动、各尺寸统一的居中纵向布局、逐显示器 DPI 缩放，以及不受 Windows 主题影响的统一圆角页面与文本区域滚动条；日志与诊断、任务输入/输出、源码构建日志和插件运行日志均使用相同样式，并支持滚轮、触控板、拖动、轨道翻页与键盘滚动。Launcher 会记住最后使用的显示器和正常窗口位置，显示器拓扑或工作区变化后会自动收回可见区域。
 
 <details>
 <summary><strong>进程所有权、退出与后台行为</strong></summary>
