@@ -169,7 +169,7 @@ Settings, runtime state, install state, update requests, and logs live under `%L
 | Completed | A short celebration for top-level tasks only |
 | Blocked | A short tired or concerned response for top-level tasks only |
 
-The pet can be dragged across monitors and stores normalized per-monitor positions. Resolution, scale, work-area, or display-topology changes remap it into a visible area; changing the startup corner clears the drag record. Windows “Show animations” accessibility preferences reduce every state to a representative still frame when animations are disabled.
+The pet can be dragged across monitors and stores normalized per-monitor positions. Resolution, scale, work-area, or display-topology changes remap it into a visible area; changing the startup corner clears the drag record. The pet stays out of the taskbar and Alt+Tab task switcher; disable it in Settings when you want to hide it. Windows “Show animations” accessibility preferences reduce every state to a representative still frame when animations are disabled.
 
 Both the resident pet and short-lived sound processes are owned by the DSH subprocess service and exit cooperatively when disabled. A known retired pet ID is migrated to Flat Whale on the next launch; other unknown values continue to fail validation.
 

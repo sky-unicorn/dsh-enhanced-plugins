@@ -379,6 +379,10 @@ describe('desktop notification assets and defaults', () => {
       '../../assets/notification/deepseek-whale-girl-pet-sprites.png',
     ))
     expect(script).toContain('Topmost="True"')
+    expect(script).toContain('ShowInTaskbar="False"')
+    expect(script).toContain('ToolWindowStyle = 0x00000080')
+    expect(script).toContain('(current | ToolWindowStyle) & ~AppWindowStyle')
+    expect(script).toContain('[DeepSeekPetNativeWindow]::HideFromTaskSwitcher($script:windowHandle)')
     expect(script).toContain('DeepSeekPetInputReader')
     expect(script).toContain('thread.IsBackground = true')
     expect(script).not.toContain('[Console]::In.ReadLineAsync()')

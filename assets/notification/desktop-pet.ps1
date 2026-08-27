@@ -25,6 +25,66 @@ public sealed class DeepSeekPetPlacement {
   public double YRatio { get; set; }
 }
 
+public static class DeepSeekPetNativeWindow {
+  private const int ExtendedStyleIndex = -20;
+  private const int ToolWindowStyle = 0x00000080;
+  private const int AppWindowStyle = 0x00040000;
+  private const uint NoSize = 0x0001;
+  private const uint NoMove = 0x0002;
+  private const uint NoZOrder = 0x0004;
+  private const uint NoActivate = 0x0010;
+  private const uint FrameChanged = 0x0020;
+
+  [DllImport("user32.dll", SetLastError = true)]
+  private static extern int GetWindowLong(IntPtr window, int index);
+
+  [DllImport("user32.dll", SetLastError = true)]
+  private static extern int SetWindowLong(IntPtr window, int index, int value);
+
+  [DllImport("user32.dll", SetLastError = true)]
+  private static extern bool SetWindowPos(
+    IntPtr window,
+    IntPtr insertAfter,
+    int x,
+    int y,
+    int width,
+    int height,
+    uint flags
+  );
+
+  [DllImport("kernel32.dll")]
+  private static extern void SetLastError(uint errorCode);
+
+  public static void HideFromTaskSwitcher(IntPtr window) {
+    if (window == IntPtr.Zero) throw new ArgumentException("The desktop pet window handle is invalid.", "window");
+    var current = GetWindowLong(window, ExtendedStyleIndex);
+    var updated = (current | ToolWindowStyle) & ~AppWindowStyle;
+    if (updated != current) {
+      SetLastError(0);
+      var previous = SetWindowLong(window, ExtendedStyleIndex, updated);
+      var error = Marshal.GetLastWin32Error();
+      if (previous == 0 && error != 0) {
+        throw new InvalidOperationException(
+          "Unable to exclude the desktop pet from the task switcher (Win32 error " + error + ")."
+        );
+      }
+    }
+    if (!SetWindowPos(
+      window,
+      IntPtr.Zero,
+      0,
+      0,
+      0,
+      0,
+      NoSize | NoMove | NoZOrder | NoActivate | FrameChanged
+    )) {
+      throw new InvalidOperationException(
+        "Unable to refresh the desktop pet window style (Win32 error " + Marshal.GetLastWin32Error() + ")."
+      );
+    }
+  }
+}
+
 public static class DeepSeekPetNativeCursor {
   [StructLayout(LayoutKind.Sequential)]
   private struct NativeRect {
@@ -538,6 +598,7 @@ $window = [System.Windows.Markup.XamlReader]::Load($reader)
 $application = [System.Windows.Application]::new()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $script:windowHandle = [System.Windows.Interop.WindowInteropHelper]::new($window).EnsureHandle()
+[DeepSeekPetNativeWindow]::HideFromTaskSwitcher($script:windowHandle)
 $motion = $window.FindName('Motion')
 $groundShadow = $window.FindName('GroundShadow')
 $ring = $window.FindName('Ring')
