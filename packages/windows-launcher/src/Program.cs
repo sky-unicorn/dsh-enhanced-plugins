@@ -410,7 +410,6 @@ namespace DshEnhanced.WindowsLauncher
             // ShowInTaskbar recreates the native HWND; when the form is maximized,
             // that handle recreation can make it visible again after Hide().
             form.Hide();
-            tray.ShowBalloonTip(1500, "Launcher 仍在运行", "可从系统托盘再次打开控制中心。", ToolTipIcon.Info);
         }
 
         private void ExitLauncher()

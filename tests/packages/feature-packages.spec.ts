@@ -490,6 +490,7 @@ describe('selective feature packages', () => {
     expect(program).toContain('tray.DoubleClick += delegate { ShowWindow(); };')
     expect(program).not.toContain('tray.MouseClick +=')
     expect(program).not.toContain('Launcher 已在托盘就绪。')
+    expect(program).not.toContain('Launcher 仍在运行')
     expect(program).toContain('bool activateUpdate = StartupRegistration.HasArgument(args, "--activate-update")')
     expect(program).toContain('SignalEvent(ShutdownEventName);')
     expect(program).toContain('mutex.WaitOne(TimeSpan.FromSeconds(15))')
