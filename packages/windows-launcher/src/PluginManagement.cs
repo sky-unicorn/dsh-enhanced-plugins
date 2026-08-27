@@ -1157,7 +1157,7 @@ namespace DshEnhanced.WindowsLauncher
             message.AppendLine("卸载：" + FeatureNames(plan.profile.remove));
             message.AppendLine("Launcher：" + LauncherActionName(plan.launcher == null ? null : plan.launcher.action));
             message.AppendLine();
-            message.Append("进入 Profile 提交阶段后不会强制取消；Launcher 发生变化时控制中心会关闭并由新版自动重开。确定执行这份计划吗？");
+            message.Append("进入 Profile 提交阶段后不会强制取消；Launcher 发生变化时控制中心会关闭，新版将在托盘继续运行，可双击托盘图标或通过右键菜单再次打开。确定执行这份计划吗？");
             return message.ToString();
         }
 

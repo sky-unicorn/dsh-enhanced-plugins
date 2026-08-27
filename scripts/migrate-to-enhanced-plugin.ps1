@@ -842,28 +842,6 @@ function Install-WindowsLauncher {
       Write-Warning "Unable to inspect the previous Windows Launcher version: $($_.Exception.Message)"
     }
   }
-  if ($RestartAfterUpdate -and $null -ne $previousExecutable -and
-    -not $previousExecutable.Equals($executable, [System.StringComparison]::OrdinalIgnoreCase)) {
-    try {
-      $shutdown = Start-Process -FilePath $previousExecutable -ArgumentList '--shutdown' -PassThru -Wait -WindowStyle Hidden
-      if ($shutdown.ExitCode -ne 0) {
-        Write-Warning "Previous Windows Launcher shutdown exited with code $($shutdown.ExitCode)."
-      }
-      $shutdownDeadline = [DateTime]::UtcNow.AddSeconds(12)
-      do {
-        Start-Sleep -Milliseconds 250
-        $stillRunning = @(
-          Get-Process -ErrorAction SilentlyContinue | Where-Object {
-            try { $_.MainModule.FileName.Equals($previousExecutable, [System.StringComparison]::OrdinalIgnoreCase) }
-            catch { $false }
-          }
-        ).Count -gt 0
-      } while ($stillRunning -and [DateTime]::UtcNow -lt $shutdownDeadline)
-      if ($stillRunning) { throw 'The previous Windows Launcher did not exit within 12 seconds.' }
-    } catch {
-      Write-Warning "Unable to request shutdown of the previous Windows Launcher: $($_.Exception.Message)"
-    }
-  }
   if (-not (Test-Path -LiteralPath $installRoot -PathType Container)) {
     [void](New-Item -ItemType Directory -Force -Path $installRoot)
   }
@@ -931,15 +909,32 @@ function Install-WindowsLauncher {
     [void](Assert-LauncherOwnedPath -Path $readyPath -InstallRoot $installRoot)
     try {
       $newLauncher = Start-Process -FilePath $executable `
-        -ArgumentList @('--tray', '--ready-file', ('"' + $readyPath + '"')) `
-        -PassThru -WindowStyle Hidden
-      $readyDeadline = [DateTime]::UtcNow.AddSeconds(12)
+        -ArgumentList @('--activate-update', '--tray', '--ready-file', ('"' + $readyPath + '"')) `
+        -PassThru
+      # The candidate may spend up to 15 seconds waiting for the previous
+      # singleton to release its mutex; leave additional time for tray setup.
+      $readyDeadline = [DateTime]::UtcNow.AddSeconds(20)
       do {
         Start-Sleep -Milliseconds 200
         $ready = Test-Path -LiteralPath $readyPath -PathType Leaf
       } while (-not $ready -and -not $newLauncher.HasExited -and [DateTime]::UtcNow -lt $readyDeadline)
+      if ($ready -and -not $newLauncher.HasExited) {
+        # Readiness is emitted after the replacement tray/context is created.
+        # Require a short stable interval so an immediately terminating UI
+        # process cannot leave behind a successful update and a shell ghost.
+        Start-Sleep -Seconds 2
+        $newLauncher.Refresh()
+      }
       if ($newLauncher.HasExited -or -not $ready) {
-        $code = if ($newLauncher.HasExited) { [string]$newLauncher.ExitCode } else { 'still running without readiness signal' }
+        $code = if ($newLauncher.HasExited) { [string]$newLauncher.ExitCode } else {
+          try {
+            $newLauncher.Kill()
+            [void]$newLauncher.WaitForExit(3000)
+          } catch {
+            Write-Warning "Unable to stop the failed Windows Launcher candidate: $($_.Exception.Message)"
+          }
+          'still running without readiness signal'
+        }
         throw "The new Windows Launcher failed its readiness check: $code."
       }
       $newLauncher.Dispose()
@@ -965,7 +960,7 @@ function Install-WindowsLauncher {
             Set-ItemProperty -Path $runKey -Name $runName -Value ('"' + $previousExecutable + '"' + $startupArguments)
           }
         }
-        [void](Start-Process -FilePath $previousExecutable -ArgumentList '--tray' -WindowStyle Hidden)
+        [void](Start-Process -FilePath $previousExecutable -ArgumentList '--tray')
       }
       throw "The Windows Launcher update was rolled back: $launchFailure"
     } finally {

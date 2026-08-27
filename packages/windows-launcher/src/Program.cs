@@ -118,16 +118,49 @@ namespace DshEnhanced.WindowsLauncher
 
             bool startHidden = StartupRegistration.HasArgument(args, "--tray");
             bool startDshAfterLogin = StartupRegistration.HasArgument(args, StartupRegistration.StartDshArgument);
+            bool activateUpdate = StartupRegistration.HasArgument(args, "--activate-update");
             string readyFile = ArgumentValue(args, "--ready-file");
-            bool created;
-            using (Mutex mutex = new Mutex(true, MutexName, out created))
+            using (Mutex mutex = new Mutex(false, MutexName))
             {
-                if (!created)
+                bool acquired = false;
+                try
                 {
-                    SignalEvent(startDshAfterLogin ? StartDshEventName : ShowEventName);
-                    return 0;
+                    try { acquired = mutex.WaitOne(0); }
+                    catch (AbandonedMutexException) { acquired = true; }
+                    if (!acquired && activateUpdate)
+                    {
+                        // The candidate executable owns the handoff: ask the previous
+                        // version to remove its tray icon, then wait until its singleton
+                        // mutex is released before registering the replacement icon.
+                        // This avoids leaving a non-responsive shell ghost between two
+                        // separately orchestrated shutdown/start commands.
+                        SignalEvent(ShutdownEventName);
+                        try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(15)); }
+                        catch (AbandonedMutexException) { acquired = true; }
+                        if (!acquired)
+                        {
+                            LauncherLog.Write("launcher update activation timed out waiting for previous instance");
+                            return 1;
+                        }
+                    }
+                    if (!acquired)
+                    {
+                        SignalEvent(startDshAfterLogin ? StartDshEventName : ShowEventName);
+                        return 0;
+                    }
+                    LauncherLog.Write("launcher UI start pid=" + Process.GetCurrentProcess().Id.ToString()
+                        + " tray=" + startHidden.ToString() + " activateUpdate=" + activateUpdate.ToString());
+                    Application.Run(new LauncherApplicationContext(startHidden, startDshAfterLogin, readyFile));
+                    LauncherLog.Write("launcher UI exit pid=" + Process.GetCurrentProcess().Id.ToString());
                 }
-                Application.Run(new LauncherApplicationContext(startHidden, startDshAfterLogin, readyFile));
+                finally
+                {
+                    if (acquired)
+                    {
+                        try { mutex.ReleaseMutex(); }
+                        catch (ApplicationException) { }
+                    }
+                }
             }
             return 0;
         }
@@ -220,7 +253,6 @@ namespace DshEnhanced.WindowsLauncher
             if (!startHidden) ShowWindow();
             else if (startDshAfterLogin)
                 tray.ShowBalloonTip(2200, "DeepSeek Harness", "Launcher 已就绪，将在 30 秒后启动 DSH Web。", ToolTipIcon.Info);
-            else tray.ShowBalloonTip(1800, "DeepSeek Harness", "Launcher 已在托盘就绪。", ToolTipIcon.Info);
             if (startDshAfterLogin) ScheduleDelayedDsh();
             if (!String.IsNullOrWhiteSpace(readyFile))
             {
