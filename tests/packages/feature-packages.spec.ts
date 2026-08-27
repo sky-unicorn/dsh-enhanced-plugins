@@ -298,6 +298,107 @@ describe('selective feature packages', () => {
     }
   }, 30_000)
 
+  it.runIf(process.platform === 'win32')('retries transient GitHub resets with HTTP/1.1 before checking updates', () => {
+    const managerDirectory = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-manager-git-retry-'))
+    try {
+      const fakeBin = resolve(managerDirectory, 'bin')
+      const launcherHome = resolve(managerDirectory, 'launcher')
+      const managerScript = resolve(managerDirectory, 'DSH-Launcher.PluginManager.ps1')
+      const outputPath = resolve(managerDirectory, 'update-check.json')
+      const attemptPath = resolve(managerDirectory, 'attempt.txt')
+      const tracePath = resolve(managerDirectory, 'git-trace.txt')
+      mkdirSync(fakeBin, { recursive: true })
+      mkdirSync(launcherHome, { recursive: true })
+      const managerSource = readFileSync(resolve(root,
+        'packages/windows-launcher/src/DSH-Launcher.PluginManager.ps1'), 'utf8')
+      writeFileSync(managerScript, `\uFEFF${managerSource}`, 'utf8')
+      writeFileSync(resolve(fakeBin, 'git.cmd'), [
+        '@echo off',
+        'setlocal EnableExtensions EnableDelayedExpansion',
+        '>> "%DSH_TEST_GIT_TRACE%" echo %*',
+        'for %%A in (%*) do if /I "%%~A"=="fetch" goto fetch',
+        'if /I "%~3"=="status" exit /b 0',
+        'if /I "%~3"=="branch" (echo master& exit /b 0)',
+        'if /I "%~3"=="config" (echo https://github.com/sky-unicorn/dsh-enhanced-plugins.git& exit /b 0)',
+        'if /I "%~3"=="merge-base" exit /b 0',
+        'if /I "%~3"=="rev-parse" if /I "%~4"=="HEAD" (echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa& exit /b 0)',
+        'if /I "%~3"=="rev-parse" if /I "%~4"=="--abbrev-ref" (echo origin/master& exit /b 0)',
+        'if /I "%~3"=="rev-parse" (echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa& exit /b 0)',
+        'exit /b 91',
+        ':fetch',
+        'set /a count=0',
+        'if exist "%DSH_TEST_GIT_ATTEMPT%" set /p count=<"%DSH_TEST_GIT_ATTEMPT%"',
+        'set /a count+=1',
+        '> "%DSH_TEST_GIT_ATTEMPT%" echo !count!',
+        'if !count! LSS %DSH_TEST_GIT_SUCCEED_AFTER% (echo fatal: unable to access repository: Recv failure: Connection was reset 1>&2& exit /b 128)',
+        'echo FETCH_RETRY_OK',
+        'exit /b 0',
+        '',
+      ].join('\r\n'), 'utf8')
+
+      const checked = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'CheckUpdate', '-RepositoryRoot', root,
+        '-Profile', 'web', '-OutputPath', outputPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${fakeBin};${process.env.PATH ?? ''}`,
+          DEEPSEEK_HARNESS_LAUNCHER_HOME: launcherHome,
+          DSH_HOME: resolve(managerDirectory, 'dsh-home'),
+          DSH_TEST_GIT_ATTEMPT: attemptPath,
+          DSH_TEST_GIT_TRACE: tracePath,
+          DSH_TEST_GIT_SUCCEED_AFTER: '3',
+        },
+      })
+      expect(checked.status, `${checked.stdout}\n${checked.stderr}`).toBe(0)
+      expect(readFileSync(attemptPath, 'utf8').trim()).toBe('3')
+      const trace = readFileSync(tracePath, 'utf8')
+      expect(trace).toContain('http.version=HTTP/1.1')
+      expect(trace).not.toContain(' pull ')
+      const result = JSON.parse(readFileSync(outputPath, 'utf8')) as {
+        success: boolean
+        source: { relation: string, updateAvailable: boolean }
+      }
+      expect(result.success).toBe(true)
+      expect(result.source).toMatchObject({ relation: 'current', updateAvailable: false })
+
+      const failedOutputPath = resolve(managerDirectory, 'update-check-failed.json')
+      const failedAttemptPath = resolve(managerDirectory, 'failed-attempt.txt')
+      const failedTracePath = resolve(managerDirectory, 'failed-git-trace.txt')
+      const failed = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'CheckUpdate', '-RepositoryRoot', root,
+        '-Profile', 'web', '-OutputPath', failedOutputPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${fakeBin};${process.env.PATH ?? ''}`,
+          DEEPSEEK_HARNESS_LAUNCHER_HOME: launcherHome,
+          DSH_HOME: resolve(managerDirectory, 'dsh-home'),
+          DSH_TEST_GIT_ATTEMPT: failedAttemptPath,
+          DSH_TEST_GIT_TRACE: failedTracePath,
+          DSH_TEST_GIT_SUCCEED_AFTER: '99',
+        },
+      })
+      expect(failed.status).toBe(1)
+      expect(readFileSync(failedAttemptPath, 'utf8').trim()).toBe('3')
+      const failure = JSON.parse(readFileSync(failedOutputPath, 'utf8')) as {
+        success: boolean
+        message: string
+      }
+      expect(failure.success).toBe(false)
+      expect(failure.message).toContain('Launcher 已自动重试 3 次')
+      expect(failure.message).toContain('本地源码、Profile 和 Launcher 均未修改')
+    } finally {
+      rmSync(managerDirectory, { recursive: true, force: true })
+    }
+  }, 30_000)
+
   it('keeps the Windows companion outside Cordis and avoids port-owner termination', () => {
     const launcherRoot = resolve(packagesRoot, 'windows-launcher')
     const runtime = readFileSync(resolve(launcherRoot, 'src', 'Runtime.cs'), 'utf8')
@@ -433,7 +534,12 @@ describe('selective feature packages', () => {
     expect(manager).toContain("[ValidateSet('Catalog', 'Snapshot', 'CheckUpdate', 'Bind', 'ImportZip', 'Plan', 'Apply')]")
     expect(manager).toContain("'Local\\DSH.Enhanced.WindowsLauncher.PluginManagement'")
     expect(manager).toContain('Expand-SafeZip')
-    expect(manager).toContain("@('pull', '--ff-only')")
+    expect(manager).toContain('Invoke-GitFetchWithRetry')
+    expect(manager).toContain("# transient network error can reach the retry policy below.")
+    expect(manager).toContain("'http.version=HTTP/1.1'")
+    expect(manager).toContain('Launcher 已自动重试 3 次')
+    expect(manager).toContain("@('merge', '--ff-only', '@{u}')")
+    expect(manager).not.toContain("Invoke-GitText $gitInfo.git $InitialRoot @('pull', '--ff-only')")
     expect(manager).toContain(".dsh-enhanced-source.json")
     expect(manager).toContain('Write-SourceRevisionMarker')
     expect(manager).toContain('Import-ManualSourceZip')

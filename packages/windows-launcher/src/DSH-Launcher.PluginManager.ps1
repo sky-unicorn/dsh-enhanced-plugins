@@ -461,16 +461,75 @@ function Get-ManagementPlan {
 
 function Invoke-GitText {
   param([string] $Git, [string] $Root, [string[]] $Arguments, [switch] $AllowFailure)
-  $output = @(& $Git -C $Root @Arguments 2>&1) -join [Environment]::NewLine
-  $code = $LASTEXITCODE
+  $originalErrorActionPreference = $ErrorActionPreference
+  try {
+    # Windows PowerShell 5.1 turns native stderr into ErrorRecord objects.
+    # Capture Git's complete diagnostic and decide from its exit code so a
+    # transient network error can reach the retry policy below.
+    $ErrorActionPreference = 'Continue'
+    $output = @(& $Git -C $Root @Arguments 2>&1) -join [Environment]::NewLine
+    $code = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $originalErrorActionPreference }
   if ($code -ne 0 -and -not $AllowFailure) {
     throw "git $($Arguments -join ' ') 失败（退出码 $code）：$output"
   }
   [pscustomobject]@{ code = $code; output = $output.Trim() }
 }
 
+function Write-ManagementLog {
+  param([string] $LogPath, [string] $Message)
+  if ([string]::IsNullOrWhiteSpace($LogPath)) { return }
+  $directory = Split-Path -Parent $LogPath
+  if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+    [void](New-Item -ItemType Directory -Force -Path $directory)
+  }
+  [System.IO.File]::AppendAllText($LogPath,
+    "[$([DateTime]::Now.ToString('s'))] $Message`r`n", $Utf8NoBom)
+}
+
+function Test-TransientGitNetworkFailure {
+  param([string] $Output)
+  if ([string]::IsNullOrWhiteSpace($Output)) { return $false }
+  $Output -match '(?i)(connection (?:was )?reset|recv failure|could not resolve host|failed to connect|' +
+    'connection timed out|operation timed out|network is unreachable|rpc failed|http/\d(?:\.\d)? stream|' +
+    'gnutls_handshake|ssl_error|schannel|unexpected disconnect|remote end hung up|' +
+    'requested url returned error:\s*5(?:00|02|03|04))'
+}
+
+function Invoke-GitFetchWithRetry {
+  param([string] $Git, [string] $Root, [string] $Remote = 'origin', [string] $LogPath = '')
+  $delays = @(0, 800, 2200)
+  $lastOutput = ''
+  for ($attempt = 1; $attempt -le $delays.Count; $attempt++) {
+    if ($delays[$attempt - 1] -gt 0) { Start-Sleep -Milliseconds $delays[$attempt - 1] }
+    # Git for Windows can intermittently lose an HTTP/2 connection on some
+    # Win10/Win11 proxy and filtering stacks. Retries use HTTP/1.1 and bounded
+    # low-speed detection without changing the user's global Git config.
+    $networkOptions = if ($attempt -eq 1) { @() } else {
+      @('-c', 'http.version=HTTP/1.1', '-c', 'http.lowSpeedLimit=1024', '-c', 'http.lowSpeedTime=20')
+    }
+    Write-ManagementLog $LogPath "git fetch attempt=$attempt remote=$Remote"
+    $result = Invoke-GitText $Git $Root @($networkOptions + @('fetch', '--prune', '--no-tags', $Remote)) -AllowFailure
+    if (-not [string]::IsNullOrWhiteSpace($result.output)) {
+      Write-ManagementLog $LogPath ("git fetch output: " + $result.output)
+    }
+    if ($result.code -eq 0) {
+      Write-ManagementLog $LogPath "git fetch succeeded attempt=$attempt"
+      return
+    }
+    $lastOutput = $result.output
+    if (-not (Test-TransientGitNetworkFailure $lastOutput)) {
+      throw "Git 获取远端源码失败（退出码 $($result.code)）：$lastOutput"
+    }
+  }
+  $compactError = ($lastOutput -replace '[\r\n]+', ' ').Trim()
+  throw ('连接 GitHub 时网络被中断，Launcher 已自动重试 3 次；本地源码、Profile 和 Launcher 均未修改。' +
+    '请检查网络或 Git 代理后重试；若只需应用当前源码，请使用“确认并应用”。' +
+    $(if ([string]::IsNullOrWhiteSpace($compactError)) { '' } else { " Git 原始错误：$compactError" }))
+}
+
 function Get-GitUpdateInfo {
-  param([string] $Root, [object] $State, [switch] $Fetch)
+  param([string] $Root, [object] $State, [switch] $Fetch, [string] $LogPath = '')
   $gitCommand = Get-Command -Name 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($null -eq $gitCommand -or -not (Test-Path -LiteralPath (Join-Path $Root '.git'))) { return $null }
   $git = $gitCommand.Source
@@ -487,7 +546,7 @@ function Get-GitUpdateInfo {
     -not $remote.Equals($boundRemote, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Git remote 已变化；绑定为 '$boundRemote'，当前为 '$remote'。请重新绑定源码。"
   }
-  if ($Fetch) { [void](Invoke-GitText $git $Root @('fetch', '--prune', 'origin')) }
+  if ($Fetch) { Invoke-GitFetchWithRetry $git $Root 'origin' $LogPath }
   $upstream = (Invoke-GitText $git $Root @('rev-parse', '@{u}')).output.ToLowerInvariant()
   $ancestor = Invoke-GitText $git $Root @('merge-base', '--is-ancestor', 'HEAD', '@{u}') -AllowFailure
   $reverse = Invoke-GitText $git $Root @('merge-base', '--is-ancestor', '@{u}', 'HEAD') -AllowFailure
@@ -1025,6 +1084,10 @@ function Invoke-Apply {
   )
   $requestId = [string](Get-OptionalProperty $Request 'requestId' ([Guid]::NewGuid().ToString('D')))
   if ($requestId -notmatch '^[0-9a-fA-F-]{36}$') { throw '请求 ID 无效。' }
+  $requestRoot = Join-Path (Join-Path $LauncherRoot 'updates') $requestId
+  $logPath = Join-Path (Join-Path $requestRoot 'logs') 'update.log'
+  [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath))
+  Write-ManagementLog $logPath "plugin management request=$requestId started"
   $profileName = [string](Get-OptionalProperty $Request 'profile' 'web')
   if ($profileName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Profile 名称无效。' }
   $catalog = Get-Catalog $InitialRoot
@@ -1108,13 +1171,15 @@ function Invoke-Apply {
   $bindingRoot = $InitialRoot
   $updateMode = 'current-source'
   if ($updateSource) {
-    $gitInfo = Get-GitUpdateInfo $InitialRoot $State -Fetch
+    $gitInfo = Get-GitUpdateInfo $InitialRoot $State -Fetch -LogPath $logPath
     if ($null -ne $gitInfo) {
       if (-not $gitInfo.clean) { throw "Git 工作区存在本地修改，已停止更新：$($gitInfo.changes)" }
       if ($gitInfo.relation -eq 'ahead') { throw '本地分支领先远端，不能自动更新。' }
       if ($gitInfo.relation -eq 'diverged') { throw '本地分支已与远端分叉，不能自动更新。' }
       if ($gitInfo.updateAvailable) {
-        [void](Invoke-GitText $gitInfo.git $InitialRoot @('pull', '--ff-only'))
+        # Fetch already updated the upstream ref. Fast-forward locally without
+        # making a second network request (git pull would fetch again).
+        [void](Invoke-GitText $gitInfo.git $InitialRoot @('merge', '--ff-only', '@{u}'))
         $gitInfo = Get-GitUpdateInfo $InitialRoot $State
       }
       $source = New-GitSnapshot $gitInfo $InitialRoot $LauncherRoot $requestId
@@ -1156,9 +1221,6 @@ function Invoke-Apply {
   if ([string]::IsNullOrWhiteSpace($dshCheckout)) { throw '安装状态未绑定 DSH 源码 checkout。' }
   $installer = Join-Path $source 'scripts\migrate-to-enhanced-plugin.ps1'
   if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw '候选源码缺少安装核心脚本。' }
-  $requestRoot = Join-Path (Join-Path $LauncherRoot 'updates') $requestId
-  [void](New-Item -ItemType Directory -Force -Path (Join-Path $requestRoot 'logs'))
-  $logPath = Join-Path (Join-Path $requestRoot 'logs') 'update.log'
   $featureArgument = if ($desired.Count -eq 0) { 'none' } else { $desired -join ',' }
   [System.IO.File]::AppendAllText($logPath,
     "[$([DateTime]::Now.ToString('s'))] request=$requestId profile=$profileName source=$source revision=$($catalog.sourceRevision)`r`n", $Utf8NoBom)

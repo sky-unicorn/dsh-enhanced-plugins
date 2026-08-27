@@ -103,7 +103,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 - 从各 `packages/*/package.json` 动态生成的功能列表，新增普通功能无需修改 Launcher；
 - 首次默认全选、按 Profile 选择、单项安装/卸载、历史聚合包迁移；
-- Git 工作区的安全 `fetch`/`pull --ff-only`，或没有 Git 时下载准确 commit 的源码 ZIP；无网络时也可手动绑定源码目录或导入源码 ZIP；
+- Git 工作区先执行带退避重试的安全 `fetch`，连接重置时自动改用 HTTP/1.1 重试，成功后仅在本地执行 `merge --ff-only`，避免 `pull` 再次访问网络；或没有 Git 时下载准确 commit 的源码 ZIP；无网络时也可手动绑定源码目录或导入源码 ZIP；
 - 只有源码 revision 或目标功能发生变化时，才在 `sources/runtime-*` 持久化隔离快照中执行 `npm ci`、正式 `npm run build` 和 runtime entry 校验；Profile 始终链接到仍然存在的活动快照，未被任何 Profile 引用的旧快照会安全清理；开发期的全仓类型检查仍在源码目录运行，不会因 sibling DSH 类型路径阻止安装；npm 的 stderr 警告保留在日志中，是否失败只看真实退出码；全部完成后才停止 Launcher-owned DSH 并提交更改；
 - Launcher 哈希变化时由外部协调器切换版本、等待新版就绪、失败回滚，并恢复此前运行的 DSH；DSH 连续保持 Launcher-owned 状态 15 秒后才报告恢复成功；
 - Launcher 重启后继续跟踪仍在运行的协调器；异常中断或状态文件损坏时保留日志/备份并从实际 Profile inventory 重新读取状态。
