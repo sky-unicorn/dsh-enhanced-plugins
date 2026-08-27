@@ -33,7 +33,7 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 - Node.js 22.19.x, or Node.js 24 and later.
 - A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
 - This repository is verified against DSH [`0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e), with local ABI baseline commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
-- Windows Launcher, native sounds, and the desktop pet require Windows 10 or later and Windows PowerShell 5.1. The remaining features are cross-platform.
+- Windows Launcher, native sounds, and the desktop pet require a full Windows desktop edition with Windows PowerShell 5.1: Windows 10 version 1607 or later, or Windows 11. The required OS capabilities are the same on Home, Pro, Education / Pro Education, and Enterprise; Windows in S mode, IoT / reduced-footprint editions, and Windows 10 versions 1507 and 1511 are outside this baseline. Windows feature updates outside Microsoft's lifecycle are best-effort because the required Node.js toolchain does not guarantee end-of-life operating systems. The installer does not depend on a particular `tar.exe`. The remaining features are cross-platform.
 
 > [!IMPORTANT]
 > DSH remains a developer preview. If a DSH upgrade causes compatibility issues, check the verified version and commit above first.

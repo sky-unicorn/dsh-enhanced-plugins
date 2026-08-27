@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -229,13 +229,39 @@ describe('selective feature packages', () => {
   }, 20_000)
 
   it.runIf(process.platform === 'win32')('imports a manual source ZIP as a validated immutable snapshot', () => {
-    const managerDirectory = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-manager-import-'))
+    const managerDirectory = mkdtempSync(resolve(tmpdir(), 'dsh 增强管理器 import-'))
     try {
       const archivePath = resolve(managerDirectory, 'source.zip')
-      const archived = spawnSync('tar.exe', [
-        '-a', '-cf', archivePath, '--exclude=.git', '--exclude=node_modules',
-        '--exclude=lib', '--exclude=*/lib', '--exclude=.verify-*', '.',
-      ], { cwd: root, encoding: 'utf8' })
+      const archiveSource = resolve(managerDirectory, 'source')
+      cpSync(root, archiveSource, {
+        recursive: true,
+        filter: (source) => {
+          const sourceRelative = relative(root, source)
+          return sourceRelative === '' || sourceRelative.split(/[\\/]/u).every(segment =>
+            segment !== '.git'
+            && segment !== 'node_modules'
+            && segment !== 'lib'
+            && !segment.startsWith('.verify-'))
+        },
+      })
+      // Use the inbox .NET Framework ZIP API available with Windows PowerShell
+      // instead of whichever tar.exe happens to appear first on PATH. Git's
+      // GNU tar treats an absolute drive-letter archive path as host:path.
+      const archived = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-Command',
+        "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; "
+          + '[System.IO.Compression.ZipFile]::CreateFromDirectory('
+          + '$env:DSH_TEST_ARCHIVE_SOURCE, $env:DSH_TEST_ARCHIVE_PATH)',
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DSH_TEST_ARCHIVE_SOURCE: archiveSource,
+          DSH_TEST_ARCHIVE_PATH: archivePath,
+        },
+      })
       expect(archived.status, `${archived.stdout}\n${archived.stderr}`).toBe(0)
 
       const managerSource = readFileSync(resolve(root,
