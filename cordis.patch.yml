@@ -30,6 +30,9 @@
     - id: edit-last-message-host
       name: 'dsh-enhanced-plugins/edit-last-message/host'
 
+    - id: agent-team-monitor
+      name: 'dsh-enhanced-plugins/agent-team-monitor'
+
     - id: subagent-codex
       name: '@deepseek-ai/dsh-subagent-codex'
 

@@ -2,7 +2,7 @@
 
 中文 | [English](README.md)
 
-面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能套件：**6 个可独立安装的 Cordis bundle + 1 个 Windows Companion**。
+面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能套件：**7 个可独立安装的 Cordis bundle + 1 个 Windows Companion**。
 
 - 不修改 DSH 核心，只使用公开插件扩展点。
 - 可一次安装全部功能，也可只保留选中的独立功能。
@@ -23,8 +23,9 @@
 | [pi-ai 模型请求类型](#5-pi-ai-模型请求类型) | `model-input-types` | `dsh-enhanced-model-input-types` | Web；设置 → 插件 | 声明模型接受纯文本还是图片请求 |
 | [编辑上一条消息](#6-编辑上一条消息) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web；最后一条用户消息 | 修改该轮内容并在当前会话重新生成 |
 | [产品子智能体](#7-产品子智能体) | `sub-agent` | `dsh-enhanced-sub-agent` | Web；设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
+| [官方团队监控](#8-官方团队监控) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web；当前对话输入框右侧团队图标 | 按角色查看执行中／历史子会话，跳转原生详情，以及 Team 任务依赖和邮箱计数 |
 
-聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 7 项；选择功能时只安装对应独立包或 Companion。
+聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 8 项；选择功能时只安装对应独立包或 Companion。
 
 ## 快速开始
 
@@ -58,7 +59,7 @@
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-省略 `-Features` 或传入 `-Features all` 会安装 6 个**独立** Cordis 功能包和必选的 Windows Launcher，不再用根聚合包表示“全选”。Launcher 位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，默认只创建开始菜单快捷方式；需要桌面快捷方式时添加 `-CreateLauncherDesktopShortcut`。直接运行安装脚本只安装或更新程序文件，不会自动启动或打开 Launcher；从 Launcher 内执行自更新时仍会完成必要的版本重启和就绪检查。
+省略 `-Features` 或传入 `-Features all` 会安装 7 个**独立** Cordis 功能包和必选的 Windows Launcher，不再用根聚合包表示“全选”。Launcher 位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，默认只创建开始菜单快捷方式；需要桌面快捷方式时添加 `-CreateLauncherDesktopShortcut`。直接运行安装脚本只安装或更新程序文件，不会自动启动或打开 Launcher；从 Launcher 内执行自更新时仍会完成必要的版本重启和就绪检查。
 
 如果 DSH checkout 不在同级目录，显式指定它：
 
@@ -240,6 +241,26 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 打开 Claude Code 或 Codex 后，变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话；关闭开关会实时移除对应工具。本机仍需安装对应产品及其官方 DSH provider。
 
 两个开关默认关闭。写入使用 path-addressed 操作和设置修订号，不会用脱敏或过期快照覆盖其他页面及外部编辑产生的新值。
+
+### 8. 官方团队监控
+
+`agent-team-monitor` · **当前对话输入框右侧 → 团队图标**
+
+![官方 Agent Teams 只读监控面板](assets/readme/agent-team-monitor.png)
+
+- 入口属于当前会话，在输入框右侧的模型／上下文控件同组显示。检测到工作流、Agent Teams 或原生子代理会话后才出现团队图标；点击才展开，切换会话立即关闭并清除旧数据，不注册全局浮层或标题栏按钮。没有子代理／团队活动的普通对话不显示入口。
+- “角色与子代理会话”按已记录的成员名／创建标签分组，同名角色的多次创建保留为不同会话；没有标签时单列“未标注角色”，不从提示词或会话标题猜测身份。可筛选“全部／正在执行／历史会话”，查看会话标题、ID、模式、创建时间和状态。目录包含当前会话下的子代理及更深层子会话，不跨到其他会话树。
+- 点击可用会话行，会按真实父子 ID 和原生目录模式调用 DSH 的 `openSubagent`，进入与原生下拉列表相同的详情页面。历史、正在执行、嵌套会话均可跳转；点击前重新核对目录，切换会话或插件卸载后不执行迟到跳转。损坏／缺失的记录显示不可用，不伪造空会话。
+- 标准 `workflow` 与实验性 Agent Teams 是两套机制，分别展示，不再把“Agent Teams 未启用”误当成没有工作流成员。工作流从当前会话自己的 `tool-workflow/*` 持久事件读取运行名称、实际启动的成员、阶段及完成／失败／取消状态；不会推测脚本未来的角色、任务依赖或邮箱。成员按 `runId + seq` 配对，fork 继承的父会话工作流不会串入新会话。
+- Agent Teams 面板跟随当前队长或 roster 成员会话，显示成员状态、任务依赖/负责人/可领取状态、写入范围重叠提示和待投递消息数量。点击任务查看详情，点击成员打开官方子代理会话。
+- Host 读取官方 `ctx.agentTeams`，通过官方公开导出的 `foldTeam` 回放 Lead Session。冷历史使用不提交恢复的 `sessionPersistence.inspect()`，不激活 Agent，也不创建 `.agent-teams` 目录或第二份团队状态。
+- 只轮询当前会话（展开时 1.5 秒、收起时 5 秒）；隐藏页面或断线后暂停。后续启动的成员和状态变化会自动刷新，但不会自动打开面板。点击图标、外部区域或 Escape 可收起。切换会话、重连和请求失败不会把旧数据显示为实时状态。
+- 监控插件**不会启用 Agent Teams 或 workflow**，不注册模型工具，不创建/唤醒/中断成员，不编辑任务或调度工作。查看标准工作流无需实验性 Team 包；要使用 Agent Teams，请按[官方 Team 文档](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2/packages/experimental/agent-team)单独启用实验性运行时。
+- 基于 DSH `0.1.1-rc.2` 源码 ABI 验证。私有实验包通过当前 profile 的公开包入口解析，不打包副本，也不从 npm 获取；历史回放仍需能解析该包。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
+- 工作流最多显示 100 次运行、合计 256 条成员记录，汇总保持完整。未记录结束的冷历史不会冒充实时运行；原步骤或轮次已关闭时标记中断。监控只读取公开记录，不读取／执行工作流脚本，普通子代理不会被伪装成实验性 Team。
+- 原生子会话目录来自公开的 `subagents.listDescendants`，通过非写入的 `sessionPersistence.inspect()` 获取自身标题与轮次结果。实际 Agent 的运行／空闲状态优先，不能用“仍驻留”冒充“正在执行”。历史筛选包含当前未运行的会话，不表示全部成功。目录最多展示 256 条、优先运行中的 Agent；超限时显示已展示／总数，筛选计数只针对已展示条目。目录不可用不会影响已有 Team／工作流记录的查看。
+
+仅安装该 Profile 功能可使用 `-Features agent-team-monitor`，`-ListFeatures` 可列出所有选择；Windows Launcher 必选规则不变。浅色、深色、跟随系统和中英文均随 DSH 设置变化。
 
 ## 兼容性与迁移
 

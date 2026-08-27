@@ -5,6 +5,7 @@ import * as modelInputTypes from '../model-input-types/client/index.ts'
 import * as notification from '../notification/client/index.ts'
 import * as pluginMarket from '../plugin-market/client/index.ts'
 import * as subAgent from '../sub-agent/client/index.ts'
+import * as agentTeamMonitor from '../agent-team-monitor/client/index.ts'
 
 export const name = 'enhanced-plugins-client'
 export const inject: string[] = []
@@ -17,4 +18,5 @@ export function apply(ctx: ClientContext): void {
   ctx.plugin(notification)
   ctx.plugin(pluginMarket)
   ctx.plugin(subAgent)
+  ctx.plugin(agentTeamMonitor)
 }

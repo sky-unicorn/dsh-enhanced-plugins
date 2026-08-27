@@ -33,6 +33,9 @@
   "include": [
     "src/client/**/*.ts",
     "src/client/**/*.tsx",
+    "src/agent-team-monitor/shared.ts",
+    "src/agent-team-monitor/client/**/*.ts",
+    "src/agent-team-monitor/client/**/*.tsx",
     "src/edit-last-message/shared.ts",
     "src/edit-last-message/client/**/*.ts",
     "src/edit-last-message/client/**/*.tsx",

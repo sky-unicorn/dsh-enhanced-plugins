@@ -2,7 +2,7 @@
 
 [中文](README.zh.md) | English
 
-An enhancement suite for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness): **six independently installable Cordis bundles plus one Windows companion**.
+An enhancement suite for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness): **seven independently installable Cordis bundles plus one Windows companion**.
 
 - Does not modify DSH core; every Web feature uses public plugin extension points.
 - Installs everything in one pass or keeps only the independently packaged features you select.
@@ -23,6 +23,7 @@ The installer only needs the stable “feature ID.” Every feature also has a s
 | [pi-ai model request types](#5-pi-ai-model-request-types) | `model-input-types` | `dsh-enhanced-model-input-types` | Web; Settings → Plugins | Declare whether a model accepts text-only or image requests |
 | [Edit last message](#6-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
 | [Product subagents](#7-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
+| [Official Team monitor](#8-official-team-monitor) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web; team icon on the current conversation composer | Role-grouped running/history child sessions, native details, Team dependencies and mailbox counts |
 
 The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed installs now express “all” as every independent Profile package plus the required global Launcher, so any one Profile feature can later be removed without changing the others.
 
@@ -58,7 +59,7 @@ When both repositories share a parent directory, run this from the root of this 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-Omitting `-Features`, or passing `-Features all`, installs the six **independent** Cordis packages and the required Windows Launcher; it no longer uses the root aggregate package to represent “all.” The launcher is deployed to `%LOCALAPPDATA%\DeepSeekHarness\Launcher` and creates a Start menu shortcut. Add `-CreateLauncherDesktopShortcut` if you also want a desktop shortcut. Running the installer directly only installs or updates the program files; it does not start or open Launcher. An update initiated inside Launcher still performs the required version restart and readiness check.
+Omitting `-Features`, or passing `-Features all`, installs the seven **independent** Cordis packages and the required Windows Launcher; it no longer uses the root aggregate package to represent “all.” The launcher is deployed to `%LOCALAPPDATA%\DeepSeekHarness\Launcher` and creates a Start menu shortcut. Add `-CreateLauncherDesktopShortcut` if you also want a desktop shortcut. Running the installer directly only installs or updates the program files; it does not start or open Launcher. An update initiated inside Launcher still performs the required version restart and readiness check.
 
 If the DSH checkout is not a sibling, provide its location explicitly:
 
@@ -240,6 +241,26 @@ Resend stays inside the current session: the plugin replaces model context start
 Enabling Claude Code or Codex applies immediately to every Agent preset carrying this controller, including running sessions. Disabling a toggle removes the matching tool in real time. The corresponding product and its official DSH provider must still be installed locally.
 
 Both toggles default to off. Writes use path-addressed operations and settings revisions, so a redacted or stale snapshot cannot overwrite changes from another page or an external editor.
+
+### 8. Official Team monitor
+
+`agent-team-monitor` · **Current conversation composer → Team icon**
+
+![Official Agent Teams read-only monitor](assets/readme/agent-team-monitor.png)
+
+- The session-owned icon appears in the composer's model/context control group after workflow, Agent Teams or native child sessions are detected. Click to open; switching conversations immediately closes the panel and clears old data. No global overlay or header button is registered. Ordinary conversations with no delegation/team activity have no icon.
+- “Roles & child sessions” groups exact recorded member names / creation labels while keeping multiple sessions for the same role distinct. Missing labels appear under “Unlabelled role”; no role is inferred from prompts or titles. Filter All / Running / History and inspect each session's title, ID, mode, creation time and state. Discovery includes nested children within this conversation tree, never unrelated roots.
+- Click an available session row to enter DSH's native `openSubagent` details view, using the exact parent/child IDs and freshly checked native catalog mode. Running, historical and nested sessions share this path. Selection changes or plugin disposal fence late navigation; missing/corrupt records remain visibly unavailable rather than becoming fabricated sessions.
+- Standard `workflow` and experimental Agent Teams are separate mechanisms and are displayed separately. The monitor reads the current session's own `tool-workflow/*` durable records for run names, actually started members, phases and completion/failure/cancellation. It never infers future roles, task dependencies or mailbox data from a script. Members pair by `runId + seq`; inherited workflow history cannot become a new fork's team.
+- The Agent Teams view follows the selected Lead or roster-member session. It shows member status, task dependencies/owners/readiness, advisory write-scope overlaps, and queued mailbox counts. Select a task for details; select a member to open its official subagent transcript.
+- The Host reads the official `ctx.agentTeams` service and replays the Lead Session with the official public `foldTeam` export. Cold history uses `sessionPersistence.inspect()`, never a mutating load or Agent activation. No `.agent-teams` directory or second team state is created.
+- Only the current conversation is polled (1.5 seconds open / 5 seconds collapsed); hidden pages and disconnected Hosts pause polling. New members and state changes refresh automatically without opening the panel. Click the icon, outside the panel, or press Escape to close. Failed/old replies cannot appear as live state after a session switch or reconnect.
+- The monitor **does not enable Agent Teams or workflow**, register model tools, create/wake/interrupt members, edit tasks, or schedule work. Standard workflow monitoring needs no experimental Team package. To use Agent Teams, enable that runtime separately following its [Team documentation](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2/packages/experimental/agent-team).
+- Requires the verified DSH `0.1.1-rc.2` source ABI. The private experimental package is resolved from the running profile through its public package entry; it is not bundled or fetched from npm. Historical replay therefore still needs that package to be resolvable. Runtime status and task completion are independent: `inactive` does not mean `completed`, and tasks depend on model-reported updates. Mail bodies and raw provider errors are never sent by the monitor. Views cap at 256 members / 1,000 tasks with explicit truncation and complete totals.
+- Workflow views cap at 100 runs / 256 total member rows with complete totals. Unfinished cold records are never presented as live work; a closed enclosing step/turn marks an unfinished run interrupted. The monitor reads public records, never reads/executes workflow scripts, and never presents ordinary subagents as an experimental Team.
+- Native discovery uses public `subagents.listDescendants`; non-mutating `sessionPersistence.inspect()` supplies own titles and turn outcomes. Exact Agent running/idle state takes precedence; residency alone is not execution. History means currently non-running, not necessarily successful. At most 256 child rows are inspected/displayed, prioritizing executing Agents; truncation shows displayed/total counts and filters count displayed rows only. Catalog failures do not hide existing Team/workflow data.
+
+Install only this Profile feature with `-Features agent-team-monitor`; use `-ListFeatures` to inspect all choices. The normal required Windows Launcher behavior is unchanged. Light/dark/system themes and English/Chinese follow DSH settings.
 
 ## Compatibility and migration
 

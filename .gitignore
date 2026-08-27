@@ -5,3 +5,4 @@ node_modules/
 coverage/
 test.log
 .verify-dsh-home/
+packages/agent-team-monitor/src/

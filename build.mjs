@@ -1,6 +1,7 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as esbuild from 'esbuild'
 import { buildWindowsLauncher } from './packages/windows-launcher/build.mjs'
 
@@ -218,15 +219,30 @@ async function buildTarget(target) {
 }
 
 async function main() {
+  // New self-contained targets declare their build beside the authoritative
+  // install identity. Installers/Launcher discover the same package manifest.
+  const standalone = []
+  for (const entry of await readdir(resolve(ROOT, 'packages'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const directory = resolve(ROOT, 'packages', entry.name)
+    if (!existsSync(resolve(directory, 'package.json'))) continue
+    const manifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'))
+    if (manifest.dshEnhanced?.build !== undefined) standalone.push({ directory, ...manifest.dshEnhanced })
+  }
   const aggregate = {
     id: 'all',
     directory: '.',
-    hostEntries: AGGREGATE_HOST_ENTRIES,
+    hostEntries: [...AGGREGATE_HOST_ENTRIES, ...standalone.flatMap(target => target.build.hostEntries)],
     clientEntry: 'src/client/index.ts',
   }
   const featureFlag = process.argv.indexOf('--feature')
   if (featureFlag !== -1) {
     const id = process.argv[featureFlag + 1]
+    const standaloneTarget = standalone.find(target => target.feature === id)
+    if (standaloneTarget !== undefined) {
+      await (await import(pathToFileURL(resolve(standaloneTarget.directory, standaloneTarget.build.script)).href)).build()
+      return
+    }
     if (id === 'windows-launcher') {
       await buildWindowsLauncher()
       return
@@ -238,6 +254,7 @@ async function main() {
   }
   await buildTarget(aggregate)
   for (const target of FEATURE_TARGETS) await buildTarget(target)
+  for (const target of standalone) await (await import(pathToFileURL(resolve(target.directory, target.build.script)).href)).build()
   await buildWindowsLauncher()
 }
 

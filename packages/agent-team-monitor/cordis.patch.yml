@@ -1,0 +1,4 @@
+# Observer only: never enables/reconfigures the official experimental Team runtime.
+- insert:
+    - id: agent-team-monitor
+      name: 'dsh-enhanced-agent-team-monitor'

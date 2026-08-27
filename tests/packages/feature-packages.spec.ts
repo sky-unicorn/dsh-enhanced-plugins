@@ -34,6 +34,7 @@ interface FeatureManifest {
 }
 
 const expectedRows: Record<string, string[]> = {
+  'agent-team-monitor': ['agent-team-monitor'],
   'edit-last-message': ['edit-last-message-host'],
   'mcp-server-manager': ['mcp-manager'],
   'model-input-types': ['model-input-types'],
