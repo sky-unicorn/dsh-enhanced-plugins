@@ -18,6 +18,7 @@ namespace DshEnhanced.WindowsLauncher
         public string DshCommand { get; set; }
         public string DshSourceDirectory { get; set; }
         public string WorkingDirectory { get; set; }
+        public LauncherWindowPlacement WindowPlacement { get; set; }
 
         internal static LauncherSettings Defaults()
         {
@@ -28,8 +29,24 @@ namespace DshEnhanced.WindowsLauncher
                 DshCommand = String.Empty,
                 DshSourceDirectory = String.Empty,
                 WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                WindowPlacement = null,
             };
         }
+    }
+
+    internal sealed class LauncherWindowPlacement
+    {
+        public string ScreenDeviceName { get; set; }
+        public int ScreenWorkingLeft { get; set; }
+        public int ScreenWorkingTop { get; set; }
+        public int ScreenWorkingWidth { get; set; }
+        public int ScreenWorkingHeight { get; set; }
+        public int Left { get; set; }
+        public int Top { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int Dpi { get; set; }
+        public bool Maximized { get; set; }
     }
 
     internal sealed class LauncherRequest
@@ -242,6 +259,13 @@ namespace DshEnhanced.WindowsLauncher
             }
             if (settings.DshCommand == null) settings.DshCommand = String.Empty;
             if (settings.DshSourceDirectory == null) settings.DshSourceDirectory = String.Empty;
+            LauncherWindowPlacement placement = settings.WindowPlacement;
+            if (placement != null && (placement.Width < 240 || placement.Height < 180
+                || placement.Width > 32768 || placement.Height > 32768
+                || placement.ScreenWorkingWidth < 1 || placement.ScreenWorkingHeight < 1))
+            {
+                settings.WindowPlacement = null;
+            }
             return settings;
         }
 

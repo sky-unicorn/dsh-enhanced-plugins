@@ -1249,26 +1249,56 @@ namespace DshEnhanced.WindowsLauncher
             left += scrollOffset.X;
             int pageTop = scrollOffset.Y;
             int gap = Dip(18);
-            int sourceHeight = Dip(196);
+            bool compactSource = width < Dip(640);
+            bool stackSourceActions = width < Dip(500);
+            int sourceHeight = Dip(stackSourceActions ? 288 : compactSource ? 230 : 196);
             SetBoundsIfChanged(pluginSourceCard, left, pageTop, width, sourceHeight);
             LayoutCardHeader(pluginSourceCard);
-            int sourceStatusWidth = Math.Min(Dip(310), Math.Max(Dip(190), pluginSourceCard.Width / 3));
-            int sourceStatusLeft = pluginSourceCard.Width - Dip(28) - sourceStatusWidth;
-            SetBoundsIfChanged(pluginSourcePath, Dip(28), Dip(76),
-                Math.Max(Dip(120), sourceStatusLeft - Dip(46)), Dip(22));
-            SetBoundsIfChanged(pluginSourceRevision, Dip(28), Dip(103),
-                Math.Max(Dip(120), pluginSourceCard.Width - Dip(56)), Dip(22));
-            pluginSourceStatusDot.SetBounds(sourceStatusLeft, Dip(80), Dip(14), Dip(14));
-            SetBoundsIfChanged(pluginSourceStatus, sourceStatusLeft + Dip(20), Dip(74),
-                Math.Max(Dip(120), sourceStatusWidth - Dip(20)), Dip(28));
-            pluginChooseSourceButton.Location = new Point(Dip(28), Dip(142));
-            pluginCheckButton.Location = new Point(Dip(148), Dip(142));
-            pluginUpdateButton.Location = new Point(Dip(268), Dip(142));
+            if (compactSource)
+            {
+                int available = Math.Max(Dip(120), pluginSourceCard.Width - Dip(56));
+                SetBoundsIfChanged(pluginSourcePath, Dip(28), Dip(76), available, Dip(22));
+                SetBoundsIfChanged(pluginSourceRevision, Dip(28), Dip(103), available, Dip(22));
+                SetBoundsIfChanged(pluginSourceStatusDot, Dip(28), Dip(134), Dip(14), Dip(14));
+                SetBoundsIfChanged(pluginSourceStatus, Dip(48), Dip(128),
+                    Math.Max(Dip(100), available - Dip(20)), Dip(28));
+                if (stackSourceActions)
+                {
+                    int smallGap = Dip(12);
+                    int half = Math.Max(Dip(90), (available - smallGap) / 2);
+                    SetBoundsIfChanged(pluginChooseSourceButton, Dip(28), Dip(166), half, Dip(42));
+                    SetBoundsIfChanged(pluginCheckButton, Dip(28) + half + smallGap, Dip(166),
+                        Math.Max(Dip(90), available - half - smallGap), Dip(42));
+                    SetBoundsIfChanged(pluginUpdateButton, Dip(28), Dip(220), available, Dip(42));
+                }
+                else
+                {
+                    pluginChooseSourceButton.Location = new Point(Dip(28), Dip(166));
+                    pluginCheckButton.Location = new Point(Dip(148), Dip(166));
+                    pluginUpdateButton.Location = new Point(Dip(268), Dip(166));
+                }
+            }
+            else
+            {
+                int sourceStatusWidth = Math.Min(Dip(310), Math.Max(Dip(190), pluginSourceCard.Width / 3));
+                int sourceStatusLeft = pluginSourceCard.Width - Dip(28) - sourceStatusWidth;
+                SetBoundsIfChanged(pluginSourcePath, Dip(28), Dip(76),
+                    Math.Max(Dip(120), sourceStatusLeft - Dip(46)), Dip(22));
+                SetBoundsIfChanged(pluginSourceRevision, Dip(28), Dip(103),
+                    Math.Max(Dip(120), pluginSourceCard.Width - Dip(56)), Dip(22));
+                SetBoundsIfChanged(pluginSourceStatusDot, sourceStatusLeft, Dip(80), Dip(14), Dip(14));
+                SetBoundsIfChanged(pluginSourceStatus, sourceStatusLeft + Dip(20), Dip(74),
+                    Math.Max(Dip(120), sourceStatusWidth - Dip(20)), Dip(28));
+                pluginChooseSourceButton.Location = new Point(Dip(28), Dip(142));
+                pluginCheckButton.Location = new Point(Dip(148), Dip(142));
+                pluginUpdateButton.Location = new Point(Dip(268), Dip(142));
+            }
 
             int mainTop = sourceHeight + gap;
             int toolbarWidth = Math.Max(Dip(140), width - Dip(56));
             bool compactToolbar = toolbarWidth < Dip(720);
-            int rowsTop = compactToolbar ? Dip(224) : Dip(158);
+            bool stackCompactToolbar = toolbarWidth < Dip(400);
+            int rowsTop = stackCompactToolbar ? Dip(290) : compactToolbar ? Dip(224) : Dip(158);
             int visibleRows = pluginFeatureRows.Controls.OfType<PluginFeatureRow>().Count(row => row.Visible);
             int rowsHeight = visibleRows == 0 ? Dip(58)
                 : (visibleRows * Dip(82)) + (Math.Max(0, visibleRows - 1) * Dip(9));
@@ -1280,7 +1310,21 @@ namespace DshEnhanced.WindowsLauncher
             LayoutCardHeader(pluginFeaturesCard);
             int profileWidth;
             int searchWidth;
-            if (compactToolbar)
+            if (stackCompactToolbar)
+            {
+                profileWidth = toolbarWidth;
+                searchWidth = toolbarWidth;
+                SetBoundsIfChanged(pluginProfileCaption, Dip(28), Dip(76), profileWidth, Dip(20));
+                SetBoundsIfChanged(pluginProfileInput, Dip(28), Dip(100), profileWidth, Dip(40));
+                int selectorGap = Dip(12);
+                int selectorWidth = Math.Max(Dip(72), (toolbarWidth - selectorGap) / 2);
+                SetBoundsIfChanged(pluginSelectAllButton, Dip(28), Dip(152), selectorWidth, Dip(42));
+                SetBoundsIfChanged(pluginClearButton, Dip(28) + selectorWidth + selectorGap, Dip(152),
+                    Math.Max(Dip(72), toolbarWidth - selectorWidth - selectorGap), Dip(42));
+                SetBoundsIfChanged(pluginSearchCaption, Dip(28), Dip(204), searchWidth, Dip(20));
+                SetBoundsIfChanged(pluginSearchShell, Dip(28), Dip(228), searchWidth, Dip(40));
+            }
+            else if (compactToolbar)
             {
                 profileWidth = Math.Max(Dip(120), Math.Min(Dip(190), toolbarWidth - Dip(196)));
                 searchWidth = toolbarWidth;
@@ -1324,12 +1368,23 @@ namespace DshEnhanced.WindowsLauncher
             }
 
             int logTop = mainTop + featureHeight + gap;
-            int logHeight = Dip(230);
+            bool stackLog = width < Dip(520);
+            int logHeight = Dip(stackLog ? 300 : 230);
             SetBoundsIfChanged(pluginLogCard, left, pageTop + logTop, width, logHeight);
             LayoutCardHeader(pluginLogCard);
             RoundedPanel logShell = pluginLogCard.Controls.OfType<RoundedPanel>().First(control => Equals(control.Tag, "plugin-log-shell"));
-            SetBoundsIfChanged(logShell, Dip(28), Dip(76), Math.Max(Dip(120), width - Dip(220)), logHeight - Dip(104));
-            pluginOpenRequestButton.Location = new Point(pluginLogCard.Width - Dip(164), Dip(76));
+            if (stackLog)
+            {
+                pluginOpenRequestButton.Location = new Point(Dip(28), Dip(76));
+                SetBoundsIfChanged(logShell, Dip(28), Dip(130), Math.Max(Dip(120), width - Dip(56)),
+                    logHeight - Dip(158));
+            }
+            else
+            {
+                SetBoundsIfChanged(logShell, Dip(28), Dip(76), Math.Max(Dip(120), width - Dip(220)),
+                    logHeight - Dip(104));
+                pluginOpenRequestButton.Location = new Point(pluginLogCard.Width - Dip(164), Dip(76));
+            }
             pluginPage.AutoScrollMinSize = new Size(0, logTop + logHeight + Dip(8));
             SizePluginRows();
         }

@@ -304,13 +304,18 @@ try {
     ['wide-source', 'source', 'wide', 1600, 900],
     ['wide-plugins', 'plugins', 'wide', 1600, 900],
     ['resize-scroll-plugins', 'plugins', 'pluginstress', 1600, 900],
+    ['scale-125-overview', 'overview', 'scale125', 1366, 720],
     ['scale-150-overview', 'overview', 'scale150', 1366, 720],
+    ['scale-175-overview', 'overview', 'scale175', 1366, 720],
     ['scale-200-overview', 'overview', 'scale200', 1366, 720],
     ['scale-200-tasks', 'tasks', 'scale200', 1366, 720],
     ['scale-200-diagnostics', 'diagnostics', 'scale200', 1366, 720],
     ['scale-200-source', 'source', 'scale200', 1366, 720],
     ['scale-150-plugins', 'plugins', 'scale150', 1366, 720],
     ['scale-200-plugins', 'plugins', 'scale200', 1366, 720],
+    ['scale-150-wide-overview', 'overview', 'scale150wide', 1920, 1024],
+    ['scale-150-wide-tasks', 'tasks', 'scale150wide', 1920, 1024],
+    ['scale-150-wide-plugins', 'plugins', 'scale150wide', 1920, 1024],
   ]) {
     const responsiveScreenshot = resolve(temporary, `launcher-${name}.png`)
     const responsiveCapture = run(executable, [

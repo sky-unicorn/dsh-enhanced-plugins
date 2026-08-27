@@ -68,6 +68,7 @@ namespace DshEnhanced.WindowsLauncher
 
         internal int Radius { get { return radius; } set { radius = value; Invalidate(); } }
         internal Color BorderColor { get { return borderColor; } set { borderColor = value; Invalidate(); } }
+        internal int LogicalPadding { get; set; }
 
         internal RoundedPanel()
         {
@@ -141,6 +142,7 @@ namespace DshEnhanced.WindowsLauncher
         private bool pressed;
 
         internal ModernButtonKind Kind { get { return kind; } set { kind = value; Invalidate(); } }
+        internal int LogicalWidth { get; set; }
 
         internal ModernButton()
         {

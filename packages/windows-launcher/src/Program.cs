@@ -84,7 +84,8 @@ namespace DshEnhanced.WindowsLauncher
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Supervisor.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.PluginManager.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.exe.config"))
-                    && StartupRegistration.SelfTest();
+                    && StartupRegistration.SelfTest()
+                    && WindowPlacementGeometry.SelfTest();
                 File.WriteAllText(args[1], complete ? "SELF_TEST_OK" : "SELF_TEST_INCOMPLETE", new UTF8Encoding(false));
                 return complete ? 0 : 1;
             }
@@ -112,7 +113,10 @@ namespace DshEnhanced.WindowsLauncher
             {
                 using (Icon icon = LauncherIcon.Create())
                 using (MainForm form = new MainForm(new LauncherRuntime(), icon))
+                {
+                    form.FormClosing += delegate { form.SaveWindowPlacement(); };
                     Application.Run(form);
+                }
                 return 0;
             }
 
@@ -195,6 +199,58 @@ namespace DshEnhanced.WindowsLauncher
                 if (String.Equals(args[index], name, StringComparison.OrdinalIgnoreCase)) return args[index + 1];
             }
             return null;
+        }
+    }
+
+    internal static class WindowPlacementGeometry
+    {
+        internal static Rectangle MapToWorkingArea(LauncherWindowPlacement placement,
+            Rectangle targetWorkingArea, int margin)
+        {
+            int offsetX = placement.Left - placement.ScreenWorkingLeft;
+            int offsetY = placement.Top - placement.ScreenWorkingTop;
+            Rectangle desired = new Rectangle(targetWorkingArea.Left + offsetX,
+                targetWorkingArea.Top + offsetY, placement.Width, placement.Height);
+            return Constrain(desired, targetWorkingArea, margin);
+        }
+
+        internal static Rectangle Constrain(Rectangle desired, Rectangle workingArea, int margin)
+        {
+            int safeMargin = Math.Max(0, Math.Min(margin,
+                Math.Min(workingArea.Width / 4, workingArea.Height / 4)));
+            int maximumWidth = Math.Max(1, workingArea.Width - (safeMargin * 2));
+            int maximumHeight = Math.Max(1, workingArea.Height - (safeMargin * 2));
+            int width = Math.Min(Math.Max(1, desired.Width), maximumWidth);
+            int height = Math.Min(Math.Max(1, desired.Height), maximumHeight);
+            int left = Math.Max(workingArea.Left + safeMargin,
+                Math.Min(desired.Left, workingArea.Right - safeMargin - width));
+            int top = Math.Max(workingArea.Top + safeMargin,
+                Math.Min(desired.Top, workingArea.Bottom - safeMargin - height));
+            return new Rectangle(left, top, width, height);
+        }
+
+        internal static bool SelfTest()
+        {
+            LauncherWindowPlacement secondary = new LauncherWindowPlacement
+            {
+                ScreenWorkingLeft = -1920,
+                ScreenWorkingTop = 0,
+                ScreenWorkingWidth = 1920,
+                ScreenWorkingHeight = 1040,
+                Left = -1700,
+                Top = 120,
+                Width = 1120,
+                Height = 740,
+            };
+            Rectangle sameScreen = MapToWorkingArea(secondary,
+                new Rectangle(-1920, 0, 1920, 1040), 8);
+            Rectangle movedScreen = MapToWorkingArea(secondary,
+                new Rectangle(0, 1080, 1920, 1040), 8);
+            Rectangle clamped = Constrain(new Rectangle(3800, -900, 2200, 1400),
+                new Rectangle(1920, 0, 1600, 900), 8);
+            return sameScreen == new Rectangle(-1700, 120, 1120, 740)
+                && movedScreen == new Rectangle(220, 1200, 1120, 740)
+                && clamped == new Rectangle(1928, 8, 1584, 884);
         }
     }
 
@@ -334,6 +390,7 @@ namespace DshEnhanced.WindowsLauncher
 
         private void ShowWindow()
         {
+            form.PrepareForShow();
             bool opening = !form.Visible;
             if (opening) form.Show();
             if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
@@ -344,6 +401,7 @@ namespace DshEnhanced.WindowsLauncher
 
         private void OnFormClosing(object sender, FormClosingEventArgs args)
         {
+            form.SaveWindowPlacement();
             if (exiting) return;
             args.Cancel = true;
             // A hidden form is removed from the taskbar automatically. Changing
@@ -474,6 +532,8 @@ namespace DshEnhanced.WindowsLauncher
         private int buildInProgress;
         private bool captureMode;
         private float layoutScaleOverride;
+        private bool restoreWindowMaximized;
+        private bool hasBeenShown;
 
         internal MainForm(LauncherRuntime runtime, Icon icon)
         {
@@ -491,6 +551,7 @@ namespace DshEnhanced.WindowsLauncher
             StartPosition = FormStartPosition.CenterScreen;
             Size = new Size(1120, 740);
             MinimumSize = Size.Empty;
+            RestoreWindowPlacement();
 
             sidebar = BuildSidebar();
             Controls.Add(sidebar);
@@ -649,7 +710,10 @@ namespace DshEnhanced.WindowsLauncher
             pageHost.Resize += delegate { QueueResponsiveLayout(); };
             Shown += delegate
             {
+                hasBeenShown = true;
                 ApplyDisplayConstraints();
+                if (restoreWindowMaximized && WindowState != FormWindowState.Maximized)
+                    WindowState = FormWindowState.Maximized;
                 // The first visible layout runs after WinForms has applied DPI scaling and docking.
                 // Keep it synchronous so the initial paint never exposes overlapping default bounds.
                 PerformLayout();
@@ -669,6 +733,13 @@ namespace DshEnhanced.WindowsLauncher
             base.OnLoad(e);
             ApplyDisplayConstraints();
             PerformLayout();
+            LayoutResponsivePages();
+        }
+
+        protected override void OnResizeEnd(EventArgs e)
+        {
+            base.OnResizeEnd(e);
+            ApplyDisplayConstraints();
             LayoutResponsivePages();
         }
 
@@ -697,10 +768,107 @@ namespace DshEnhanced.WindowsLauncher
             return Math.Max(value == 0 ? 0 : 1, (int)Math.Round(value * scale));
         }
 
+        private void RestoreWindowPlacement()
+        {
+            LauncherWindowPlacement placement = runtime.Settings.WindowPlacement;
+            if (placement == null) return;
+            Screen target = FindSavedScreen(placement);
+            if (target == null) return;
+            int savedDpi = placement.Dpi < 96 ? 96 : placement.Dpi;
+            Rectangle bounds = WindowPlacementGeometry.MapToWorkingArea(placement,
+                target.WorkingArea, Math.Max(8, (int)Math.Round(8d * savedDpi / 96d)));
+            StartPosition = FormStartPosition.Manual;
+            Bounds = bounds;
+            restoreWindowMaximized = placement.Maximized;
+        }
+
+        private static Screen FindSavedScreen(LauncherWindowPlacement placement)
+        {
+            Screen[] screens = Screen.AllScreens;
+            foreach (Screen screen in screens)
+            {
+                if (!String.IsNullOrWhiteSpace(placement.ScreenDeviceName)
+                    && String.Equals(screen.DeviceName, placement.ScreenDeviceName,
+                        StringComparison.OrdinalIgnoreCase)) return screen;
+            }
+
+            Rectangle savedBounds = new Rectangle(placement.Left, placement.Top,
+                placement.Width, placement.Height);
+            Screen best = null;
+            long largestIntersection = 0;
+            foreach (Screen screen in screens)
+            {
+                Rectangle intersection = Rectangle.Intersect(savedBounds, screen.WorkingArea);
+                long area = (long)intersection.Width * intersection.Height;
+                if (area <= largestIntersection) continue;
+                largestIntersection = area;
+                best = screen;
+            }
+            return best ?? Screen.PrimaryScreen;
+        }
+
+        internal void SaveWindowPlacement()
+        {
+            if (captureMode) return;
+            Rectangle bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            if (bounds.Width < 240 || bounds.Height < 180) return;
+            Screen screen = Screen.FromRectangle(bounds);
+            Rectangle workingArea = screen.WorkingArea;
+            runtime.Settings.WindowPlacement = new LauncherWindowPlacement
+            {
+                ScreenDeviceName = screen.DeviceName,
+                ScreenWorkingLeft = workingArea.Left,
+                ScreenWorkingTop = workingArea.Top,
+                ScreenWorkingWidth = workingArea.Width,
+                ScreenWorkingHeight = workingArea.Height,
+                Left = bounds.Left,
+                Top = bounds.Top,
+                Width = bounds.Width,
+                Height = bounds.Height,
+                Dpi = Math.Max(96, DeviceDpi),
+                Maximized = WindowState == FormWindowState.Maximized
+                    || (!hasBeenShown && restoreWindowMaximized),
+            };
+            try { runtime.SaveSettings(); }
+            catch (Exception error) { LauncherLog.Write("window placement save failed: " + error.Message); }
+        }
+
+        internal void PrepareForShow()
+        {
+            if (captureMode) return;
+            bool maximizeAgain = WindowState == FormWindowState.Maximized;
+            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+            Rectangle candidate = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            int minimumCaptionWidth = Math.Min(Dip(80), Math.Max(1, candidate.Width));
+            int minimumCaptionHeight = Math.Min(Dip(20), Math.Max(1, candidate.Height));
+            Rectangle titleBar = new Rectangle(candidate.Left, candidate.Top,
+                Math.Max(1, candidate.Width), Math.Min(Dip(48), Math.Max(1, candidate.Height)));
+            bool reachable = false;
+            foreach (Screen screen in Screen.AllScreens)
+            {
+                Rectangle visibleCaption = Rectangle.Intersect(titleBar, screen.WorkingArea);
+                if (visibleCaption.Width >= minimumCaptionWidth
+                    && visibleCaption.Height >= minimumCaptionHeight)
+                {
+                    reachable = true;
+                    break;
+                }
+            }
+            if (reachable) return;
+
+            Screen target = Screen.PrimaryScreen ?? Screen.FromPoint(Cursor.Position);
+            Rectangle safeBounds = WindowPlacementGeometry.Constrain(candidate,
+                target.WorkingArea, Dip(8));
+            WindowState = FormWindowState.Normal;
+            Bounds = safeBounds;
+            ApplyDisplayConstraints();
+            if (maximizeAgain) WindowState = FormWindowState.Maximized;
+        }
+
         private void ApplyDisplayConstraints()
         {
             if (captureMode || WindowState != FormWindowState.Normal) return;
-            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            Rectangle workingArea = Screen.FromRectangle(Bounds).WorkingArea;
             int margin = Dip(8);
             int maximumWidth = Math.Max(1, workingArea.Width - (margin * 2));
             int maximumHeight = Math.Max(1, workingArea.Height - (margin * 2));
@@ -718,7 +886,6 @@ namespace DshEnhanced.WindowsLauncher
             int top = Math.Max(workingArea.Top + margin,
                 Math.Min(Top, workingArea.Bottom - margin - Height));
             Location = new Point(left, top);
-            MaximizedBounds = workingArea;
         }
 
         private Panel BuildSidebar()
@@ -961,6 +1128,7 @@ namespace DshEnhanced.WindowsLauncher
         private void LayoutResponsivePages()
         {
             if (overviewPage == null || overviewActions == null) return;
+            LayoutChrome();
             LayoutSidebar();
             LayoutHeader();
             // Control.Visible is false while an ancestor form is hidden, even when this is the
@@ -970,6 +1138,43 @@ namespace DshEnhanced.WindowsLauncher
             else if (activePage == diagnosticsPage) LayoutDiagnostics();
             else if (activePage == sourcePage) LayoutSource();
             else if (activePage == pluginPage) LayoutPluginManager();
+        }
+
+        private void LayoutChrome()
+        {
+            int headerHeight = Dip(92);
+            if (header.Height != headerHeight) header.Height = headerHeight;
+            int toastHeight = Dip(42);
+            if (toast.Height != toastHeight) toast.Height = toastHeight;
+            Padding toastPadding = new Padding(Dip(36), 0, 0, 0);
+            if (toast.Padding != toastPadding) toast.Padding = toastPadding;
+            Padding hostPadding = new Padding(Dip(34), Dip(8), Dip(34), Dip(12));
+            if (pageHost.Padding != hostPadding) pageHost.Padding = hostPadding;
+            ScaleStandardControls(this);
+        }
+
+        private void ScaleStandardControls(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                ModernButton button = control as ModernButton;
+                if (button != null && button.LogicalWidth > 0)
+                {
+                    int width = Dip(button.LogicalWidth);
+                    int height = Dip(42);
+                    if (button.Width != width || button.Height != height)
+                        button.Size = new Size(width, height);
+                    Padding margin = new Padding(0, 0, Dip(12), Dip(8));
+                    if (button.Margin != margin) button.Margin = margin;
+                }
+                RoundedPanel rounded = control as RoundedPanel;
+                if (rounded != null && rounded.LogicalPadding > 0)
+                {
+                    Padding padding = new Padding(Dip(rounded.LogicalPadding));
+                    if (rounded.Padding != padding) rounded.Padding = padding;
+                }
+                if (control.HasChildren) ScaleStandardControls(control);
+            }
         }
 
         private void QueueResponsiveLayout()
@@ -991,10 +1196,17 @@ namespace DshEnhanced.WindowsLauncher
         {
             int contentLeft;
             int contentWidth;
-            GetContentBounds(overviewPage, out contentLeft, out contentWidth);
+            GetContentBounds(activePage ?? overviewPage, out contentLeft, out contentWidth);
             int left = pageHost.Padding.Left + contentLeft;
-            pageTitle.Left = left;
-            pageSubtitle.Left = left + 2;
+            contentWidth = Math.Min(contentWidth,
+                Math.Max(1, header.ClientSize.Width - left - pageHost.Padding.Right));
+            pageTitle.AutoSize = false;
+            pageTitle.AutoEllipsis = true;
+            pageSubtitle.AutoSize = false;
+            pageSubtitle.AutoEllipsis = true;
+            SetBoundsIfChanged(pageTitle, left, Dip(14), Math.Max(Dip(120), contentWidth), Dip(40));
+            SetBoundsIfChanged(pageSubtitle, left + Dip(2), Dip(56),
+                Math.Max(Dip(120), contentWidth - Dip(2)), Dip(24));
         }
 
         private void LayoutSidebar()
@@ -1006,9 +1218,12 @@ namespace DshEnhanced.WindowsLauncher
 
             brandName.Visible = !compact;
             brandEdition.Visible = !compact;
-            brandMark.Location = compact
-                ? new Point(Math.Max(0, (sidebarWidth - brandMark.Width) / 2), Dip(26))
-                : new Point(Dip(24), Dip(26));
+            int brandSize = Dip(48);
+            SetBoundsIfChanged(brandMark,
+                compact ? Math.Max(0, (sidebarWidth - brandSize) / 2) : Dip(24),
+                Dip(26), brandSize, brandSize);
+            brandName.Location = new Point(Dip(82), Dip(30));
+            brandEdition.Location = new Point(Dip(82), Dip(55));
 
             NavButton[] navigation = { overviewNav, tasksNav, diagnosticsNav, sourceNav, pluginNav };
             int navigationTop = Math.Min(Dip(122), Math.Max(Dip(92), sidebar.ClientSize.Height / 4));
@@ -1033,7 +1248,7 @@ namespace DshEnhanced.WindowsLauncher
             bool compactHero = width < Dip(560);
             privacyLabel.Visible = !compactHero;
             shieldLabel.Visible = !compactHero;
-            statusDot.Location = new Point(Dip(30), Dip(33));
+            SetBoundsIfChanged(statusDot, Dip(30), Dip(33), Dip(14), Dip(14));
             SetBoundsIfChanged(statusTitle, Dip(54), Dip(22),
                 Math.Max(Dip(140), width - Dip(compactHero ? 86 : 250)), Dip(34));
             SetBoundsIfChanged(statusDetail, Dip(31), Dip(62), Math.Max(Dip(120), width - Dip(62)), Dip(25));
@@ -1086,8 +1301,12 @@ namespace DshEnhanced.WindowsLauncher
             label.AutoSize = false;
             label.AutoEllipsis = true;
             SetBoundsIfChanged(label, left, top, Math.Max(Dip(72), columnWidth - Dip(12)), Dip(21));
-            control.Location = new Point(left, top + Dip(27));
-            if (control is PortField) control.Width = Math.Min(Dip(118), Math.Max(Dip(92), columnWidth - Dip(18)));
+            if (control is PortField)
+            {
+                SetBoundsIfChanged(control, left, top + Dip(27),
+                    Math.Min(Dip(118), Math.Max(Dip(92), columnWidth - Dip(18))), Dip(40));
+            }
+            else SetBoundsIfChanged(control, left, top + Dip(27), Dip(48), Dip(28));
         }
 
         private void LayoutTasks()
@@ -1348,14 +1567,18 @@ namespace DshEnhanced.WindowsLauncher
             bool stressResize = String.Equals(layout, "stress", StringComparison.OrdinalIgnoreCase);
             bool pluginScrollStress = String.Equals(layout, "pluginstress", StringComparison.OrdinalIgnoreCase);
             bool firstShow = String.Equals(layout, "first", StringComparison.OrdinalIgnoreCase);
+            bool simulated125 = String.Equals(layout, "scale125", StringComparison.OrdinalIgnoreCase);
             bool simulated150 = String.Equals(layout, "scale150", StringComparison.OrdinalIgnoreCase);
+            bool simulated175 = String.Equals(layout, "scale175", StringComparison.OrdinalIgnoreCase);
             bool simulated200 = String.Equals(layout, "scale200", StringComparison.OrdinalIgnoreCase);
-            if (simulated150 || simulated200)
+            bool simulated150Wide = String.Equals(layout, "scale150wide", StringComparison.OrdinalIgnoreCase);
+            if (simulated125 || simulated150 || simulated175 || simulated200 || simulated150Wide)
             {
-                layoutScaleOverride = simulated200 ? 2f : 1.5f;
+                layoutScaleOverride = simulated125 ? 1.25f
+                    : simulated175 ? 1.75f : simulated200 ? 2f : 1.5f;
                 AutoScaleMode = AutoScaleMode.None;
                 Scale(new SizeF(layoutScaleOverride, layoutScaleOverride));
-                Size = new Size(1366, 720);
+                Size = simulated150Wide ? new Size(1920, 1024) : new Size(1366, 720);
             }
             else if (String.Equals(layout, "compact", StringComparison.OrdinalIgnoreCase)) Size = new Size(820, 600);
             else if (String.Equals(layout, "wide", StringComparison.OrdinalIgnoreCase)) Size = new Size(1600, 900);
@@ -1450,6 +1673,10 @@ namespace DshEnhanced.WindowsLauncher
 
         private void ValidateResponsiveLayout()
         {
+            EnsureContained(header, pageTitle, "page title");
+            EnsureContained(header, pageSubtitle, "page subtitle");
+            if (pageTitle.Bottom > pageSubtitle.Top)
+                throw new InvalidOperationException("Page title and subtitle must not overlap at any DPI.");
             if (activePage == overviewPage)
             {
                 if (pathCard.Top <= settingsCard.Bottom)
@@ -1718,6 +1945,7 @@ namespace DshEnhanced.WindowsLauncher
             shell.Radius = 12;
             shell.BackColor = Color.FromArgb(242, 245, 251);
             shell.BorderColor = UiTheme.BorderStrong;
+            shell.LogicalPadding = 12;
             shell.Padding = new Padding(12);
             return shell;
         }
@@ -1727,6 +1955,7 @@ namespace DshEnhanced.WindowsLauncher
             ModernButton button = new ModernButton();
             button.Text = text;
             button.Kind = kind;
+            button.LogicalWidth = width;
             button.Width = width;
             button.Margin = new Padding(0, 0, 12, 8);
             return button;

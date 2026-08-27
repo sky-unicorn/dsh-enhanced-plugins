@@ -126,7 +126,7 @@ A Windows control center outside the Cordis plugin tree for local DSH users who 
 - **Tasks and profiles:** run one-shot Headless tasks and background profiles with unified UTF-8 results and logs.
 - **Source maintenance:** run `git pull --ff-only` against the bound DSH checkout and only run `pnpm run build` after a successful update; explicitly allow build-only operation when Git is unavailable.
 - **Diagnostics:** collect command, port, working directory, status, and log information, with a dedicated DSH Source page.
-- **Desktop behavior:** system tray, optional login startup, a centered vertical layout at every window size, per-monitor DPI scaling, and multi-monitor bounds protection.
+- **Desktop behavior:** system tray, optional login startup, a centered vertical layout at every window size, and per-monitor DPI scaling. Launcher remembers the last display and normal window bounds, then remaps them into a visible work area when the display topology changes.
 
 <details>
 <summary><strong>Process ownership, exit, and background behavior</strong></summary>
