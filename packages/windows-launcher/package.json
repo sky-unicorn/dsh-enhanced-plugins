@@ -1,12 +1,14 @@
 {
   "name": "dsh-enhanced-windows-launcher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Standalone Windows tray launcher and control center for DeepSeek Harness",
   "type": "module",
   "dshEnhanced": {
     "feature": "windows-launcher",
     "kind": "companion",
-    "platforms": ["win32"],
+    "platforms": [
+      "win32"
+    ],
     "legacyPackages": [],
     "manager": {
       "scope": "global",
@@ -14,7 +16,10 @@
       "defaultSelected": true,
       "order": 0,
       "category": "system",
-      "name": { "zh-CN": "Windows Launcher", "en-US": "Windows Launcher" },
+      "name": {
+        "zh-CN": "Windows Launcher",
+        "en-US": "Windows Launcher"
+      },
       "description": {
         "zh-CN": "本机 DSH 控制中心与本项目插件管理器。",
         "en-US": "Local DSH control center and project plugin manager."
@@ -28,7 +33,12 @@
       "./lib/DSH-Launcher.PluginManager.ps1"
     ]
   },
-  "files": ["lib/"],
+  "files": [
+    "lib/",
+    "src/",
+    "tools/",
+    "build.mjs"
+  ],
   "scripts": {
     "build": "node ./build.mjs",
     "prepare": "npm run build"

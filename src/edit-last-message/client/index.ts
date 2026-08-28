@@ -1,9 +1,12 @@
 /** Browser-only inline editor for the latest durable user bubble. */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Pulls the keyed Chat SlotMap and session standard-kit declarations without a runtime edge.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import {
   EditCutEnd, EditableUserMessage, EditedUserMessage,
 } from './EditableUserMessage.tsx'
@@ -26,7 +29,7 @@ export type { EditLastMessageLocaleKey } from './locales.ts'
 /** Locale namespace owned by this action. */
 export const NS = 'edit-last-message'
 /** Required browser services. */
-export const inject = ['connection', 'conversationEvents', 'locale', 'sessions', 'slots']
+export const inject = ['connection', 'uiConversation', 'locale', 'sessions', 'slots']
 
 /** Shadow the built-in user renderer to add inline editing beside Copy. */
 export function apply(ctx: ClientContext): void {
@@ -37,8 +40,8 @@ export function apply(ctx: ClientContext): void {
     editAndResend: (request: Parameters<typeof remote.rewrite>[1]) => remote.rewrite(sessionId, request).then(() => {}),
   })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'edit-last-message: dictionaries')
-  ctx.conversationEvents.register(editedUserDefinition)
-  ctx.conversationEvents.register(editCutEndDefinition)
+  ctx.uiConversation.events.register(editedUserDefinition)
+  ctx.uiConversation.events.register(editCutEndDefinition)
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'user',

@@ -12,7 +12,7 @@
  * committed, so an invalid row blocks the save instead of being discarded.
  */
 
-import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   McpConfigSnapshot, McpFormatReport, McpImportSource, McpImportSummary, McpWireOp,
 } from './mcp-config-store.ts'

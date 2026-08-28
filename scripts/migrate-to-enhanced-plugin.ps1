@@ -31,11 +31,90 @@ param(
 
   [switch] $UninstallLauncher,
 
-  [switch] $ListFeatures
+  [switch] $ListFeatures,
+
+  [switch] $CheckCompatibility
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($CheckCompatibility -and ($UninstallLauncher -or $ListFeatures)) {
+  throw '-CheckCompatibility cannot be combined with -UninstallLauncher or -ListFeatures.'
+}
+
+function Assert-DshCompatibility {
+  param(
+    [Parameter(Mandatory = $true)][object] $PluginManifest,
+    [Parameter(Mandatory = $true)][string] $Checkout,
+    [Parameter(Mandatory = $true)][object[]] $Catalog
+  )
+
+  # The aggregate manifest is the release's sole compatibility authority.
+  # Check before builds, profile commands, service stops, or companion writes.
+  $metadata = $PluginManifest.PSObject.Properties['dshEnhanced']
+  $compatibility = if ($null -eq $metadata) { $null } else { $metadata.Value.PSObject.Properties['compatibility'] }
+  if ($null -eq $compatibility) {
+    throw 'Plugin release has no dshEnhanced.compatibility declaration; cannot safely install it.'
+  }
+  $versionProperty = $compatibility.Value.PSObject.Properties['dshVersion']
+  $commitProperty = $compatibility.Value.PSObject.Properties['sourceCommit']
+  if ($null -eq $versionProperty -or $versionProperty.Value -isnot [string] -or
+      $versionProperty.Value -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' -or
+      $null -eq $commitProperty -or $commitProperty.Value -isnot [string] -or
+      $commitProperty.Value -notmatch '^[0-9a-f]{40}$') {
+    throw 'Plugin release has an invalid DSH compatibility declaration.'
+  }
+  $expectedVersion = [string] $versionProperty.Value
+  $expectedCommit = [string] $commitProperty.Value
+  foreach ($feature in $Catalog) {
+    if ($feature.Manifest.version -ne $PluginManifest.version) {
+      throw "Mixed plugin release: '$($feature.PackageName)' is $($feature.Manifest.version), expected $($PluginManifest.version). Re-extract or update the complete plugin release."
+    }
+  }
+  $dshManifestPath = Join-Path $Checkout 'package.json'
+  if (-not (Test-Path -LiteralPath $dshManifestPath -PathType Leaf)) {
+    throw "Cannot check DSH compatibility: '$dshManifestPath' is missing. Pass -DshCheckout with the DSH source directory."
+  }
+  $dshManifest = Get-Content -Raw -LiteralPath $dshManifestPath -Encoding UTF8 | ConvertFrom-Json
+  $name = $dshManifest.PSObject.Properties['name']
+  $version = $dshManifest.PSObject.Properties['version']
+  if ($null -eq $name -or $name.Value -ne '@deepseek-ai/dsh-root' -or
+      $null -eq $version -or $version.Value -isnot [string]) {
+    throw "Cannot identify the DSH source version at '$Checkout'; expected @deepseek-ai/dsh-root."
+  }
+  if ($version.Value -cne $expectedVersion) {
+    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $expectedVersion, but '$Checkout' is $($version.Value). Use the matching DSH release or plugin tag '$($PluginManifest.version)/dsh-$expectedVersion'. Nothing was installed or removed."
+  }
+  Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $expectedVersion."
+
+  $git = Get-Command -Name 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -eq $git -or -not (Test-Path -LiteralPath (Join-Path $Checkout '.git'))) {
+    Write-Warning "DSH version matches, but source commit cannot be verified (no Git checkout). Verified commit: $expectedCommit."
+    return
+  }
+  $previousPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    $headOutput = @(& $git.Source -C $Checkout rev-parse --verify HEAD 2>&1)
+    $headCode = $LASTEXITCODE
+    $dirtyOutput = @(& $git.Source -C $Checkout status --porcelain --untracked-files=no 2>&1)
+    $dirtyCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousPreference
+  }
+  $head = ($headOutput -join '').Trim()
+  if ($headCode -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') {
+    Write-Warning "DSH version matches, but Git commit could not be read. Verified commit: $expectedCommit."
+  } elseif ($head -cne $expectedCommit) {
+    Write-Warning "DSH version matches, but commit $head differs from verified $expectedCommit; this source revision is unverified."
+  }
+  if ($dirtyCode -ne 0) {
+    Write-Warning 'DSH source worktree status could not be verified.'
+  } elseif ($dirtyOutput.Count -gt 0) {
+    Write-Warning 'DSH has local tracked changes; compatibility of those source changes is unverified.'
+  }
+}
 
 function Get-ProfileDependencies {
   param(
@@ -1088,6 +1167,12 @@ if ($ListFeatures) {
   return
 }
 
+$checkoutCandidate = if ($DshCheckout -ne '') { $DshCheckout }
+  else { Join-Path $pluginRoot '..\deepseek-harness' }
+$checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
+Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -Catalog $catalog
+if ($CheckCompatibility) { return }
+
 $requestedFeatures = @(
   Resolve-RequestedFeatures -Catalog $catalog -RetiredCatalog $retiredCatalog -Requested $Features
 )
@@ -1140,12 +1225,6 @@ if (-not $SkipBuild) {
 [string[]] $prefixArguments = @()
 [string] $runnerWorkingDirectory = ''
 
-$checkoutCandidate = if ($DshCheckout -ne '') {
-  $DshCheckout
-} else {
-  Join-Path $PSScriptRoot '..\..\deepseek-harness'
-}
-$checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
 foreach ($requiredDshPath in @(
   'package.json',
   'tsconfig.json',
@@ -1317,7 +1396,7 @@ try {
     -DesiredFeatures $selectedBundleFeatures
 
   Write-Host "Installed enhanced feature set '$selectedLabel' for profile '$Profile'."
-  Write-Host 'Use the latest official DSH and type @ in the conversation input for workspace file references.'
+  Write-Host 'Use the compatible official DSH release and type @ in the conversation input for workspace file references.'
 } finally {
   if ($runnerWorkingDirectory -ne '') {
     Set-Location -LiteralPath $originalWorkingDirectory

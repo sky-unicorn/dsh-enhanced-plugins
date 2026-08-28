@@ -927,7 +927,7 @@ namespace DshEnhanced.WindowsLauncher
             pluginNav.Click += delegate { ShowPage(pluginPage, pluginNav, "插件管理"); };
 
             sidebarVersion = new Label();
-            sidebarVersion.Text = "LOCAL COMPANION  ·  v0.1.0";
+            sidebarVersion.Text = "LOCAL COMPANION  ·  v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
             sidebarVersion.ForeColor = Color.FromArgb(115, 134, 165);
             sidebarVersion.Font = UiTheme.Font(7.4f, FontStyle.Regular);
             sidebarVersion.AutoSize = true;

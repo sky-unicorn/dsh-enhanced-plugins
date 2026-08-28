@@ -31,6 +31,7 @@ function propsOf(options: {
     node: { key: `user:${seq}`, kind: 'user', data },
     renderMessageImages: vi.fn(() => null),
     useSession: (selector: (value: typeof snapshot) => unknown) => selector(snapshot),
+    useChat: (selector: (value: unknown) => unknown) => selector({ ...snapshot.chat, legacy: { nodes: snapshot.nodes } }),
     editAndResend: options.editAndResend ?? vi.fn().mockResolvedValue(undefined),
     t: (key, values) => {
       const template = en[key]
@@ -96,7 +97,7 @@ describe('EditableUserMessage', () => {
     ] as never)).toBeUndefined()
   })
 
-  it('hides the original raw bubble through the durable edit boundary', () => {
+  it('hides grouped replay rows and newly mounted content through the durable edit boundary', async () => {
     const editedData = {
       transactionId: 'replacement-id',
       rootSeq: 7,
@@ -118,17 +119,18 @@ describe('EditableUserMessage', () => {
     const shared = {
       renderMessageImages: vi.fn(() => null),
       useSession: (selector: (value: typeof snapshot) => unknown) => selector(snapshot),
+      useChat: (selector: (value: unknown) => unknown) => selector({ ...snapshot.chat, legacy: { nodes: snapshot.nodes } }),
       editAndResend: vi.fn().mockResolvedValue(undefined),
       t: propsOf().t,
     }
 
     const { container } = render(
       <div>
-        <div data-chat-flow-key="13:input-messageoriginal-id" data-testid="original">old</div>
+        <section><div data-chat-flow-key="13:input-messageoriginal-id" data-testid="original">old</div></section>
         <div data-chat-flow-key="25:edit-last-messagereplacement-id">
           <EditedUserMessage {...shared as never} node={{ kind: 'edited-user', data: editedData } as never} />
         </div>
-        <div data-chat-flow-key="13:context" data-testid="discarded-context">old context</div>
+        <section><div data-chat-flow-key="13:context" data-testid="discarded-context">old context</div></section>
         <div data-chat-flow-key="21:edit-last-message-endreplacement-id">
           <EditCutEnd node={{ kind: 'edit-cut-end', data: editedData } as never} />
         </div>
@@ -139,5 +141,12 @@ describe('EditableUserMessage', () => {
     expect(screen.getByTestId('discarded-context')).toHaveProperty('hidden', true)
     expect(container.querySelector('[data-edit-cut-start="replacement-id"]')?.closest('[data-chat-flow-key]'))
       .toHaveProperty('hidden', false)
+    const late = document.createElement('div')
+    late.dataset.chatFlowKey = 'late-context'
+    late.textContent = 'deferred raw context'
+    container.querySelector('[data-testid="discarded-context"]')!.after(late)
+    await waitFor(() => { expect(late.hidden).toBe(true) })
+    cleanup()
+    expect(late.hidden).toBe(false)
   })
 })

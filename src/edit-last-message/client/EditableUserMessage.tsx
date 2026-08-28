@@ -1,7 +1,8 @@
 import {
   useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode,
 } from 'react'
-import type { UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   Button, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconLoadingOutline16,
@@ -84,16 +85,17 @@ interface EditableBubbleProps extends EditableUserMessageInjected {
   readonly data: Pick<UserMessageNode, 'seq' | 'time' | 'content' | 'source'>
   readonly renderMessageImages: EditableUserMessageProps['renderMessageImages']
   readonly useSession: EditableUserMessageProps['useSession']
+  readonly useChat: EditableUserMessageProps['useChat']
   readonly t: EditableUserMessageProps['t']
 }
 
 /** Shared bubble body for an append-origin or replacement-projected user message. */
-function EditableUserBubble({ data, renderMessageImages, useSession, editAndResend, t }: EditableBubbleProps) {
+function EditableUserBubble({ data, renderMessageImages, useSession, useChat, editAndResend, t }: EditableBubbleProps) {
   const { text, images, rest } = contentParts(data.content)
   const candidate = editableText(data.content)
   const running = useSession(snapshot => snapshot.running)
   const subagent = useSession(snapshot => snapshot.subagent !== null)
-  const latestSeq = useSession(snapshot => latestEditableMessageSeq(snapshot))
+  const latestSeq = useChat(snapshot => latestEditableMessageSeq(snapshot))
   const canEdit = !running && !subagent && candidate !== undefined && latestSeq === data.seq
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(candidate ?? '')
@@ -259,13 +261,14 @@ function EditableUserBubble({ data, renderMessageImages, useSession, editAndRese
 
 /** User bubble with inline edit-and-resend support on the stopped transcript tail. */
 export function EditableUserMessage({
-  node, renderMessageImages, useSession, editAndResend, t,
+  node, renderMessageImages, useSession, useChat, editAndResend, t,
 }: EditableUserMessageProps) {
   return (
     <EditableUserBubble
       data={node.data}
       renderMessageImages={renderMessageImages}
       useSession={useSession}
+      useChat={useChat}
       editAndResend={editAndResend}
       t={t}
     />
@@ -308,33 +311,45 @@ function useDiscardedRange(
     const display = flowItemOf(markerRef.current)
     const flow = display?.parentElement
     if (display === null || flow === null || flow === undefined) return
-    const end = matchingFlowItem(flow, 'editCutEnd', data.transactionId)
-    if (end === null) return
-    const original = matchingFlowItem(flow, 'chatFlowKey', data.rootMessageId)
-    const hidden: HTMLElement[] = []
-    let cursor: Element | null = original ?? display.nextElementSibling
-    while (cursor instanceof HTMLElement && cursor !== end) {
-      const next = cursor.nextElementSibling
-      if (cursor !== display && !cursor.hidden) {
-        cursor.hidden = true
-        hidden.push(cursor)
-      }
-      cursor = next
-    }
-    return () => {
+    let hidden: HTMLElement[] = []
+    const restore = () => {
       for (const item of hidden) item.hidden = false
+      hidden = []
     }
+    const project = () => {
+      restore()
+      const end = matchingFlowItem(flow, 'editCutEnd', data.transactionId)
+      if (end === null) return
+      const original = matchingFlowItem(flow, 'chatFlowKey', data.rootMessageId)
+      // Chat can group raw rows into separate wrappers during cold replay or
+      // turn folding. Document order, not sibling order, defines the cut.
+      const rows = Array.from(flow.querySelectorAll<HTMLElement>('[data-chat-flow-key]'))
+      const start = rows.indexOf(original ?? display)
+      const finish = rows.indexOf(end)
+      if (start < 0 || finish <= start) return
+      for (const item of rows.slice(start, finish)) {
+        if (item.contains(display) || item.contains(end) || item.hidden) continue
+        item.hidden = true
+        hidden.push(item)
+      }
+    }
+    project()
+    // Fold/unfold and deferred renderer mounts can replace DOM without changing
+    // the Chat key order. Observe children only; our hidden writes cannot loop.
+    const observer = new MutationObserver(project)
+    observer.observe(flow, { childList: true, subtree: true })
+    return () => { observer.disconnect(); restore() }
   }, [active, data.rootMessageId, data.transactionId, flowRevision, markerRef])
 }
 
 /** Edited bubble projected at the first version's position in this same session. */
 export function EditedUserMessage({
-  node, renderMessageImages, useSession, editAndResend, t,
+  node, renderMessageImages, useSession, useChat, editAndResend, t,
 }: EditedUserMessageProps) {
   const data = node.data
-  const latest = useSession(snapshot => isLatestRootEdit(snapshot, data))
-  const flowRevision = useSession(snapshot => {
-    const order = snapshot.chat.order
+  const latest = useChat(snapshot => isLatestRootEdit(snapshot, data))
+  const flowRevision = useChat(snapshot => {
+    const order = snapshot.order
     return `${order.length}:${order[0] ?? ''}:${order.at(-1) ?? ''}`
   })
   const markerRef = useRef<HTMLDivElement>(null)
@@ -351,6 +366,7 @@ export function EditedUserMessage({
         }}
         renderMessageImages={renderMessageImages}
         useSession={useSession}
+        useChat={useChat}
         editAndResend={editAndResend}
         t={t}
       />

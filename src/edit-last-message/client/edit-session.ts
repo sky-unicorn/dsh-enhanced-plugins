@@ -1,4 +1,4 @@
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
 
 /** Identity and replacement text supplied by the inline bubble editor. */

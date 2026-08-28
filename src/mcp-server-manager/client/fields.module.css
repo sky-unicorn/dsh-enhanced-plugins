@@ -45,7 +45,7 @@
   padding: 8px 10px;
   border: 1px solid var(--dsw-alias-state-warn-tertiary);
   border-radius: 8px;
-  background: var(--dsw-alias-state-warn-secondary);
+  background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
   font-size: 12px;
   line-height: 18px;

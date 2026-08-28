@@ -1,8 +1,7 @@
 import type {
-  ChatConversationViewNode, ConversationNodeDefinition, ConversationSnapshot, UserMessageNode,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { isReplacementSurfaceEvent } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ChatNodeDataMap } from '@deepseek-ai/dsh-client-ui-conversation/client'
+  ChatConversationViewNode, ChatNodeDataMap, ChatSnapshot, UserMessageNode,
+} from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { ConversationNodeDefinition } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { editLastMessageSource } from '../shared.ts'
 
 /** Payload rendered at the original user-message position after a semantic rewind. */
@@ -23,7 +22,7 @@ export interface EditCutEndChatData {
   readonly messageSeq: number
 }
 
-declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+declare module '@deepseek-ai/dsh-client-ui-chat/client' {
   interface ChatNodeDataMap {
     /** Latest edited text projected back onto the original user-bubble position. */
     'edited-user': EditedUserChatData
@@ -44,7 +43,7 @@ interface EditEventState {
 }
 
 function editEvent(event: Parameters<ConversationNodeDefinition['match']>[0]): EditEventState | undefined {
-  if (event.type !== 'user/message' || !isReplacementSurfaceEvent(event)) return
+  if (event.type !== 'user/message' || event.surfaceOp === undefined || event.surfaceOp === 'append') return
   const source = editLastMessageSource(event.data.source)
   if (source === undefined) return
   return {
@@ -129,7 +128,7 @@ export const editCutEndDefinition: ConversationNodeDefinition<EditEventState> = 
   },
 }
 
-function legacyHumanSeq(nodes: ConversationSnapshot['nodes']): number | undefined {
+function legacyHumanSeq(nodes: ChatSnapshot['legacy']['nodes']): number | undefined {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
     const node = nodes[index]
     if (node?.kind === 'user' || node?.kind === 'steering') return node.seq
@@ -139,10 +138,10 @@ function legacyHumanSeq(nodes: ConversationSnapshot['nodes']): number | undefine
 
 /** Latest editable durable user input across built-in and replacement projections. */
 export function latestEditableMessageSeq(
-  snapshot: Pick<ConversationSnapshot, 'nodes' | 'chat'>,
+  snapshot: Pick<ChatSnapshot, 'legacy' | 'nodes'>,
 ): number | undefined {
-  let latest = legacyHumanSeq(snapshot.nodes)
-  for (const raw of snapshot.chat.nodes.values()) {
+  let latest = legacyHumanSeq(snapshot.legacy.nodes)
+  for (const raw of snapshot.nodes.values()) {
     if (raw.kind !== 'edited-user') continue
     const data = raw.data as EditedUserChatData
     if (latest === undefined || data.messageSeq > latest) latest = data.messageSeq
@@ -151,8 +150,8 @@ export function latestEditableMessageSeq(
 }
 
 /** Whether this transaction is the newest replacement for its original bubble. */
-export function isLatestRootEdit(snapshot: Pick<ConversationSnapshot, 'chat'>, data: EditedUserChatData): boolean {
-  for (const raw of snapshot.chat.nodes.values()) {
+export function isLatestRootEdit(snapshot: Pick<ChatSnapshot, 'nodes'>, data: EditedUserChatData): boolean {
+  for (const raw of snapshot.nodes.values()) {
     if (raw.kind !== 'edited-user') continue
     const candidate = raw.data as EditedUserChatData
     if (candidate.rootMessageId === data.rootMessageId && candidate.messageSeq > data.messageSeq) return false

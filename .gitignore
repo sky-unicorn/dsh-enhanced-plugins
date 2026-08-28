@@ -6,3 +6,12 @@ coverage/
 test.log
 .verify-dsh-home/
 packages/agent-team-monitor/src/
+packages/edit-last-message/src/
+packages/mcp-server-manager/src/
+packages/model-input-types/src/
+packages/notification/src/
+packages/plugin-market/src/
+packages/sub-agent/src/
+packages/*/build-client.mjs
+packages/*/build-support.mjs
+packages/*/build-config.json

@@ -1,4 +1,4 @@
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
 import type { MonitorSnapshot } from '../shared.ts'
 import { parseSnapshot } from './parse.ts'

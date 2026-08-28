@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import { useState, useSyncExternalStore, type ChangeEvent, type ReactNode } from 'react'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, FishLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -30,7 +30,7 @@ const SOUND_COPY: Record<NotificationSoundEvent, {
 }
 
 export interface NotificationSectionFace {
-  hooks: { notificationSettings: SettingsScope<NotificationSettings> }
+  hooks: { notificationSettings: Pick<SettingsScope<NotificationSettings>, 'getSnapshot' | 'subscribe'> }
   soundLibrary: {
     getSnapshot: () => NotificationCustomSound[]
     subscribe: (listener: () => void) => () => void

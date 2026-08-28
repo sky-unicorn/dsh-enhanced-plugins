@@ -35,6 +35,8 @@
       "@deepseek-ai/dsh-settings": ["../deepseek-harness/packages/settings/settings/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-subprocess": ["../deepseek-harness/packages/subprocess/subprocess/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-tool-subagent": ["../deepseek-harness/packages/subagent/tool-subagent/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-subagent-codex": ["../deepseek-harness/packages/subagent/subagent-codex/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-subagent-claude-code": ["../deepseek-harness/packages/subagent/subagent-claude-code/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-typert-protocol": ["../deepseek-harness/packages/typert/protocol/lib/types/index.d.ts"]
     }
   },
@@ -50,6 +52,8 @@
     "src/notification/host/**/*.ts",
     "src/plugin-market/*.ts",
     "src/sub-agent/host.ts",
+    "src/sub-agent/codex.ts",
+    "src/sub-agent/claude-code.ts",
     "src/sub-agent/preset.ts",
     "src/sub-agent/settings.ts",
     "src/sub-agent/shared.ts"

@@ -86,7 +86,7 @@
 
 .warning {
   border: 1px solid var(--dsw-alias-state-warn-tertiary);
-  background: var(--dsw-alias-state-warn-secondary);
+  background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
 }
 

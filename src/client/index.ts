@@ -1,4 +1,4 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import * as editLastMessage from '../edit-last-message/client/index.ts'
 import * as mcpServerManager from '../mcp-server-manager/client/index.ts'
 import * as modelInputTypes from '../model-input-types/client/index.ts'

@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugin-market",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Selective DSH bundle for the plugin community",
   "type": "module",
   "main": "./lib/plugin-market/index.js",
@@ -10,13 +10,15 @@
     "./package.json": "./package.json"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-slots"
       ]
@@ -25,37 +27,61 @@
   "dshEnhanced": {
     "feature": "plugin-market",
     "kind": "bundle",
-    "legacyPackages": ["dsh-plugin-market"],
+    "legacyPackages": [
+      "dsh-plugin-market"
+    ],
     "manager": {
       "scope": "profile",
       "required": false,
       "defaultSelected": true,
       "order": 50,
       "category": "ecosystem",
-      "name": { "zh-CN": "插件社区", "en-US": "Plugin Community" },
+      "name": {
+        "zh-CN": "插件社区",
+        "en-US": "Plugin Community"
+      },
       "description": {
         "zh-CN": "浏览、预检并管理 DSH 社区插件。",
         "en-US": "Browse, preflight, and manage DSH community plugins."
       }
     }
   },
-  "files": ["lib/", "assets/plugins-cache.json", "cordis.patch.yml"],
-  "scripts": { "build": "node ../../build.mjs --feature plugin-market", "prepare": "npm run build" },
+  "files": [
+    "lib/",
+    "assets/plugins-cache.json",
+    "cordis.patch.yml",
+    "src/",
+    "build.mjs",
+    "build-client.mjs",
+    "build-support.mjs",
+    "build-config.json"
+  ],
+  "scripts": {
+    "build": "node ./build.mjs --feature plugin-market",
+    "prepare": "npm run build"
+  },
   "license": "MIT",
-  "engines": { "node": "^22.19.0 || >=24.0.0" },
-  "dependencies": { "undici": "^7.29.0" },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dependencies": {
+    "undici": "^7.29.0"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.1",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-runtime": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-credentials": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-subprocess": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-client-locale": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-settings": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-credentials": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-host-webserver": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-subprocess": "0.1.2-alpha.1",
     "@deepseek-ai/schemastery": ">=3.18.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.2-alpha.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }

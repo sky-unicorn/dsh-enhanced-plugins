@@ -1,4 +1,8 @@
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
@@ -26,9 +30,9 @@ export function apply(ctx: ClientContext): void {
       controller.select(current)
     }
     const visibility = () => controller.setVisible(!document.hidden)
-    const online = () => controller.setOnline(connection.hostDescription.getSnapshot() !== undefined)
+    const online = () => controller.setOnline(connection.generation.getSnapshot() !== undefined)
     const off = ctx.sessions.list.subscribe(select)
-    const disconnect = connection.hostDescription.subscribe(online)
+    const disconnect = connection.generation.subscribe(online)
     document.addEventListener('visibilitychange', visibility)
     online(); visibility(); select()
     return () => { selectionEpoch++; off(); disconnect(); document.removeEventListener('visibilitychange', visibility); controller.dispose() }

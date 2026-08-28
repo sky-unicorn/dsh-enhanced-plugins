@@ -10,6 +10,7 @@ import { LlmAdapter, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionProjections from '@deepseek-ai/dsh-session-projection'
+import SessionQuery from '@deepseek-ai/dsh-session-query-sqlite'
 import Subagents from '@deepseek-ai/dsh-subagent'
 import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import Teams from '@deepseek-ai/dsh-experimental-agent-team'
@@ -30,6 +31,7 @@ async function stack(root: string) {
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(SessionProjections)
   await ctx.plugin(JsonlSessionPersistence, { root })
+  await ctx.plugin(SessionQuery, { path: ':memory:', openAt: 'never' })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(Subagents)
   await ctx.plugin(Spawn, { providerName: 'spawn' })

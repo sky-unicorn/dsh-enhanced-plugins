@@ -33,7 +33,7 @@
 
 - Node.js 22.19.x，或 Node.js 24 及更高版本。
 - 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
-- 本仓库针对 DSH [`0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e) 验证，本地 ABI 基准 commit 为 `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`。
+- 本仓库针对 DSH [`0.1.2-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/cd5ef8148158c3a752a658978873241fdf8e2bbc) 验证，本地 ABI 基准 commit 为 `cd5ef8148158c3a752a658978873241fdf8e2bbc`。
 - Windows Launcher、原生提示音和桌面宠物需要带 Windows PowerShell 5.1 的完整 Windows 桌面版本，即 Windows 10 1607 或更高版本，或 Windows 11。所需系统能力在 Home、Pro、Education / Pro Education 与 Enterprise 上相同；Windows S 模式、IoT / 精简版本以及 Windows 10 1507、1511 不在这一基线内。已经超出微软生命周期的 Windows 功能更新只能尽力兼容，因为所需 Node.js 工具链不保证支持已停止维护的操作系统。安装器不依赖某一个特定的 `tar.exe`；其余功能可跨平台使用。
 
 > [!IMPORTANT]
@@ -255,8 +255,8 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 - Agent Teams 面板跟随当前队长或 roster 成员会话，显示成员状态、任务依赖/负责人/可领取状态、写入范围重叠提示和待投递消息数量。点击任务查看详情，点击成员打开官方子代理会话。
 - Host 读取官方 `ctx.agentTeams`，通过官方公开导出的 `foldTeam` 回放 Lead Session。冷历史使用不提交恢复的 `sessionPersistence.inspect()`，不激活 Agent，也不创建 `.agent-teams` 目录或第二份团队状态。
 - 只轮询当前会话（展开时 1.5 秒、收起时 5 秒）；隐藏页面或断线后暂停。后续启动的成员和状态变化会自动刷新，但不会自动打开面板。点击图标、外部区域或 Escape 可收起。切换会话、重连和请求失败不会把旧数据显示为实时状态。
-- 监控插件**不会启用 Agent Teams 或 workflow**，不注册模型工具，不创建/唤醒/中断成员，不编辑任务或调度工作。查看标准工作流无需实验性 Team 包；要使用 Agent Teams，请按[官方 Team 文档](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2/packages/experimental/agent-team)单独启用实验性运行时。
-- 基于 DSH `0.1.1-rc.2` 源码 ABI 验证。私有实验包通过当前 profile 的公开包入口解析，不打包副本，也不从 npm 获取；历史回放仍需能解析该包。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
+- 监控插件**不会启用 Agent Teams 或 workflow**，不注册模型工具，不创建/唤醒/中断成员，不编辑任务或调度工作。查看标准工作流无需实验性 Team 包；要使用 Agent Teams，请按[官方 Team 文档](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.2-alpha.1/packages/experimental/agent-team)单独启用实验性运行时。
+- 基于 DSH `0.1.2-alpha.1` 源码 ABI 验证。私有实验包通过当前 profile 的公开包入口解析，不打包副本，也不从 npm 获取；历史回放仍需能解析该包。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
 - 工作流最多显示 100 次运行、合计 256 条成员记录，汇总保持完整。未记录结束的冷历史不会冒充实时运行；原步骤或轮次已关闭时标记中断。监控只读取公开记录，不读取／执行工作流脚本，普通子代理不会被伪装成实验性 Team。
 - 原生子会话目录来自公开的 `subagents.listDescendants`，通过非写入的 `sessionPersistence.inspect()` 获取自身标题与轮次结果。实际 Agent 的运行／空闲状态优先，不能用“仍驻留”冒充“正在执行”。历史筛选包含当前未运行的会话，不表示全部成功。目录最多展示 256 条、优先运行中的 Agent；超限时显示已展示／总数，筛选计数只针对已展示条目。目录不可用不会影响已有 Team／工作流记录的查看。
 
@@ -264,10 +264,22 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 ## 兼容性与迁移
 
-- **实测基线：** DSH `0.1.1-rc.2`，commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`。
+- **版本对应：** 插件 `0.2.0` 对应 DSH `0.1.2-alpha.1`，源码基线 commit 为 `cd5ef8148158c3a752a658978873241fdf8e2bbc`；插件发布 tag 为 `0.2.0/dsh-0.1.2-alpha.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `0.2.0`。
+- **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 Git commit 不同、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告，不将它描述为已验证兼容。
+- **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。在线 cookbook 中仍有旧 runtime 示例，本项目以以上源码 commit 的公开接口为准。
+- **提供方来源：** `subagent-codex`、`subagent-claude-code` 的 Loader ID 不变，改由本包的 `sub-agent/codex`、`sub-agent/claude-code` 入口转出官方提供方；独立包对应 `./codex`、`./claude-code`。这样新版 DeepSeek 请求的活动插件清单能解析其包来源，无需关闭该功能或修改 DSH。
+- **独立构建：** 各功能发布物携带自身源码和构建脚本，可在没有 sibling DSH checkout 的目录执行 `npm install --legacy-peer-deps`、`npm run prepare` 和 `npm pack`；运行时仍由匹配版本的 DSH 提供公开 peer 服务。Windows Launcher 原生重建需要 Windows 与 .NET Framework 4.x 编译器。
 - **架构边界：** Web 功能通过公开 Service、event、slot 和 settings 扩展；Windows Launcher 是独立 Companion，不进入 Cordis 插件树。
 - **文件引用已退役：** 最新官方 DSH 已原生支持 [`@` 文件引用](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference)。在输入框键入 `@`，含空格路径可键入 `@"`。旧 `referenced-file` 安装名称和 `#` 快照语法不再提供。
 - **自动清理：** `-Features referenced-file` 会被明确拒绝；正常运行安装脚本会清理历史独立包或旧版聚合包中携带的该功能。
+
+只检查版本对应关系、不构建或安装（非同目录时追加 `-DshCheckout`）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -CheckCompatibility
+```
+
+需要旧版 DSH 时应选择其对应的插件版本，不要仅删除 peer dependency 检查或强行安装新版插件。
 
 ## 配置参考
 
@@ -334,6 +346,10 @@ npm run build
 npm run pack:dry-run
 git diff --check
 ```
+
+Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home 中逐个安装 7 项功能，检查全量、多功能重选、清理和聚合包的真实 Host 启动及 Client 资源；不会修改长期 profile。该命令需要先完成 DSH 与插件构建，验证记录保存在被 Git 忽略的 `.verify-dsh-home/`。页面交互和 light/dark 视觉验证仍需在真实 Web 页面完成。
+
+`npm run verify:pack` 会将独立包打成 tarball，在没有 DSH peer 包的隔离目录重新安装构建依赖、执行 `prepare` 并检查再次打包的入口；Windows Companion 的这项验证也需要 Windows。
 
 浏览器 bundle 使用 CSS Modules，并且只消费 DSH 的 `--dsw-alias-*` 语义主题 token，会自动跟随 light、dark 与 system 外观。插件架构与公开扩展点可参考 [DSH 插件开发文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 和 [架构参考](https://deepseek-harness.github.io/deepseek-harness/reference/)。
 

@@ -1,9 +1,9 @@
 - insert:
     - id: subagent-codex
-      name: '@deepseek-ai/dsh-subagent-codex'
+      name: 'dsh-enhanced-sub-agent/codex'
 
     - id: subagent-claude-code
-      name: '@deepseek-ai/dsh-subagent-claude-code'
+      name: 'dsh-enhanced-sub-agent/claude-code'
 
     - id: subagent-product-toggles
       name: 'dsh-enhanced-sub-agent'

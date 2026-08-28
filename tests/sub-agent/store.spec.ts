@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
 import { ToggleController } from '../../src/sub-agent/client/store.ts'
 
-vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
+vi.mock('@deepseek-ai/dsh-client-store', () => ({
   createSnapshotStore<T extends object>(initial: T) {
     let snapshot = structuredClone(initial)
     const listeners = new Set<() => void>()

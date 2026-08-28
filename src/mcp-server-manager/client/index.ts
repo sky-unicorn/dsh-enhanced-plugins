@@ -15,7 +15,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the `settings.plugin.item` SlotMap declaration and the client
 // runtime's Context merges.
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the ctx.remote Context merge and the forwarded-event key face.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { McpCard } from './McpCard.tsx'

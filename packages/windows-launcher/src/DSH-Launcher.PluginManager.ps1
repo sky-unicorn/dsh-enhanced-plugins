@@ -1074,6 +1074,18 @@ function Restore-LauncherOwnedDsh {
   $success
 }
 
+function Assert-SourceDshCompatibility {
+  param([string] $Source, [string] $Checkout, [string] $LogPath)
+  if ([string]::IsNullOrWhiteSpace($Checkout)) { throw '安装状态未绑定 DSH 源码 checkout。' }
+  $installer = Join-Path $Source 'scripts\migrate-to-enhanced-plugin.ps1'
+  if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw '候选源码缺少安装核心脚本。' }
+  $engine = Get-Command -Name 'powershell.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
+  Invoke-LoggedCommand $engine.Source @(
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', $installer, '-PluginPath', $Source, '-DshCheckout', $Checkout, '-CheckCompatibility'
+  ) $Source $LogPath 'DSH compatibility check'
+}
+
 function Invoke-Apply {
   param(
     [object] $Request,
@@ -1121,6 +1133,8 @@ function Invoke-Apply {
     @((Get-OptionalProperty $preflightProfile 'remove' @())).Count -gt 0 -or
     $preflightLauncherAction -ne 'none'
   if (-not $preflightHasWork) {
+    $boundDsh = Get-OptionalProperty $State 'dsh'
+    Assert-SourceDshCompatibility $InitialRoot ([string](Get-OptionalProperty $boundDsh 'checkout' '')) $logPath
     return [pscustomobject][ordered]@{
       protocolVersion = 1
       requestId = $requestId
@@ -1135,7 +1149,7 @@ function Invoke-Apply {
       launcher = [pscustomobject]@{ required = $true; action = 'none' }
       dshRestored = $true
       statePath = Join-Path $LauncherRoot 'install-state.json'
-      logPath = ''
+      logPath = $logPath
       snapshot = Get-Snapshot $InitialRoot $profileName $State
     }
   }
@@ -1226,6 +1240,7 @@ function Invoke-Apply {
     "[$([DateTime]::Now.ToString('s'))] request=$requestId profile=$profileName source=$source revision=$($catalog.sourceRevision)`r`n", $Utf8NoBom)
   $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
   $installerPowerShell = Get-Command -Name 'powershell.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
+  Assert-SourceDshCompatibility $source $dshCheckout $logPath
   Invoke-LoggedCommand $npm.Source @('ci', '--no-audit', '--no-fund', '--ignore-scripts=false') $source $logPath 'npm ci'
   # The repository tsconfig files intentionally resolve DSH types from the
   # sibling development checkout.  This request workspace is isolated under

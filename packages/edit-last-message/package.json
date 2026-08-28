@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-edit-last-message",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Selective DSH bundle for editing and resending the latest user message",
   "type": "module",
   "main": "./lib/edit-last-message/host/index.js",
@@ -10,16 +10,20 @@
     "./package.json": "./package.json"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-attachment",
+        "@deepseek-ai/dsh-client-ui-chat",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session",
         "@deepseek-ai/dsh-client-ui-slots"
       ]
     }
@@ -34,31 +38,53 @@
       "defaultSelected": true,
       "order": 10,
       "category": "conversation",
-      "name": { "zh-CN": "编辑最后一条消息", "en-US": "Edit Last Message" },
+      "name": {
+        "zh-CN": "编辑最后一条消息",
+        "en-US": "Edit Last Message"
+      },
       "description": {
         "zh-CN": "修改最近一条用户消息，并在同一会话中重新生成。",
         "en-US": "Edit the latest user message and regenerate in the same session."
       }
     }
   },
-  "files": ["lib/", "cordis.patch.yml"],
-  "scripts": { "build": "node ../../build.mjs --feature edit-last-message", "prepare": "npm run build" },
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "src/",
+    "build.mjs",
+    "build-client.mjs",
+    "build-support.mjs",
+    "build-config.json"
+  ],
+  "scripts": {
+    "build": "node ./build.mjs --feature edit-last-message",
+    "prepare": "npm run build"
+  },
   "license": "MIT",
-  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.1",
-    "@deepseek-ai/dsh-agent": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-connection": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-runtime": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-attachment": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-conversation": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-llm": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-session": ">=0.1.0-rc.5 <0.2.0",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.1.0-rc.5 <0.2.0",
+    "@deepseek-ai/dsh-agent": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-connection": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-locale": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-llm": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-session": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.2-alpha.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "@deepseek-ai/dsh-api-session-controller": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-chat": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-session": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-store": "0.1.2-alpha.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }

@@ -1,7 +1,7 @@
 /** Reactive browser mirror over the notification plugin's private settings Remote. */
 
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {
   NotificationConfigView,
   NotificationCustomSound,
@@ -146,8 +146,8 @@ function decodeOutcome(value: unknown): NotificationMutateOutcome | undefined {
   return view === undefined ? undefined : { kind: value['kind'], view }
 }
 
-/** SettingsScope-compatible source with ordered writes and revision-conflict recovery. */
-export class NotificationConfigStore implements SettingsScope<NotificationSettings> {
+/** Plugin-owned scope view with ordered scalar writes and revision-conflict recovery. */
+export class NotificationConfigStore implements Pick<SettingsScope<NotificationSettings>, 'getSnapshot' | 'subscribe' | 'set' | 'unset'> {
   private snapshot = LOADING
   private customSounds: NotificationCustomSound[] = []
   private readonly listeners = new Set<() => void>()

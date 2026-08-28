@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as esbuild from 'esbuild'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
-const externals = ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-runtime/client', '@deepseek-ai/dsh-client-ui-primitives']
+const externals = ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-primitives']
 
 /** Self-contained prepare: source checkouts use the shared source; tarballs include a buildable snapshot of it. */
 export async function build() {

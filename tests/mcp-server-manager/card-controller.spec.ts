@@ -130,7 +130,7 @@ describe('McpCardController', () => {
       revision: 1,
     }))
     const face = controller.inject()
-    const snapshot = () => face.hooks.mcpCard.get()
+    const snapshot = () => face.hooks.mcpCard.getSnapshot()
 
     expect(snapshot().available).toBe(true)
     expect(snapshot().dirty).toBe(false)
@@ -242,7 +242,7 @@ describe('McpCardController', () => {
 })
 
 function snapshotOf(face: ReturnType<McpCardController['inject']>) {
-  return face.hooks.mcpCard.get()
+  return face.hooks.mcpCard.getSnapshot()
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {

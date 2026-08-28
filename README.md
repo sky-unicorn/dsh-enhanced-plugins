@@ -33,7 +33,7 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 - Node.js 22.19.x, or Node.js 24 and later.
 - A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
-- This repository is verified against DSH [`0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e), with local ABI baseline commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+- This repository is verified against DSH [`0.1.2-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/cd5ef8148158c3a752a658978873241fdf8e2bbc), with local ABI baseline commit `cd5ef8148158c3a752a658978873241fdf8e2bbc`.
 - Windows Launcher, native sounds, and the desktop pet require a full Windows desktop edition with Windows PowerShell 5.1: Windows 10 version 1607 or later, or Windows 11. The required OS capabilities are the same on Home, Pro, Education / Pro Education, and Enterprise; Windows in S mode, IoT / reduced-footprint editions, and Windows 10 versions 1507 and 1511 are outside this baseline. Windows feature updates outside Microsoft's lifecycle are best-effort because the required Node.js toolchain does not guarantee end-of-life operating systems. The installer does not depend on a particular `tar.exe`. The remaining features are cross-platform.
 
 > [!IMPORTANT]
@@ -255,8 +255,8 @@ Both toggles default to off. Writes use path-addressed operations and settings r
 - The Agent Teams view follows the selected Lead or roster-member session. It shows member status, task dependencies/owners/readiness, advisory write-scope overlaps, and queued mailbox counts. Select a task for details; select a member to open its official subagent transcript.
 - The Host reads the official `ctx.agentTeams` service and replays the Lead Session with the official public `foldTeam` export. Cold history uses `sessionPersistence.inspect()`, never a mutating load or Agent activation. No `.agent-teams` directory or second team state is created.
 - Only the current conversation is polled (1.5 seconds open / 5 seconds collapsed); hidden pages and disconnected Hosts pause polling. New members and state changes refresh automatically without opening the panel. Click the icon, outside the panel, or press Escape to close. Failed/old replies cannot appear as live state after a session switch or reconnect.
-- The monitor **does not enable Agent Teams or workflow**, register model tools, create/wake/interrupt members, edit tasks, or schedule work. Standard workflow monitoring needs no experimental Team package. To use Agent Teams, enable that runtime separately following its [Team documentation](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2/packages/experimental/agent-team).
-- Requires the verified DSH `0.1.1-rc.2` source ABI. The private experimental package is resolved from the running profile through its public package entry; it is not bundled or fetched from npm. Historical replay therefore still needs that package to be resolvable. Runtime status and task completion are independent: `inactive` does not mean `completed`, and tasks depend on model-reported updates. Mail bodies and raw provider errors are never sent by the monitor. Views cap at 256 members / 1,000 tasks with explicit truncation and complete totals.
+- The monitor **does not enable Agent Teams or workflow**, register model tools, create/wake/interrupt members, edit tasks, or schedule work. Standard workflow monitoring needs no experimental Team package. To use Agent Teams, enable that runtime separately following its [Team documentation](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.2-alpha.1/packages/experimental/agent-team).
+- Requires the verified DSH `0.1.2-alpha.1` source ABI. The private experimental package is resolved from the running profile through its public package entry; it is not bundled or fetched from npm. Historical replay therefore still needs that package to be resolvable. Runtime status and task completion are independent: `inactive` does not mean `completed`, and tasks depend on model-reported updates. Mail bodies and raw provider errors are never sent by the monitor. Views cap at 256 members / 1,000 tasks with explicit truncation and complete totals.
 - Workflow views cap at 100 runs / 256 total member rows with complete totals. Unfinished cold records are never presented as live work; a closed enclosing step/turn marks an unfinished run interrupted. The monitor reads public records, never reads/executes workflow scripts, and never presents ordinary subagents as an experimental Team.
 - Native discovery uses public `subagents.listDescendants`; non-mutating `sessionPersistence.inspect()` supplies own titles and turn outcomes. Exact Agent running/idle state takes precedence; residency alone is not execution. History means currently non-running, not necessarily successful. At most 256 child rows are inspected/displayed, prioritizing executing Agents; truncation shows displayed/total counts and filters count displayed rows only. Catalog failures do not hide existing Team/workflow data.
 
@@ -264,8 +264,20 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Verified baseline:** DSH `0.1.1-rc.2`, commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+- **Version pairing:** plugin `0.2.0` targets DSH `0.1.2-alpha.1`, source commit `cd5ef8148158c3a752a658978873241fdf8e2bbc`; its release tag is `0.2.0/dsh-0.1.2-alpha.1`. The aggregate, all seven standalone bundles, and Windows Launcher use `0.2.0`.
+- **Installation preflight:** the installer and Launcher plugin updater read `dshEnhanced.compatibility` from the root `package.json` before building, stopping services, or changing a profile. A DSH version mismatch, missing declaration, or mixed plugin package versions stops installation. A matching version with a different Git commit, local source changes, or no Git metadata produces an unverified-source warning, not a claim of verified compatibility.
+- **Current interfaces:** Client features use `client-store`, `ui-session`, `ui-chat`, and public Remotes, without the removed `dsh-client-runtime`, `connection.api`, or `hostDescription`. Some online cookbook examples still reference the old runtime; this project follows the public interfaces of the source commit above.
+- **Provider provenance:** the `subagent-codex` and `subagent-claude-code` Loader IDs are unchanged. Their official implementations are re-exported through this package's `sub-agent/codex` and `sub-agent/claude-code` entries (`./codex` and `./claude-code` in the standalone bundle), so the new DeepSeek active-package inventory can resolve ownership without being disabled or changing DSH.
+- **Standalone builds:** feature distributions include their own source and build scripts. `npm install --legacy-peer-deps`, `npm run prepare`, and `npm pack` work without a sibling DSH checkout; the matching DSH runtime still supplies public peer services. Rebuilding Windows Launcher requires Windows and a .NET Framework 4.x compiler.
 - **Architecture boundary:** Web features extend public Services, events, slots, and settings. Windows Launcher is an independent companion and never joins the Cordis plugin tree.
+
+Check the version pairing without building or installing (add `-DshCheckout` when the checkouts are not siblings):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -CheckCompatibility
+```
+
+Use the matching plugin release for an older DSH version instead of bypassing peer dependency checks or forcing this release to install.
 - **File reference retired:** current DSH provides native [`@` file references](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference). Type `@` in the composer, or `@"` for paths containing spaces. The old `referenced-file` feature ID and `#` snapshot syntax are no longer provided.
 - **Automatic cleanup:** `-Features referenced-file` is rejected explicitly. A normal installer run removes the historical selective package or the feature carried by an older aggregate install.
 
@@ -334,6 +346,10 @@ npm run build
 npm run pack:dry-run
 git diff --check
 ```
+
+On Windows, `npm run verify:compat` additionally installs all seven features individually into an isolated DSH home, then checks all-features, reselection, cleanup, and aggregate profiles against the real Host and Client artifacts. It requires built DSH and plugin artifacts and leaves the normal profiles untouched. Reports stay under the Git-ignored `.verify-dsh-home/`. Interactive behavior and light/dark appearance still require the real Web page.
+
+`npm run verify:pack` packs each standalone distribution, installs only its build dependencies in an isolated directory without DSH peers, runs `prepare`, and checks its repacked entries. The Windows Companion part requires Windows as well.
 
 Browser bundles use CSS Modules and consume only DSH `--dsw-alias-*` semantic theme tokens, so they follow light, dark, and system appearance automatically. See the [DSH plugin development guide](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) and [architecture reference](https://deepseek-harness.github.io/deepseek-harness/reference/) for public extension points.
 

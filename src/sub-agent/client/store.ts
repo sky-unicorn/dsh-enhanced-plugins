@@ -1,5 +1,5 @@
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
-import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ProductToggleSettings } from '../shared.ts'
 
 export type ToggleError =

@@ -1,11 +1,11 @@
 /** pi-ai model request-type settings card, browser half. */
 
-import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only Context merges for locale, remote events, and the plugin-card slot.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { ModelInputTypesCard } from './ModelInputTypesCard.tsx'
 import { ModelInputTypesController, PI_AI_SETTINGS_NS } from './controller.ts'
 import type { ModelInputTypesLocaleKey } from './locales.ts'
@@ -29,14 +29,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const NS = 'settings.modelInputTypes'
 
 /** Required browser services; the child fiber waits for each one. */
-export const inject = ['slots', 'locale', 'connection', 'remote']
+export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.settings']
 
 /** Register the card and bind its Settings transport to this child fiber. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'model-input-types: card dictionary')
 
-  const { api } = ctx.get('connection') as ConnectionHandle
-  const controller = new ModelInputTypesController(api)
+  const controller = new ModelInputTypesController(ctx.remote)
   ctx.effect(() => {
     const disposers = [
       ctx.remote.$on('settings/document-updated', (namespace?: string, revision?: number) => {

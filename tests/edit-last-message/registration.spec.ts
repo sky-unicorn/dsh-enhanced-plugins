@@ -11,7 +11,7 @@ describe('edit-last-message client registration', () => {
       effect: (factory: () => unknown) => factory(),
       get: (name: string) => name === 'connection' ? { rpc: { call: vi.fn() } } : undefined,
       locale: { register: localeRegister },
-      conversationEvents: { register: definitionRegister },
+      uiConversation: { events: { register: definitionRegister } },
       slots: { inject: slotInject, register: slotRegister },
     }
 

@@ -34,10 +34,10 @@
       name: 'dsh-enhanced-plugins/agent-team-monitor'
 
     - id: subagent-codex
-      name: '@deepseek-ai/dsh-subagent-codex'
+      name: 'dsh-enhanced-plugins/sub-agent/codex'
 
     - id: subagent-claude-code
-      name: '@deepseek-ai/dsh-subagent-claude-code'
+      name: 'dsh-enhanced-plugins/sub-agent/claude-code'
 
     - id: subagent-product-toggles
       name: 'dsh-enhanced-plugins/sub-agent/host'

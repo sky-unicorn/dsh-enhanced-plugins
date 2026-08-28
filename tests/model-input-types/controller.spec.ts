@@ -16,7 +16,7 @@ function view(providers: Record<string, unknown>, revision = 0): SettingsNamespa
 }
 
 function ok<T>(value: T) {
-  return { rpcId: 'test', result: { ok: true as const, value } }
+  return { ok: true as const, value }
 }
 
 function described(namespace: SettingsNamespaceView, writable = true) {
@@ -101,15 +101,11 @@ describe('ModelInputTypesController', () => {
     await controller.load()
     await controller.selectModelType('gateway', 0, 'vision', 'multimodal')
 
-    expect(mutate).toHaveBeenCalledWith({
-      ns: 'llm-pi-ai',
-      ops: [{
+    expect(mutate).toHaveBeenCalledWith('llm-pi-ai', [{
         op: 'set',
         path: ['providers', 'gateway', 'models'],
         value: [{ id: 'vision', input: ['text', 'image'], compat: { preserved: true } }],
-      }],
-      expectedRevision: 4,
-    })
+      }], 4)
     expect(controller.store.getSnapshot()).toMatchObject({
       writable: true,
       saved: true,
@@ -125,11 +121,8 @@ describe('ModelInputTypesController', () => {
       .mockResolvedValueOnce(described(initial))
       .mockResolvedValueOnce(described(winner))
     const mutate = vi.fn().mockResolvedValue({
-      rpcId: 'test',
-      result: {
-        ok: false as const,
-        error: { code: 'settings-conflict', message: 'stale', details: {} },
-      },
+      ok: false as const,
+      error: { code: 'settings-conflict', message: 'stale', details: {} },
     })
     const controller = new ModelInputTypesController({ settings: { describe, mutate } as never })
 

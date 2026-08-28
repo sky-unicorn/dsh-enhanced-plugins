@@ -57,6 +57,7 @@ describe('product tool reconciliation', () => {
         enableRunInBackground: false,
         backgroundMode: 'one-shot',
         maxDepth: 'provider-managed',
+        modelSelectionSettings: false,
       },
       {
         provider: 'codex',
@@ -64,6 +65,7 @@ describe('product tool reconciliation', () => {
         enableRunInBackground: false,
         backgroundMode: 'one-shot',
         maxDepth: 'provider-managed',
+        modelSelectionSettings: false,
       },
     ])
 

@@ -2,7 +2,8 @@
 
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { NOTIFICATION_SETTINGS_NAMESPACE } from '../shared.ts'
 import { NotificationSection, type NotificationSectionFace } from './NotificationSection.tsx'

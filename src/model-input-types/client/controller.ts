@@ -8,11 +8,13 @@
  * every unedited model object is retained verbatim.
  */
 
-import type { IApiClient, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
-import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientRemote, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 
 /** Official pi-ai adapter settings namespace. */
 export const PI_AI_SETTINGS_NS = 'llm-pi-ai'
+
+type ModelRecord = Record<string, SettingsNamespaceView['value']>
 
 /** Curated request capability exposed by this plugin. */
 export type ModelType = 'default' | 'text' | 'multimodal'
@@ -97,7 +99,7 @@ export function inputFor(type: ModelType): readonly string[] | undefined {
 }
 
 /** Read one provider's raw model array from a descriptor layer. */
-function modelsInLayer(layer: unknown, provider: string): Record<string, unknown>[] | undefined {
+function modelsInLayer(layer: SettingsNamespaceView['value'] | undefined, provider: string): ModelRecord[] | undefined {
   if (!isPlainObject(layer)) return undefined
   const providers = layer['providers']
   if (!isPlainObject(providers)) return undefined
@@ -109,7 +111,8 @@ function modelsInLayer(layer: unknown, provider: string): Record<string, unknown
   if (!Array.isArray(models) || models.some(model => !isPlainObject(model))) {
     throw new Error(`llm-pi-ai provider "${provider}" models must be an object array`)
   }
-  return models as Record<string, unknown>[]
+  // The standard Settings wire guarantees JsonValue; only the record-array shape needs narrowing.
+  return models as ModelRecord[]
 }
 
 /**
@@ -118,7 +121,7 @@ function modelsInLayer(layer: unknown, provider: string): Record<string, unknown
  * composition base; the resolved value is only the final compatibility
  * fallback for descriptors that predate separated layers.
  */
-function modelsOf(view: SettingsNamespaceView, provider: string): Record<string, unknown>[] {
+function modelsOf(view: SettingsNamespaceView, provider: string): ModelRecord[] {
   return modelsInLayer(view.user, provider)
     ?? modelsInLayer(view.base, provider)
     ?? modelsInLayer(view.value, provider)
@@ -165,7 +168,7 @@ export function modelsWithType(
   index: number,
   modelId: string,
   type: ModelType,
-): Record<string, unknown>[] {
+): ModelRecord[] {
   const models = modelsOf(view, provider)
   const selected = models[index]
   if (selected === undefined || selected['id'] !== modelId) {
@@ -207,8 +210,11 @@ export class ModelInputTypesController {
   private generation = 0
   private view: SettingsNamespaceView | undefined
 
-  /** @param api - public Settings wire face. */
-  constructor(private readonly api: Pick<IApiClient, 'settings'>) {}
+  /**
+   * @param api - standard Settings Remote; its explicit failures let this editor
+   * distinguish conflicts from successful writes (SettingsScope.mutate returns void).
+   */
+  constructor(private readonly api: Pick<ClientRemote, 'settings'>) {}
 
   /** Stable slot injection face for this controller. */
   inject(): ModelInputTypesFace {
@@ -229,15 +235,15 @@ export class ModelInputTypesController {
       state.saved = false
     })
     try {
-      const described = await this.api.settings.describe({})
+      const described = await this.api.settings.describe()
       if (generation !== this.generation) return
-      if (!described.result.ok) throw new Error(described.result.error.message)
-      const view = described.result.value.namespaces.find(candidate => candidate.ns === PI_AI_SETTINGS_NS)
+      if (!described.ok) throw new Error(described.error.message)
+      const view = described.value.namespaces.find(candidate => candidate.ns === PI_AI_SETTINGS_NS)
       if (view === undefined) {
         this.unavailable()
         return
       }
-      this.accept(view, described.result.value.writable)
+      this.accept(view, described.value.writable)
     } catch (error) {
       if (generation !== this.generation) return
       this.fail({ kind: 'message', message: messageOf(error) })
@@ -265,7 +271,7 @@ export class ModelInputTypesController {
     const current = this.store.getSnapshot()
     if (view === undefined || !current.writable || current.saving !== null || !isModelType(type)) return
 
-    let models: Record<string, unknown>[]
+    let models: ModelRecord[]
     try {
       models = modelsWithType(view, provider, index, modelId, type)
     } catch (error) {
@@ -281,17 +287,17 @@ export class ModelInputTypesController {
       state.saved = false
     })
     try {
-      const response = await this.api.settings.mutate({
-        ns: PI_AI_SETTINGS_NS,
-        ops: [{ op: 'set', path: ['providers', provider, 'models'], value: models }],
-        expectedRevision: view.revision,
-      })
+      const response = await this.api.settings.mutate(
+        PI_AI_SETTINGS_NS,
+        [{ op: 'set', path: ['providers', provider, 'models'], value: models }],
+        view.revision,
+      )
       if (generation !== this.generation) return
-      if (!response.result.ok) {
-        await this.recover(writeError(response.result.error.code, response.result.error.message), generation)
+      if (!response.ok) {
+        await this.recover(writeError(response.error.code, response.error.message), generation)
         return
       }
-      this.accept(response.result.value, true)
+      this.accept(response.value, true)
       this.store.update((state) => { state.saved = true })
     } catch (error) {
       if (generation !== this.generation) return
@@ -308,18 +314,18 @@ export class ModelInputTypesController {
   /** Re-read the winner after a rejected or failed write, retaining the failure. */
   private async recover(failure: ModelInputTypesError, generation: number): Promise<void> {
     try {
-      const described = await this.api.settings.describe({})
+      const described = await this.api.settings.describe()
       if (generation !== this.generation) return
-      if (!described.result.ok) {
+      if (!described.ok) {
         this.fail(failure)
         return
       }
-      const view = described.result.value.namespaces.find(candidate => candidate.ns === PI_AI_SETTINGS_NS)
+      const view = described.value.namespaces.find(candidate => candidate.ns === PI_AI_SETTINGS_NS)
       if (view === undefined) {
         this.unavailable()
         return
       }
-      this.accept(view, described.result.value.writable)
+      this.accept(view, described.value.writable)
       this.store.update((state) => {
         state.error = failure
         state.saved = false
