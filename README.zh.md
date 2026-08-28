@@ -125,7 +125,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 - **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
-- **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后再运行 `pnpm run build`；无 Git 时可明确选择仅构建。Git 进度和 pnpm 警告不会被误判为失败，操作以真实退出码为准；拉取失败不继续构建。页面会区分拉取、构建与环境错误，放大的日志文字和“打开日志目录”入口便于排查；完整 UTF-8 输出、命令引擎错误及最终结果保存在 `logs/dsh-build.log`，刷新或重新进入页面不会丢失。
+- **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后依次运行 `pnpm run clean`、`pnpm install --frozen-lockfile`、`pnpm run build`。无 Git 时经确认只跳过拉取，仍执行这三个 pnpm 步骤；清理前会检查更新后的 checkout 是否具备 clean/build 脚本和锁文件，以及 pnpm 是否可用。任一步失败即停止后续步骤，锁文件错误不会降级为非冻结安装。Git 进度和 pnpm 警告不会被误判为失败，操作以真实退出码为准。页面会区分拉取、清理、依赖安装、构建与环境错误，放大的日志文字和“打开日志目录”入口便于排查；完整 UTF-8 输出、命令引擎错误及最终结果保存在 `logs/dsh-build.log`，刷新或重新进入页面不会丢失。运行前请先停止使用此 checkout 的 DSH：清理会删除现有构建产物，后续步骤失败时旧产物不会恢复。本操作不会自动停止或重启 DSH，请在构建成功后手动启动服务。
+
+  源码操作进程会临时设置 `pnpm_config_verify_deps_before_run=false`，防止 pnpm 的[脚本前自动安装](https://pnpm.io/settings/build#verifydepsbeforerun)在明确的冻结安装步骤前改写锁文件；不会修改仓库或全局 pnpm 配置。
+
 - **诊断：** 汇总命令、端口、工作目录、运行状态和日志，并提供独立的 DSH 源码页。
 - **桌面体验：** 系统托盘、可选登录启动、各尺寸统一的居中纵向布局、逐显示器 DPI 缩放，以及不受 Windows 主题影响的统一圆角页面与文本区域滚动条；日志与诊断、任务输入/输出、源码构建日志和插件运行日志均使用相同样式，并支持滚轮、触控板、拖动、轨道翻页与键盘滚动。Launcher 会记住最后使用的显示器和正常窗口位置，显示器拓扑或工作区变化后会自动收回可见区域。
 
@@ -348,6 +351,8 @@ git diff --check
 ```
 
 Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home 中逐个安装 7 项功能，检查全量、多功能重选、清理和聚合包的真实 Host 启动及 Client 资源；不会修改长期 profile。该命令需要先完成 DSH 与插件构建，验证记录保存在被 Git 忽略的 `.verify-dsh-home/`。页面交互和 light/dark 视觉验证仍需在真实 Web 页面完成。
+
+`npm run verify:launcher` 在临时目录中验证编译后的 Launcher 和 PowerShell 命令引擎，包括清理、安装、构建的顺序、失败即停止，以及真实 pnpm 对过期锁文件的拒绝。需要 Windows，并在 `PATH` 中提供 Git 和 pnpm；不会清理或重建真实 DSH checkout。
 
 `npm run verify:pack` 会将独立包打成 tarball，在没有 DSH peer 包的隔离目录重新安装构建依赖、执行 `prepare` 并检查再次打包的入口；Windows Companion 的这项验证也需要 Windows。
 

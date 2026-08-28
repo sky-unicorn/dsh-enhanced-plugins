@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
@@ -42,6 +43,14 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'))
 }
 
+async function readPnpmSteps(directory) {
+  const trace = await readFile(resolve(directory, 'pnpm-steps.txt'), 'utf8').catch(error => {
+    if (error.code === 'ENOENT') return ''
+    throw error
+  })
+  return trace.trim() === '' ? [] : trace.trim().split(/\r?\n/)
+}
+
 if (process.platform !== 'win32') {
   process.stdout.write('windows-launcher verification skipped on a non-Windows host\n')
   process.exit(0)
@@ -77,18 +86,39 @@ try {
   await writeFile(resolve(dshSource, 'package.json'), JSON.stringify({
     name: '@deepseek-ai/dsh-root',
     private: true,
-    scripts: { build: 'fixture-build' },
+    scripts: { clean: 'fixture-clean', build: 'fixture-build' },
   }), 'utf8')
+  await writeFile(resolve(dshSource, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf8')
   await writeFile(resolve(fakeBin, 'pnpm.cmd'), [
     '@echo off',
+    '>> "%CD%\\pnpm-steps.txt" echo %*',
+    'if not "%~3"=="" exit /b 40',
+    'if /I "%~1"=="install" goto install',
     'if /I not "%~1"=="run" exit /b 41',
+    'if /I "%~2"=="clean" goto clean',
     'if /I not "%~2"=="build" exit /b 42',
-    'if not exist "%CD%\\git-pull-marker.txt" exit /b 43',
+    'if not exist "%CD%\\install-marker.txt" exit /b 43',
     'echo BUILD_STDERR_WARNING 1>&2',
     'if defined DSH_LAUNCHER_VERIFY_BUILD_FAILURE echo BUILD_FAILED_FIXTURE 1>&2',
     'if defined DSH_LAUNCHER_VERIFY_BUILD_FAILURE exit /b 23',
     '> "%CD%\\build-marker.txt" echo BUILD_FIXTURE_OK',
     'echo BUILD_FIXTURE_OK',
+    'exit /b 0',
+    ':clean',
+    'echo CLEAN_STDERR_WARNING 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_CLEAN_FAILURE echo CLEAN_FAILED_FIXTURE 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_CLEAN_FAILURE exit /b 21',
+    '> "%CD%\\clean-marker.txt" echo CLEAN_FIXTURE_OK',
+    'echo CLEAN_FIXTURE_OK',
+    'exit /b 0',
+    ':install',
+    'if /I not "%~2"=="--frozen-lockfile" exit /b 44',
+    'if not exist "%CD%\\clean-marker.txt" exit /b 45',
+    'echo INSTALL_STDERR_WARNING 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_INSTALL_FAILURE echo ERR_PNPM_OUTDATED_LOCKFILE 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_INSTALL_FAILURE exit /b 22',
+    '> "%CD%\\install-marker.txt" echo INSTALL_FIXTURE_OK',
+    'echo INSTALL_FIXTURE_OK',
     'exit /b 0',
     '',
   ].join('\r\n'), 'utf8')
@@ -105,15 +135,7 @@ try {
     'exit /b 0',
     '',
   ].join('\r\n'), 'utf8')
-  await writeFile(resolve(buildOnlyBin, 'pnpm.cmd'), [
-    '@echo off',
-    'if /I not "%~1"=="run" exit /b 61',
-    'if /I not "%~2"=="build" exit /b 62',
-    '> "%CD%\\build-only-marker.txt" echo BUILD_ONLY_FIXTURE_OK',
-    'echo BUILD_ONLY_FIXTURE_OK',
-    'exit /b 0',
-    '',
-  ].join('\r\n'), 'utf8')
+  await copyFile(resolve(fakeBin, 'pnpm.cmd'), resolve(buildOnlyBin, 'pnpm.cmd'))
   await writeFile(settingsPath, JSON.stringify({
     Port: port,
     NoOpen: true,
@@ -175,17 +197,24 @@ try {
     throw new Error(`launcher Git-less DSH source build did not start: ${JSON.stringify(buildOnlyResult)}\n${buildOnly.stderr}`)
   }
   const buildOnlyLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
-  const buildOnlyMarker = await readFile(resolve(dshSource, 'build-only-marker.txt'), 'utf8')
-  if (!buildOnlyResult.output.includes('BUILD_ONLY_FIXTURE_OK')
-      || !buildOnlyLog.includes('Git unavailable: skipping source update and running build only')
-      || buildOnlyMarker.trim() !== 'BUILD_ONLY_FIXTURE_OK') {
+  const buildOnlyMarker = await readFile(resolve(dshSource, 'build-marker.txt'), 'utf8')
+  const expectedPnpmSteps = ['run clean', 'install --frozen-lockfile', 'run build']
+  assert.deepEqual(await readPnpmSteps(dshSource), expectedPnpmSteps, 'Git-less clean/install/build order')
+  if (!buildOnlyResult.output.includes('BUILD_FIXTURE_OK')
+      || !buildOnlyLog.includes('Git unavailable: skipping source update; running clean, frozen install, and build')
+      || buildOnlyLog.includes('git pull --ff-only')
+      || buildOnlyMarker.trim() !== 'BUILD_FIXTURE_OK') {
     throw new Error(`launcher Git-less DSH source build failed: ${JSON.stringify(buildOnlyResult)}\n${buildOnly.stderr}`)
   }
 
   const buildResultPath = resolve(temporary, 'build-result.json')
+  const priorBuildSteps = await readPnpmSteps(dshSource)
+  const priorBuildLog = buildOnlyLog.length
   const build = run(executable, ['--automation', 'build', buildResultPath], { env: environment })
   const buildResult = await readJson(buildResultPath)
-  const buildLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+  const buildLog = (await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')).slice(priorBuildLog)
+  assert.deepEqual((await readPnpmSteps(dshSource)).slice(priorBuildSteps.length), expectedPnpmSteps,
+    'updated source clean/install/build order')
   if (build.status !== 0 || buildResult.success !== true) {
     throw new Error(`launcher source build stopped before completion: ${JSON.stringify(buildResult)}\n${buildLog}`)
   }
@@ -195,36 +224,48 @@ try {
       || !buildResult.output.includes('BUILD_FIXTURE_OK')
       || !buildResult.output.includes('GIT_PULL_FIXTURE_OK')
       || !buildResult.output.includes('GIT_STDERR_PROGRESS')
+      || !buildResult.output.includes('CLEAN_STDERR_WARNING')
+      || !buildResult.output.includes('INSTALL_STDERR_WARNING')
       || !buildResult.output.includes('BUILD_STDERR_WARNING')
       || !buildLog.includes('git pull --ff-only') || !buildLog.includes('pnpm run build')
+      || !buildLog.includes('pnpm run clean') || !buildLog.includes('pnpm install --frozen-lockfile')
+      || buildLog.indexOf('git pull --ff-only') > buildLog.indexOf('pnpm run clean')
       || gitMarker.trim() !== 'GIT_PULL_FIXTURE_OK' || buildMarker.trim() !== 'BUILD_FIXTURE_OK') {
     throw new Error(`launcher DSH source build failed: ${JSON.stringify(buildResult)}\n${build.stderr}`)
   }
 
   // Exercise actual Windows PowerShell 5.1 stderr/exit behavior, not only the
   // success-only stdout fixtures that originally missed the early abort.
-  async function failedBuild(name, env, expectedMessage, expectedLog, buildMustNotRun = false) {
+  async function failedBuild(name, env, expectedMessage, expectedLog,
+    allowedSteps = expectedPnpmSteps, sourceDirectory = dshSource) {
     const previousLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+    const previousSteps = await readPnpmSteps(sourceDirectory)
     const resultPath = resolve(temporary, `${name}.json`)
     const processResult = run(executable, ['--automation', 'build', resultPath], { env })
     const result = await readJson(resultPath)
     const persistedLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
     const currentLog = persistedLog.slice(previousLog.length)
+    assert.deepEqual((await readPnpmSteps(sourceDirectory)).slice(previousSteps.length), allowedSteps,
+      `${name} must stop at the failed step`)
     if (processResult.status === 0 || result.success !== false
         || !result.message.includes(expectedMessage) || !currentLog.includes(expectedLog)
         || !currentLog.includes(result.message) || !result.output.includes(expectedLog)
-        || (buildMustNotRun && currentLog.includes('pnpm run build'))) {
+        || expectedPnpmSteps.some(step => !allowedSteps.includes(step) && currentLog.includes(`pnpm ${step} (`))) {
       throw new Error(`${name} lost its failure or ran an unsafe next step: ${JSON.stringify(result)}\n${currentLog}`)
     }
   }
 
   await failedBuild('git-network-failure', { ...environment, DSH_LAUNCHER_VERIFY_GIT_FAILURE: '1' },
-    'Git 拉取失败（退出码 128）', 'Connection was reset', true)
+    'Git 拉取失败（退出码 128）', 'Connection was reset', [])
   const failureScreenshot = resolve(temporary, 'source-failure.png')
   const failureCapture = run(executable, ['--screenshot', failureScreenshot, 'source', 'sourcefailure'], { env: environment })
   if (failureCapture.status !== 0) {
     throw new Error(`source failure did not survive UI refresh: ${await readFile(`${failureScreenshot}.error.txt`, 'utf8')}`)
   }
+  await failedBuild('pnpm-clean-failure', { ...environment, DSH_LAUNCHER_VERIFY_CLEAN_FAILURE: '1' },
+    '清理构建产物失败（退出码 21）', 'CLEAN_FAILED_FIXTURE', ['run clean'])
+  await failedBuild('pnpm-install-failure', { ...environment, DSH_LAUNCHER_VERIFY_INSTALL_FAILURE: '1' },
+    '依赖安装失败（退出码 22）', 'ERR_PNPM_OUTDATED_LOCKFILE', ['run clean', 'install --frozen-lockfile'])
   await failedBuild('pnpm-build-failure', { ...environment, DSH_LAUNCHER_VERIFY_BUILD_FAILURE: '1' },
     'DSH 构建失败（退出码 23）', 'BUILD_FAILED_FIXTURE')
 
@@ -232,7 +273,26 @@ try {
   await mkdir(gitOnlyBin)
   await copyFile(resolve(fakeBin, 'git.cmd'), resolve(gitOnlyBin, 'git.cmd'))
   await failedBuild('missing-pnpm', { ...environment, PATH: gitlessPath.replace(buildOnlyBin, gitOnlyBin) },
-    'DSH 构建失败', 'pnpm', true)
+    '环境检查失败', 'pnpm', [])
+
+  const sourceLock = resolve(dshSource, 'pnpm-lock.yaml')
+  const savedLock = await readFile(sourceLock, 'utf8')
+  try {
+    await rm(sourceLock)
+    await failedBuild('missing-lockfile', environment, '环境检查失败', 'pnpm-lock.yaml', [])
+  } finally {
+    await writeFile(sourceLock, savedLock, 'utf8')
+  }
+  const sourceManifest = resolve(dshSource, 'package.json')
+  const savedManifest = await readFile(sourceManifest, 'utf8')
+  try {
+    const withoutClean = JSON.parse(savedManifest)
+    delete withoutClean.scripts.clean
+    await writeFile(sourceManifest, JSON.stringify(withoutClean), 'utf8')
+    await failedBuild('missing-clean-script', environment, '环境检查失败', 'clean', [])
+  } finally {
+    await writeFile(sourceManifest, savedManifest, 'utf8')
+  }
 
   // A script-engine failure before its structured result is written must also
   // reach the durable log, otherwise the next UI timer tick would erase it.
@@ -268,8 +328,9 @@ try {
   git(['-C', seed, 'config', 'user.name', 'Launcher Verification'])
   git(['-C', seed, 'config', 'user.email', 'launcher-verification@example.invalid'])
   await copyFile(resolve(dshSource, 'package.json'), resolve(seed, 'package.json'))
+  await copyFile(resolve(dshSource, 'pnpm-lock.yaml'), resolve(seed, 'pnpm-lock.yaml'))
   await writeFile(resolve(seed, 'tracked.txt'), 'base\n')
-  git(['-C', seed, 'add', 'package.json', 'tracked.txt'])
+  git(['-C', seed, 'add', 'package.json', 'pnpm-lock.yaml', 'tracked.txt'])
   git(['-C', seed, 'commit', '-m', 'fixture base'])
   git(['-C', seed, 'remote', 'add', 'origin', remote])
   git(['-C', seed, 'push', '-u', 'origin', 'main'])
@@ -287,16 +348,17 @@ try {
     const actualResult = await readJson(actualBuildPath)
     if (actualBuild.status !== 0 || actualResult.success !== true
         || git(['-C', checkout, 'rev-parse', 'HEAD']) !== git(['-C', seed, 'rev-parse', 'HEAD'])
-        || !actualResult.output.includes('BUILD_ONLY_FIXTURE_OK')) {
+        || !actualResult.output.includes('BUILD_FIXTURE_OK')) {
       throw new Error(`real Git fast-forward failed: ${JSON.stringify(actualResult)}`)
     }
+    assert.deepEqual(await readPnpmSteps(checkout), expectedPnpmSteps, 'real Git update before clean/install/build')
     await writeFile(resolve(checkout, 'tracked.txt'), 'user local changes\n')
     await writeFile(resolve(seed, 'tracked.txt'), 'another remote update\n')
     git(['-C', seed, 'commit', '-am', 'fixture conflict'])
     git(['-C', seed, 'push'])
     const preservedHead = git(['-C', checkout, 'rev-parse', 'HEAD'])
     await failedBuild('real-git-local-changes', realGitEnvironment,
-      'Git 拉取失败', 'would be overwritten', true)
+      'Git 拉取失败', 'would be overwritten', [], checkout)
     if (await readFile(resolve(checkout, 'tracked.txt'), 'utf8') !== 'user local changes\n'
         || git(['-C', checkout, 'rev-parse', 'HEAD']) !== preservedHead) {
       throw new Error('source update changed a checkout after a rejected merge')
@@ -304,6 +366,72 @@ try {
   } finally {
     await writeFile(settingsPath, savedSettings)
   }
+
+  // Real pnpm must not auto-install before clean and silently repair a stale
+  // lockfile before the explicit frozen install can reject it.
+  const pnpmSource = resolve(temporary, 'real-pnpm-source')
+  await mkdir(pnpmSource)
+  const pnpmManifest = {
+    name: '@deepseek-ai/dsh-root', version: '1.0.0', private: true,
+    scripts: { clean: 'node lifecycle.cjs clean', build: 'node lifecycle.cjs build' },
+  }
+  await writeFile(resolve(pnpmSource, 'package.json'), JSON.stringify(pnpmManifest))
+  await writeFile(resolve(pnpmSource, 'pnpm-workspace.yaml'), 'verifyDepsBeforeRun: install\n')
+  await writeFile(resolve(pnpmSource, 'lifecycle.cjs'), [
+    "const fs = require('node:fs')",
+    "const path = require('node:path')",
+    "const output = path.resolve(__dirname, 'lib')",
+    "if (path.dirname(output) !== __dirname) throw new Error('Unsafe fixture output path')",
+    'const stage = process.argv[2]',
+    "fs.appendFileSync(path.join(__dirname, 'steps.txt'), stage + '\\n')",
+    "if (stage === 'clean') fs.rmSync(output, { recursive: true, force: true })",
+    "else if (stage === 'build') {",
+    '  fs.mkdirSync(output, { recursive: true })',
+    "  fs.writeFileSync(path.join(output, 'fresh.txt'), 'REAL_BUILD_OK')",
+    "} else throw new Error('Unexpected fixture stage')",
+  ].join('\n'))
+  const realPnpmEnvironment = { ...environment, PATH: process.env.PATH, pnpm_config_verify_deps_before_run: 'install' }
+  const seedLock = run('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
+    "$ErrorActionPreference = 'Stop'\n$pnpm = Get-Command pnpm -CommandType Application | Select-Object -First 1\n& $pnpm.Source install --lockfile-only --offline --ignore-scripts\nexit $LASTEXITCODE",
+  ], { cwd: pnpmSource, env: realPnpmEnvironment })
+  if (seedLock.status !== 0) throw new Error(`real pnpm fixture setup failed: ${seedLock.stdout}\n${seedLock.stderr}`)
+  const frozenLock = await readFile(resolve(pnpmSource, 'pnpm-lock.yaml'), 'utf8')
+  await mkdir(resolve(pnpmSource, 'lib'))
+  await writeFile(resolve(pnpmSource, 'lib/stale.txt'), 'stale build output')
+  async function realPnpmBuild(name) {
+    const requestPath = resolve(temporary, `${name}.request.json`)
+    const resultPath = resolve(temporary, `${name}.result.json`)
+    const logPath = resolve(temporary, `${name}.log`)
+    await writeFile(requestPath, JSON.stringify({
+      requestId: crypto.randomUUID(), mode: 'build', sourceDirectory: pnpmSource,
+      workingDirectory: pnpmSource, updateSource: false, logPath, resultPath,
+    }))
+    const processResult = run('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-File', commandScript, '-RequestPath', requestPath,
+    ], { env: realPnpmEnvironment })
+    return { processResult, result: await readJson(resultPath), log: await readFile(logPath, 'utf8') }
+  }
+  const realBuild = await realPnpmBuild('real-pnpm-success')
+  assert.equal(realBuild.processResult.status, 0, realBuild.log)
+  assert.equal(realBuild.result.success, true, realBuild.log)
+  assert.equal(await stat(resolve(pnpmSource, 'lib/stale.txt')).then(() => true, () => false), false)
+  assert.equal(await readFile(resolve(pnpmSource, 'lib/fresh.txt'), 'utf8'), 'REAL_BUILD_OK')
+  assert.equal(await readFile(resolve(pnpmSource, 'pnpm-lock.yaml'), 'utf8'), frozenLock)
+  await mkdir(resolve(pnpmSource, 'fixture-dep'))
+  await writeFile(resolve(pnpmSource, 'fixture-dep/package.json'), JSON.stringify({ name: 'fixture-dep', version: '1.0.0' }))
+  await writeFile(resolve(pnpmSource, 'package.json'), JSON.stringify({
+    ...pnpmManifest, dependencies: { 'fixture-dep': 'file:./fixture-dep' },
+  }))
+  const lockMismatch = await realPnpmBuild('real-pnpm-lock-mismatch')
+  assert.notEqual(lockMismatch.processResult.status, 0, lockMismatch.log)
+  assert.equal(lockMismatch.result.success, false, lockMismatch.log)
+  assert.match(lockMismatch.result.message, /依赖安装失败/)
+  assert.match(lockMismatch.log, /ERR_PNPM_OUTDATED_LOCKFILE/)
+  assert.doesNotMatch(lockMismatch.log, /pnpm run build/)
+  assert.equal(await readFile(resolve(pnpmSource, 'pnpm-lock.yaml'), 'utf8'), frozenLock)
+  assert.equal(await readFile(resolve(pnpmSource, 'steps.txt'), 'utf8'), 'clean\nbuild\nclean\n')
 
   const headlessRequest = resolve(temporary, 'headless.json')
   const metacharacterTask = '中文任务 & whoami | more > marker.txt'

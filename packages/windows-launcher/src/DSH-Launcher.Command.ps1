@@ -80,7 +80,7 @@ function Get-SourceFailureMessage {
 
   $message = "$Stage" + "失败（退出码 $($Result.code)）。"
   if ($Stage -eq 'Git 拉取') {
-    $message += '未执行构建。'
+    $message += '未执行清理、依赖安装或构建。'
     if ($Result.output -match '(?i)connection (?:was )?reset|recv failure|could not resolve host|failed to connect|timed out|network is unreachable') {
       $message += '请检查网络或 Git 代理后重试。'
     } elseif ($Result.output -match '(?i)not possible to fast-forward|diverg|would be overwritten|local changes') {
@@ -88,6 +88,8 @@ function Get-SourceFailureMessage {
     } elseif ($Result.output -match '(?i)no tracking information|not currently on a branch') {
       $message += '请先为当前分支设置上游。'
     }
+  } elseif ($Stage -in @('清理构建产物', '依赖安装')) {
+    $message += '未执行后续步骤。'
   }
   return $message + '详细原因见运行日志。'
 }
@@ -139,6 +141,7 @@ if (-not (Test-Path -LiteralPath $workingDirectory -PathType Container)) {
 }
 
 $originalDirectory = (Get-Location).Path
+$originalPnpmVerifyDeps = [Environment]::GetEnvironmentVariable('pnpm_config_verify_deps_before_run', 'Process')
 $buildStage = '环境检查'
 try {
   Set-Location -LiteralPath $workingDirectory
@@ -170,25 +173,48 @@ try {
           exit $gitResult.code
         }
       } else {
-        $skipHeader = "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) Git unavailable: skipping source update and running build only ($workingDirectory) ====="
+        $skipHeader = "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) Git unavailable: skipping source update; running clean, frozen install, and build ($workingDirectory) ====="
         [System.IO.File]::AppendAllText($logPath, $skipHeader + [Environment]::NewLine, $Utf8NoBom)
       }
 
-      $buildStage = 'DSH 构建'
+      # Pull can change the scripts or lockfile. Validate the updated checkout
+      # and toolchain before clean removes any existing build artifacts.
+      $buildStage = '环境检查'
+      $manifest = Get-Content -Raw -LiteralPath $manifestPath -Encoding UTF8 | ConvertFrom-Json
+      if ([string] $manifest.name -ne '@deepseek-ai/dsh-root' -or
+        [string]::IsNullOrWhiteSpace([string] $manifest.scripts.clean) -or
+        [string]::IsNullOrWhiteSpace([string] $manifest.scripts.build)) {
+        throw 'The configured DSH checkout must provide clean and build scripts.'
+      }
+      if (-not (Test-Path -LiteralPath (Join-Path $workingDirectory 'pnpm-lock.yaml') -PathType Leaf)) {
+        throw 'The configured DSH checkout has no pnpm-lock.yaml; frozen dependency installation is required.'
+      }
       $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
         Select-Object -First 1
-      $buildResult = Invoke-LoggedDsh `
-        -Command $pnpm.Source `
-        -Arguments @('run', 'build') `
-        -LogPath $logPath `
-        -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) pnpm run build ($workingDirectory) ====="
-      if ($buildResult.code -ne 0) {
-        Write-BuildOutcome $false $buildResult.code (Get-SourceFailureMessage 'DSH 构建' $buildResult)
-      } else {
-        $message = if ([bool] $request.updateSource) { 'DSH 源码已更新并构建完成。' } else { 'DSH 源码构建完成（未执行 Git 更新）。' }
-        Write-BuildOutcome $true 0 $message
+      # pnpm 11 otherwise auto-installs before `run clean`, potentially rewriting
+      # the lockfile before our explicit frozen install can validate it.
+      [Environment]::SetEnvironmentVariable('pnpm_config_verify_deps_before_run', 'false', 'Process')
+      $buildSteps = @(
+        @{ stage = '清理构建产物'; arguments = @('run', 'clean') },
+        @{ stage = '依赖安装'; arguments = @('install', '--frozen-lockfile') },
+        @{ stage = 'DSH 构建'; arguments = @('run', 'build') }
+      )
+      foreach ($step in $buildSteps) {
+        $buildStage = $step.stage
+        $commandLabel = 'pnpm ' + ($step.arguments -join ' ')
+        $stepResult = Invoke-LoggedDsh `
+          -Command $pnpm.Source `
+          -Arguments $step.arguments `
+          -LogPath $logPath `
+          -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) $commandLabel ($workingDirectory) ====="
+        if ($stepResult.code -ne 0) {
+          Write-BuildOutcome $false $stepResult.code (Get-SourceFailureMessage $buildStage $stepResult)
+          exit $stepResult.code
+        }
       }
-      exit $buildResult.code
+      $message = if ([bool] $request.updateSource) { 'DSH 源码已更新并构建完成。' } else { 'DSH 源码构建完成（未执行 Git 更新）。' }
+      Write-BuildOutcome $true 0 $message
+      exit 0
     }
     'doctor' {
       & $dsh --version
@@ -233,6 +259,9 @@ try {
   Write-BuildOutcome $false 1 ($buildStage + '失败：' + $_.Exception.Message)
   exit 1
 } finally {
+  if ($mode -eq 'build') {
+    [Environment]::SetEnvironmentVariable('pnpm_config_verify_deps_before_run', $originalPnpmVerifyDeps, 'Process')
+  }
   Set-Location -LiteralPath $originalDirectory
   if ($mode -in @('build', 'doctor', 'headless', 'profile')) {
     Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue

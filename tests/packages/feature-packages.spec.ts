@@ -538,7 +538,7 @@ describe('selective feature packages', () => {
     expect(command).toContain('exit $gitResult.code')
     expect(command).toContain("'build'")
     expect(command).toContain("@('-C', $workingDirectory, 'pull', '--ff-only')")
-    expect(command).toContain('Git unavailable: skipping source update and running build only')
+    expect(command).toContain('Git unavailable: skipping source update; running clean, frozen install, and build')
     expect(command).toContain("@('run', 'build')")
     expect(command).not.toContain('Read-Host')
     expect(runtime).toContain('StandardOutputEncoding = new UTF8Encoding(false)')

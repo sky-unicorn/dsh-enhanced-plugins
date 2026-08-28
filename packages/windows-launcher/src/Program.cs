@@ -1106,7 +1106,7 @@ namespace DshEnhanced.WindowsLauncher
         {
             sourceCard = new RoundedPanel();
             sourcePage.Content.Controls.Add(sourceCard);
-            AddCardTitle(sourceCard, "更新并构建 DSH", "先以安全快进方式拉取最新源码，再执行 pnpm run build");
+            AddCardTitle(sourceCard, "更新并构建 DSH", "安全拉取源码后，依次清理旧产物、按锁文件安装依赖并构建");
 
             sourcePathLabel = NewLabel(String.Empty, 8.5f, FontStyle.Regular, UiTheme.Muted);
             sourcePathLabel.AutoSize = false;
@@ -1660,7 +1660,7 @@ namespace DshEnhanced.WindowsLauncher
                     RefreshSourceLog(true);
                     if (sourceOutput.SelectionStart != 0)
                         throw new InvalidOperationException("Unchanged source logs must not reset the reader's selection.");
-                    SetSourceStatus(OperationResult.Fail("Git 拉取失败（退出码 128）。未执行构建。请检查网络或 Git 代理后重试。详细原因见运行日志。"));
+                    SetSourceStatus(OperationResult.Fail("Git 拉取失败（退出码 128）。未执行清理、依赖安装或构建。请检查网络或 Git 代理后重试。详细原因见运行日志。"));
                 }
                 else if (captureMode) sourceOutput.Text = CaptureLogSample("DSH 源码构建日志");
                 sourceNav.Focus();
@@ -1858,16 +1858,19 @@ namespace DshEnhanced.WindowsLauncher
                 return;
             }
             bool updateSource = runtime.IsGitAvailable();
+            string buildCommands = "pnpm run clean" + Environment.NewLine
+                + "pnpm install --frozen-lockfile" + Environment.NewLine
+                + "pnpm run build";
             string confirmation = updateSource
                 ? "即将依次执行：" + Environment.NewLine + Environment.NewLine
-                    + "1. git pull --ff-only" + Environment.NewLine
-                    + "2. pnpm run build" + Environment.NewLine + Environment.NewLine
-                    + "源码目录：" + source + Environment.NewLine + Environment.NewLine
-                    + "如果存在无法快进的提交或冲突，流程会停止，不会继续构建。确定运行吗？"
+                    + "git pull --ff-only" + Environment.NewLine + buildCommands
                 : "未检测到 Git，无法拉取最新源码。" + Environment.NewLine + Environment.NewLine
-                    + "本次将跳过源码更新，仅执行 pnpm run build。" + Environment.NewLine + Environment.NewLine
-                    + "源码目录：" + source + Environment.NewLine + Environment.NewLine
-                    + "确定继续吗？";
+                    + "本次跳过 Git 更新，依次执行：" + Environment.NewLine + buildCommands;
+            confirmation += Environment.NewLine + Environment.NewLine
+                + "源码目录：" + source + Environment.NewLine + Environment.NewLine
+                + "清理会删除现有构建产物，请先停止使用此源码的 DSH。"
+                + "任一步失败即停止，不会忽略锁文件错误。"
+                + "本操作不会自动停止或重启 DSH；成功后请手动启动服务。确定运行吗？";
             DialogResult confirmed = MessageBox.Show(this, confirmation, "更新并构建 DSH",
                 MessageBoxButtons.YesNo, updateSource ? MessageBoxIcon.Question : MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2);
@@ -1879,10 +1882,10 @@ namespace DshEnhanced.WindowsLauncher
             if (Interlocked.CompareExchange(ref buildInProgress, 1, 0) != 0) return;
             buildDshButton.Enabled = false;
             buildDshButton.Text = "更新与构建中…";
-            sourceStatusLabel.Text = "执行中 · " + (updateSource ? "拉取成功后才会开始构建，请稍候…" : "已跳过 Git，正在构建本地源码…");
+            sourceStatusLabel.Text = "执行中 · " + (updateSource ? "拉取后依次清理、安装依赖并构建…" : "已跳过 Git，依次清理、安装依赖并构建…");
             sourceStatusLabel.ForeColor = UiTheme.Primary;
             LayoutSource();
-            sourceOutput.Text = (updateSource ? "正在拉取最新 DSH 源码并构建…" : "未检测到 Git，正在仅构建 DSH 源码…")
+            sourceOutput.Text = (updateSource ? "正在更新、清理、安装依赖并构建 DSH 源码…" : "未检测到 Git，正在清理、安装依赖并构建本地 DSH 源码…")
                 + Environment.NewLine + "源码目录: " + source + Environment.NewLine
                 + "日志将自动刷新，无需离开当前页面。";
             sourceOutput.SelectionStart = sourceOutput.TextLength;

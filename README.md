@@ -125,7 +125,10 @@ A Windows control center outside the Cordis plugin tree for local DSH users who 
 
 - **Web control:** inspect status, start, open, restart, or stop Web; identify services already bound to the port without taking ownership of them.
 - **Tasks and profiles:** run one-shot Headless tasks and background profiles with unified UTF-8 results and logs.
-- **Source maintenance:** run `git pull --ff-only` against the bound DSH checkout and only run `pnpm run build` after a successful update; explicitly allow build-only operation when Git is unavailable. Git progress and pnpm warnings are not treated as failures: the real exit code determines the outcome, and a failed pull never proceeds to build. The page distinguishes pull, build, and environment failures, with larger log text and an Open Log Folder action. Full UTF-8 output, command-engine errors, and the final outcome remain in `logs/dsh-build.log` across refreshes and page navigation.
+- **Source maintenance:** run `git pull --ff-only` against the bound DSH checkout, then `pnpm run clean`, `pnpm install --frozen-lockfile`, and `pnpm run build` in order. Without Git, confirmation skips only the pull and still runs all three pnpm steps. Before cleaning, Launcher checks the updated checkout for clean/build scripts and a lockfile, and verifies that pnpm is available. Any failed step stops the remaining steps; lockfile errors never fall back to an unfrozen install. Git progress and pnpm warnings are not treated as failures: the real exit code determines the outcome. The page distinguishes pull, clean, dependency-install, build, and environment failures, with larger log text and an Open Log Folder action. Full UTF-8 output, command-engine errors, and the final outcome remain in `logs/dsh-build.log` across refreshes and page navigation. Stop DSH instances using this checkout before running: clean removes existing build artifacts, which are not restored if a later step fails. Launcher does not automatically stop or restart DSH for this action; start it manually after a successful build.
+
+  The source-operation process temporarily sets `pnpm_config_verify_deps_before_run=false` so pnpm's [automatic install before scripts](https://pnpm.io/settings/build#verifydepsbeforerun) cannot change the lockfile before the explicit frozen install. This does not edit repository or global pnpm settings.
+
 - **Diagnostics:** collect command, port, working directory, status, and log information, with a dedicated DSH Source page.
 - **Desktop behavior:** system tray, optional login startup, a centered vertical layout at every window size, per-monitor DPI scaling, and consistent rounded scrollbars for both pages and text areas independent of the Windows theme. Diagnostics, task input/output, source-build logs, and plugin-operation logs share the same styling, with mouse-wheel, touchpad, thumb-dragging, track-paging, and keyboard support. Launcher remembers the last display and normal window bounds, then remaps them into a visible work area when the display topology changes.
 
@@ -348,6 +351,8 @@ git diff --check
 ```
 
 On Windows, `npm run verify:compat` additionally installs all seven features individually into an isolated DSH home, then checks all-features, reselection, cleanup, and aggregate profiles against the real Host and Client artifacts. It requires built DSH and plugin artifacts and leaves the normal profiles untouched. Reports stay under the Git-ignored `.verify-dsh-home/`. Interactive behavior and light/dark appearance still require the real Web page.
+
+`npm run verify:launcher` exercises the compiled Launcher and PowerShell command engine in temporary directories, including clean/install/build ordering, failure stops, and real pnpm frozen-lockfile rejection. It requires Windows, Git, and pnpm on `PATH`; it does not clean or rebuild the real DSH checkout.
 
 `npm run verify:pack` packs each standalone distribution, installs only its build dependencies in an isolated directory without DSH peers, runs `prepare`, and checks its repacked entries. The Windows Companion part requires Windows as well.
 
