@@ -58,12 +58,21 @@ namespace DshEnhanced.WindowsLauncher
         public int port { get; set; }
         public bool noOpen { get; set; }
         public string logPath { get; set; }
+        public string resultPath { get; set; }
         public string statePath { get; set; }
         public string stopPath { get; set; }
         public string task { get; set; }
         public string profile { get; set; }
         public string sourceDirectory { get; set; }
         public bool updateSource { get; set; }
+    }
+
+    internal sealed class LauncherCommandResult
+    {
+        public string requestId { get; set; }
+        public bool success { get; set; }
+        public int exitCode { get; set; }
+        public string message { get; set; }
     }
 
     internal sealed class LauncherState
@@ -734,15 +743,39 @@ namespace DshEnhanced.WindowsLauncher
             request.sourceDirectory = source;
             request.workingDirectory = source;
             request.logPath = LauncherPaths.BuildLog;
+            request.resultPath = Path.Combine(LauncherPaths.Requests, "build-" + request.requestId + ".result.json");
             request.updateSource = updateSource;
             string commandOutput;
             LauncherLog.Write((updateSource ? "update and build" : "build") + " DSH source=" + source);
+            File.AppendAllText(LauncherPaths.BuildLog, Environment.NewLine + "===== "
+                + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " 开始 DSH 源码操作 =====" + Environment.NewLine,
+                new UTF8Encoding(false));
             OperationResult result = RunCapturedRequest(request, out commandOutput);
-            string logTail = ReadTail(LauncherPaths.BuildLog, 240);
-            output = String.IsNullOrWhiteSpace(commandOutput)
-                ? logTail
-                : logTail + Environment.NewLine + Environment.NewLine + "命令引擎输出" + Environment.NewLine
-                    + "────────────────────────────────────────" + Environment.NewLine + commandOutput.Trim();
+            LauncherCommandResult outcome = JsonFile.Read<LauncherCommandResult>(request.resultPath);
+            TryDelete(request.resultPath);
+            if (outcome != null && outcome.requestId == request.requestId && !String.IsNullOrWhiteSpace(outcome.message))
+            {
+                // A success record cannot override a failed process exit.
+                result = result.Success && outcome.success && outcome.exitCode == 0
+                    ? OperationResult.Ok(outcome.message)
+                    : OperationResult.Fail(outcome.success ? result.Message : outcome.message);
+            }
+            try
+            {
+                // The log is the single source for both the live refresh and final
+                // display. Never leave engine errors only in a transient textbox.
+                if (!String.IsNullOrWhiteSpace(commandOutput))
+                    File.AppendAllText(LauncherPaths.BuildLog, Environment.NewLine + "命令引擎输出" + Environment.NewLine
+                        + commandOutput.Trim() + Environment.NewLine, new UTF8Encoding(false));
+                if (outcome == null || outcome.requestId != request.requestId)
+                    File.AppendAllText(LauncherPaths.BuildLog, result.Message + Environment.NewLine, new UTF8Encoding(false));
+            }
+            catch (Exception error)
+            {
+                output = commandOutput + Environment.NewLine + result.Message;
+                return OperationResult.Fail("无法保存源码构建日志：" + error.Message);
+            }
+            output = DshSourceBuildLog();
             if (!result.Success)
             {
                 LauncherLog.Write("update/build DSH failed: " + result.Message);
@@ -871,11 +904,12 @@ namespace DshEnhanced.WindowsLauncher
         private OperationResult RunCapturedRequest(LauncherRequest request, out string output)
         {
             output = String.Empty;
-            string requestPath = WriteRequest(request);
+            string requestPath = null;
             string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DSH-Launcher.Command.ps1");
             if (!File.Exists(script)) return OperationResult.Fail("Launcher command engine 组件缺失。");
             try
             {
+                requestPath = WriteRequest(request);
                 ProcessStartInfo startInfo = PowerShellStartInfo(script, requestPath, true, false);
                 startInfo.RedirectStandardOutput = true;
                 startInfo.RedirectStandardError = true;
@@ -975,14 +1009,47 @@ namespace DshEnhanced.WindowsLauncher
             if (!File.Exists(path)) return "（暂无日志）";
             try
             {
-                string[] all = File.ReadAllLines(path, Encoding.UTF8);
-                int start = Math.Max(0, all.Length - lines);
-                return String.Join(Environment.NewLine, all, start, all.Length - start);
+                // The command engine keeps a writer open during long builds.
+                // Readers must share write access or live refresh fails while
+                // the command is running. Keep only the visible tail in memory.
+                using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete))
+                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    Queue<string> tail = new Queue<string>();
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        tail.Enqueue(line);
+                        if (tail.Count > lines) tail.Dequeue();
+                    }
+                    return String.Join(Environment.NewLine, tail.ToArray());
+                }
             }
             catch (Exception error)
             {
                 return "（无法读取日志：" + error.Message + "）";
             }
+        }
+
+        internal static bool SourceLogSelfTest()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "dsh-source-log-test-" + Guid.NewGuid().ToString("N") + ".log");
+            try
+            {
+                using (StreamWriter writer = new StreamWriter(path, false, new UTF8Encoding(false)))
+                {
+                    writer.WriteLine("older entry");
+                    writer.WriteLine("中文进度");
+                    writer.WriteLine("stderr warning");
+                    writer.Flush();
+                    if (ReadTail(path, 2) != "中文进度" + Environment.NewLine + "stderr warning") return false;
+                    writer.WriteLine("final error");
+                    writer.Flush();
+                    return ReadTail(path, 1) == "final error";
+                }
+            }
+            finally { TryDelete(path); }
         }
 
         private static void TryDelete(string path)

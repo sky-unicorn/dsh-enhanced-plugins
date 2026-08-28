@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
@@ -12,7 +12,7 @@ const commandScript = resolve(launcherRoot, 'lib/DSH-Launcher.Command.ps1')
 const fixtureSource = resolve(root, 'tests/packages/fixtures/dsh.ps1')
 
 function run(file, args, options = {}) {
-  const result = spawnSync(file, args, { encoding: 'utf8', ...options })
+  const result = spawnSync(file, args, { encoding: 'utf8', windowsHide: true, ...options })
   if (result.error !== undefined) throw result.error
   return result
 }
@@ -84,6 +84,9 @@ try {
     'if /I not "%~1"=="run" exit /b 41',
     'if /I not "%~2"=="build" exit /b 42',
     'if not exist "%CD%\\git-pull-marker.txt" exit /b 43',
+    'echo BUILD_STDERR_WARNING 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_BUILD_FAILURE echo BUILD_FAILED_FIXTURE 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_BUILD_FAILURE exit /b 23',
     '> "%CD%\\build-marker.txt" echo BUILD_FIXTURE_OK',
     'echo BUILD_FIXTURE_OK',
     'exit /b 0',
@@ -94,6 +97,9 @@ try {
     'if /I not "%~1"=="-C" exit /b 51',
     'if /I not "%~3"=="pull" exit /b 52',
     'if /I not "%~4"=="--ff-only" exit /b 53',
+    'echo GIT_STDERR_PROGRESS 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_GIT_FAILURE echo fatal: Recv failure: Connection was reset 1>&2',
+    'if defined DSH_LAUNCHER_VERIFY_GIT_FAILURE exit /b 128',
     '> "%~2\\git-pull-marker.txt" echo GIT_PULL_FIXTURE_OK',
     'echo GIT_PULL_FIXTURE_OK',
     'exit /b 0',
@@ -180,14 +186,123 @@ try {
   const build = run(executable, ['--automation', 'build', buildResultPath], { env: environment })
   const buildResult = await readJson(buildResultPath)
   const buildLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+  if (build.status !== 0 || buildResult.success !== true) {
+    throw new Error(`launcher source build stopped before completion: ${JSON.stringify(buildResult)}\n${buildLog}`)
+  }
   const buildMarker = await readFile(resolve(dshSource, 'build-marker.txt'), 'utf8')
   const gitMarker = await readFile(resolve(dshSource, 'git-pull-marker.txt'), 'utf8')
   if (build.status !== 0 || buildResult.success !== true
       || !buildResult.output.includes('BUILD_FIXTURE_OK')
       || !buildResult.output.includes('GIT_PULL_FIXTURE_OK')
+      || !buildResult.output.includes('GIT_STDERR_PROGRESS')
+      || !buildResult.output.includes('BUILD_STDERR_WARNING')
       || !buildLog.includes('git pull --ff-only') || !buildLog.includes('pnpm run build')
       || gitMarker.trim() !== 'GIT_PULL_FIXTURE_OK' || buildMarker.trim() !== 'BUILD_FIXTURE_OK') {
     throw new Error(`launcher DSH source build failed: ${JSON.stringify(buildResult)}\n${build.stderr}`)
+  }
+
+  // Exercise actual Windows PowerShell 5.1 stderr/exit behavior, not only the
+  // success-only stdout fixtures that originally missed the early abort.
+  async function failedBuild(name, env, expectedMessage, expectedLog, buildMustNotRun = false) {
+    const previousLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+    const resultPath = resolve(temporary, `${name}.json`)
+    const processResult = run(executable, ['--automation', 'build', resultPath], { env })
+    const result = await readJson(resultPath)
+    const persistedLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+    const currentLog = persistedLog.slice(previousLog.length)
+    if (processResult.status === 0 || result.success !== false
+        || !result.message.includes(expectedMessage) || !currentLog.includes(expectedLog)
+        || !currentLog.includes(result.message) || !result.output.includes(expectedLog)
+        || (buildMustNotRun && currentLog.includes('pnpm run build'))) {
+      throw new Error(`${name} lost its failure or ran an unsafe next step: ${JSON.stringify(result)}\n${currentLog}`)
+    }
+  }
+
+  await failedBuild('git-network-failure', { ...environment, DSH_LAUNCHER_VERIFY_GIT_FAILURE: '1' },
+    'Git 拉取失败（退出码 128）', 'Connection was reset', true)
+  const failureScreenshot = resolve(temporary, 'source-failure.png')
+  const failureCapture = run(executable, ['--screenshot', failureScreenshot, 'source', 'sourcefailure'], { env: environment })
+  if (failureCapture.status !== 0) {
+    throw new Error(`source failure did not survive UI refresh: ${await readFile(`${failureScreenshot}.error.txt`, 'utf8')}`)
+  }
+  await failedBuild('pnpm-build-failure', { ...environment, DSH_LAUNCHER_VERIFY_BUILD_FAILURE: '1' },
+    'DSH 构建失败（退出码 23）', 'BUILD_FAILED_FIXTURE')
+
+  const gitOnlyBin = resolve(temporary, 'git-only-bin')
+  await mkdir(gitOnlyBin)
+  await copyFile(resolve(fakeBin, 'git.cmd'), resolve(gitOnlyBin, 'git.cmd'))
+  await failedBuild('missing-pnpm', { ...environment, PATH: gitlessPath.replace(buildOnlyBin, gitOnlyBin) },
+    'DSH 构建失败', 'pnpm', true)
+
+  // A script-engine failure before its structured result is written must also
+  // reach the durable log, otherwise the next UI timer tick would erase it.
+  const brokenEngine = resolve(temporary, 'broken-engine')
+  await mkdir(brokenEngine)
+  await copyFile(executable, resolve(brokenEngine, 'DSH-Launcher.exe'))
+  await writeFile(resolve(brokenEngine, 'DSH-Launcher.Command.ps1'), '\uFEFFthrow "ENGINE_FAILURE_FIXTURE 中文错误"\n', 'utf8')
+  const engineResultPath = resolve(temporary, 'engine-failure.json')
+  const engineRun = run(resolve(brokenEngine, 'DSH-Launcher.exe'), ['--automation', 'build', engineResultPath], { env: environment })
+  const engineResult = await readJson(engineResultPath)
+  const engineLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+  if (engineRun.status === 0 || !engineResult.output.includes('ENGINE_FAILURE_FIXTURE')
+      || !engineLog.includes('ENGINE_FAILURE_FIXTURE')) {
+    throw new Error(`command-engine error was not persisted: ${JSON.stringify(engineResult)}`)
+  }
+  const leakedRequests = (await readdir(resolve(dataRoot, 'requests'))).filter(name => name.startsWith('build-'))
+  if (leakedRequests.length > 0) throw new Error(`source build left request files behind: ${leakedRequests.join(', ')}`)
+
+  // Real Git, local-only: fast-forward a checkout with a Unicode/space path,
+  // then reject an update that would overwrite the user's local changes.
+  const realGit = run('where.exe', ['git.exe']).stdout.trim().split(/\r?\n/)[0]
+  if (!realGit) throw new Error('real Git is required for source-update integration verification')
+  const remote = resolve(temporary, 'source-remote.git')
+  const seed = resolve(temporary, 'source-seed')
+  const checkout = resolve(temporary, '源码 checkout & space')
+  function git(args) {
+    const result = run(realGit, args)
+    if (result.status !== 0) throw new Error(`local Git fixture failed: ${result.stdout}\n${result.stderr}`)
+    return result.stdout.trim()
+  }
+  git(['init', '--bare', remote])
+  git(['init', '-b', 'main', seed])
+  git(['-C', seed, 'config', 'user.name', 'Launcher Verification'])
+  git(['-C', seed, 'config', 'user.email', 'launcher-verification@example.invalid'])
+  await copyFile(resolve(dshSource, 'package.json'), resolve(seed, 'package.json'))
+  await writeFile(resolve(seed, 'tracked.txt'), 'base\n')
+  git(['-C', seed, 'add', 'package.json', 'tracked.txt'])
+  git(['-C', seed, 'commit', '-m', 'fixture base'])
+  git(['-C', seed, 'remote', 'add', 'origin', remote])
+  git(['-C', seed, 'push', '-u', 'origin', 'main'])
+  git(['--git-dir', remote, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
+  git(['clone', remote, checkout])
+  await writeFile(resolve(seed, 'tracked.txt'), 'remote update\n')
+  git(['-C', seed, 'commit', '-am', 'fixture update'])
+  git(['-C', seed, 'push'])
+  const savedSettings = await readFile(settingsPath, 'utf8')
+  const realGitEnvironment = { ...environment, PATH: `${buildOnlyBin};${dirname(realGit)};${process.env.PATH ?? ''}` }
+  try {
+    await writeFile(settingsPath, JSON.stringify({ ...JSON.parse(savedSettings), DshSourceDirectory: checkout }))
+    const actualBuildPath = resolve(temporary, 'real-git-build.json')
+    const actualBuild = run(executable, ['--automation', 'build', actualBuildPath], { env: realGitEnvironment })
+    const actualResult = await readJson(actualBuildPath)
+    if (actualBuild.status !== 0 || actualResult.success !== true
+        || git(['-C', checkout, 'rev-parse', 'HEAD']) !== git(['-C', seed, 'rev-parse', 'HEAD'])
+        || !actualResult.output.includes('BUILD_ONLY_FIXTURE_OK')) {
+      throw new Error(`real Git fast-forward failed: ${JSON.stringify(actualResult)}`)
+    }
+    await writeFile(resolve(checkout, 'tracked.txt'), 'user local changes\n')
+    await writeFile(resolve(seed, 'tracked.txt'), 'another remote update\n')
+    git(['-C', seed, 'commit', '-am', 'fixture conflict'])
+    git(['-C', seed, 'push'])
+    const preservedHead = git(['-C', checkout, 'rev-parse', 'HEAD'])
+    await failedBuild('real-git-local-changes', realGitEnvironment,
+      'Git 拉取失败', 'would be overwritten', true)
+    if (await readFile(resolve(checkout, 'tracked.txt'), 'utf8') !== 'user local changes\n'
+        || git(['-C', checkout, 'rev-parse', 'HEAD']) !== preservedHead) {
+      throw new Error('source update changed a checkout after a rejected merge')
+    }
+  } finally {
+    await writeFile(settingsPath, savedSettings)
   }
 
   const headlessRequest = resolve(temporary, 'headless.json')

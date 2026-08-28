@@ -34,15 +34,62 @@ function Invoke-LoggedDsh {
   }
   [System.IO.File]::AppendAllText($LogPath, $Header + [Environment]::NewLine, $Utf8NoBom)
   $writer = New-Object System.IO.StreamWriter($LogPath, $true, $Utf8NoBom)
+  $tail = New-Object 'System.Collections.Generic.Queue[string]'
+  $originalErrorActionPreference = $ErrorActionPreference
   try {
+    # Windows PowerShell 5.1 wraps native stderr in ErrorRecord objects. Git
+    # progress and pnpm warnings are not failures: preserve both streams and
+    # decide only after the child has exited. Keep Stop everywhere else.
+    $ErrorActionPreference = 'Continue'
     & $Command @Arguments 2>&1 | ForEach-Object {
-      $writer.WriteLine([string] $_)
+      $line = [string] $_
+      $writer.WriteLine($line)
       $writer.Flush()
+      $tail.Enqueue($line)
+      if ($tail.Count -gt 24) { [void] $tail.Dequeue() }
     }
-    return $LASTEXITCODE
+    $code = $LASTEXITCODE
+    $writer.WriteLine("===== exit=$code =====")
+    return [pscustomobject]@{ code = $code; output = ($tail.ToArray() -join [Environment]::NewLine) }
   } finally {
+    $ErrorActionPreference = $originalErrorActionPreference
     $writer.Dispose()
   }
+}
+
+function Write-BuildOutcome {
+  param([bool] $Success, [int] $ExitCode, [string] $Message)
+
+  $outcome = [ordered]@{
+    requestId = [string] $request.requestId
+    success = $Success
+    exitCode = $ExitCode
+    message = $Message
+  }
+  [System.IO.File]::AppendAllText([string] $request.logPath,
+    $Message + [Environment]::NewLine, $Utf8NoBom)
+  $resultProperty = $request.PSObject.Properties['resultPath']
+  if ($null -ne $resultProperty -and -not [string]::IsNullOrWhiteSpace([string] $resultProperty.Value)) {
+    [System.IO.File]::WriteAllText([string] $resultProperty.Value,
+      ($outcome | ConvertTo-Json -Compress), $Utf8NoBom)
+  }
+}
+
+function Get-SourceFailureMessage {
+  param([string] $Stage, [object] $Result)
+
+  $message = "$Stage" + "失败（退出码 $($Result.code)）。"
+  if ($Stage -eq 'Git 拉取') {
+    $message += '未执行构建。'
+    if ($Result.output -match '(?i)connection (?:was )?reset|recv failure|could not resolve host|failed to connect|timed out|network is unreachable') {
+      $message += '请检查网络或 Git 代理后重试。'
+    } elseif ($Result.output -match '(?i)not possible to fast-forward|diverg|would be overwritten|local changes') {
+      $message += '请先处理本地修改或分叉；Launcher 不会强制覆盖源码。'
+    } elseif ($Result.output -match '(?i)no tracking information|not currently on a branch') {
+      $message += '请先为当前分支设置上游。'
+    }
+  }
+  return $message + '详细原因见运行日志。'
 }
 
 function Resolve-SafeDshCommand {
@@ -92,6 +139,7 @@ if (-not (Test-Path -LiteralPath $workingDirectory -PathType Container)) {
 }
 
 $originalDirectory = (Get-Location).Path
+$buildStage = '环境检查'
 try {
   Set-Location -LiteralPath $workingDirectory
   switch ($mode) {
@@ -109,27 +157,38 @@ try {
       if ([string]::IsNullOrWhiteSpace($logPath)) { throw 'DSH build log path is missing.' }
 
       if ([bool] $request.updateSource) {
+        $buildStage = 'Git 拉取'
         $git = Get-Command -Name 'git' -CommandType Application -ErrorAction Stop |
           Select-Object -First 1
-        $gitCode = Invoke-LoggedDsh `
+        $gitResult = Invoke-LoggedDsh `
           -Command $git.Source `
           -Arguments @('-C', $workingDirectory, 'pull', '--ff-only') `
           -LogPath $logPath `
           -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) git pull --ff-only ($workingDirectory) ====="
-        if ($gitCode -ne 0) { exit $gitCode }
+        if ($gitResult.code -ne 0) {
+          Write-BuildOutcome $false $gitResult.code (Get-SourceFailureMessage 'Git 拉取' $gitResult)
+          exit $gitResult.code
+        }
       } else {
         $skipHeader = "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) Git unavailable: skipping source update and running build only ($workingDirectory) ====="
         [System.IO.File]::AppendAllText($logPath, $skipHeader + [Environment]::NewLine, $Utf8NoBom)
       }
 
+      $buildStage = 'DSH 构建'
       $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
         Select-Object -First 1
-      $code = Invoke-LoggedDsh `
+      $buildResult = Invoke-LoggedDsh `
         -Command $pnpm.Source `
         -Arguments @('run', 'build') `
         -LogPath $logPath `
         -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) pnpm run build ($workingDirectory) ====="
-      exit $code
+      if ($buildResult.code -ne 0) {
+        Write-BuildOutcome $false $buildResult.code (Get-SourceFailureMessage 'DSH 构建' $buildResult)
+      } else {
+        $message = if ([bool] $request.updateSource) { 'DSH 源码已更新并构建完成。' } else { 'DSH 源码构建完成（未执行 Git 更新）。' }
+        Write-BuildOutcome $true 0 $message
+      }
+      exit $buildResult.code
     }
     'doctor' {
       & $dsh --version
@@ -146,12 +205,12 @@ try {
       if ($profile -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Profile name is invalid.' }
       $logPath = [string] $request.logPath
       if ([string]::IsNullOrWhiteSpace($logPath)) { throw 'Profile log path is missing.' }
-      $code = Invoke-LoggedDsh `
+      $profileResult = Invoke-LoggedDsh `
         -Command $dsh `
         -Arguments @('--profile', $profile) `
         -LogPath $logPath `
         -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) dsh --profile $profile ====="
-      exit $code
+      exit $profileResult.code
     }
     'web' {
       $port = 0
@@ -161,14 +220,18 @@ try {
       $arguments = @('web', '--port', [string] $port)
       if ([bool] $request.noOpen) { $arguments += '--no-open' }
       $logPath = [string] $request.logPath
-      $code = Invoke-LoggedDsh `
+      $webResult = Invoke-LoggedDsh `
         -Command $dsh `
         -Arguments $arguments `
         -LogPath $logPath `
         -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) dsh web --port $port ====="
-      exit $code
+      exit $webResult.code
     }
   }
+} catch {
+  if ($mode -ne 'build') { throw }
+  Write-BuildOutcome $false 1 ($buildStage + '失败：' + $_.Exception.Message)
+  exit 1
 } finally {
   Set-Location -LiteralPath $originalDirectory
   if ($mode -in @('build', 'doctor', 'headless', 'profile')) {

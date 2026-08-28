@@ -125,7 +125,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 - **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
-- **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后再运行 `pnpm run build`；无 Git 时可明确选择仅构建。
+- **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后再运行 `pnpm run build`；无 Git 时可明确选择仅构建。Git 进度和 pnpm 警告不会被误判为失败，操作以真实退出码为准；拉取失败不继续构建。页面会区分拉取、构建与环境错误，放大的日志文字和“打开日志目录”入口便于排查；完整 UTF-8 输出、命令引擎错误及最终结果保存在 `logs/dsh-build.log`，刷新或重新进入页面不会丢失。
 - **诊断：** 汇总命令、端口、工作目录、运行状态和日志，并提供独立的 DSH 源码页。
 - **桌面体验：** 系统托盘、可选登录启动、各尺寸统一的居中纵向布局、逐显示器 DPI 缩放，以及不受 Windows 主题影响的统一圆角页面与文本区域滚动条；日志与诊断、任务输入/输出、源码构建日志和插件运行日志均使用相同样式，并支持滚轮、触控板、拖动、轨道翻页与键盘滚动。Launcher 会记住最后使用的显示器和正常窗口位置，显示器拓扑或工作区变化后会自动收回可见区域。
 

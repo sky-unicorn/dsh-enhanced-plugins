@@ -87,7 +87,8 @@ namespace DshEnhanced.WindowsLauncher
                     && StartupRegistration.SelfTest()
                     && WindowPlacementGeometry.SelfTest()
                     && ModernScrollPage.SelfTest()
-                    && ModernTextAreaScroll.SelfTest();
+                    && ModernTextAreaScroll.SelfTest()
+                    && LauncherRuntime.SourceLogSelfTest();
                 File.WriteAllText(args[1], complete ? "SELF_TEST_OK" : "SELF_TEST_INCOMPLETE", new UTF8Encoding(false));
                 return complete ? 0 : 1;
             }
@@ -524,6 +525,8 @@ namespace DshEnhanced.WindowsLauncher
         private RoundedPanel sourceCard;
         private RoundedPanel sourceLogShell;
         private Label sourcePathLabel;
+        private FlowLayoutPanel sourceActions;
+        private Label sourceStatusLabel;
         private ModernScrollPage activePage;
         private bool loadingSettings;
         private bool layoutPending;
@@ -1112,7 +1115,17 @@ namespace DshEnhanced.WindowsLauncher
 
             buildDshButton.Click += delegate { RunDshBuild(); };
             buildDshButton.Enabled = runtime.ResolveDshSource() != null;
-            sourceCard.Controls.Add(buildDshButton);
+            sourceActions = new FlowLayoutPanel();
+            sourceActions.BackColor = UiTheme.Surface;
+            sourceActions.Controls.Add(buildDshButton);
+            ModernButton openSourceLogs = NewButton("打开日志目录", ModernButtonKind.Secondary, 126);
+            openSourceLogs.Click += delegate { runtime.OpenLogFolder(); };
+            sourceActions.Controls.Add(openSourceLogs);
+            sourceCard.Controls.Add(sourceActions);
+
+            sourceStatusLabel = NewLabel("运行日志 · 执行结果会自动保存", 9f, FontStyle.Regular, UiTheme.Muted);
+            sourceStatusLabel.AutoSize = false;
+            sourceCard.Controls.Add(sourceStatusLabel);
 
             sourceLogShell = NewEditorShell();
             sourceCard.Controls.Add(sourceLogShell);
@@ -1120,7 +1133,7 @@ namespace DshEnhanced.WindowsLauncher
             sourceOutput.BorderStyle = BorderStyle.None;
             sourceOutput.BackColor = UiTheme.SurfaceSoft;
             sourceOutput.ForeColor = UiTheme.Text;
-            sourceOutput.Font = new Font("Consolas", 8.5f, FontStyle.Regular);
+            sourceOutput.Font = new Font("Consolas", 10f, FontStyle.Regular);
             sourceOutput.Dock = DockStyle.Fill;
             sourceOutput.Text = runtime.DshSourceBuildLog();
             sourceLogShell.Controls.Add(sourceOutput);
@@ -1389,13 +1402,17 @@ namespace DshEnhanced.WindowsLauncher
             GetContentBounds(sourcePage, out left, out width);
             if (width < 1) return;
 
-            int logTop = Dip(174);
+            int innerWidth = Math.Max(Dip(120), width - Dip(56));
+            int actionsHeight = FlowLayoutHeight(sourceActions, innerWidth, Dip(50));
+            SetBoundsIfChanged(sourceActions, Dip(28), Dip(112), innerWidth, actionsHeight);
+            int statusHeight = Math.Max(Dip(24), sourceStatusLabel.GetPreferredSize(new Size(innerWidth, 0)).Height);
+            SetBoundsIfChanged(sourceStatusLabel, Dip(28), sourceActions.Bottom + Dip(8), innerWidth, statusHeight);
+            int logTop = sourceStatusLabel.Bottom + Dip(10);
             int height = Math.Max(logTop + Dip(214), sourcePage.ClientSize.Height - Dip(2));
             SetBoundsIfChanged(sourceCard, left, 0, width, height);
             LayoutCardHeader(sourceCard);
             SetBoundsIfChanged(sourcePathLabel, Dip(28), Dip(76), Math.Max(Dip(120), width - Dip(56)), Dip(24));
-            buildDshButton.Location = new Point(Dip(28), Dip(112));
-            SetBoundsIfChanged(sourceLogShell, Dip(28), logTop, Math.Max(Dip(120), width - Dip(56)),
+            SetBoundsIfChanged(sourceLogShell, Dip(28), logTop, innerWidth,
                 Math.Max(Dip(180), height - logTop - Dip(28)));
             sourcePage.AutoScrollMinSize = new Size(0, height);
         }
@@ -1630,7 +1647,22 @@ namespace DshEnhanced.WindowsLauncher
             else if (!firstShow && String.Equals(page, "source", StringComparison.OrdinalIgnoreCase))
             {
                 ShowPage(sourcePage, sourceNav, "DSH 源码");
-                if (captureMode) sourceOutput.Text = CaptureLogSample("DSH 源码构建日志");
+                if (String.Equals(layout, "sourcefailure", StringComparison.OrdinalIgnoreCase))
+                {
+                    string expectedLog = runtime.DshSourceBuildLog().Replace("\r\n", "\n");
+                    RefreshSourceLog(true);
+                    ShowPage(overviewPage, overviewNav, "概览");
+                    ShowPage(sourcePage, sourceNav, "DSH 源码");
+                    RefreshSourceLog(true);
+                    if (!expectedLog.Contains("失败") || sourceOutput.Text != expectedLog)
+                        throw new InvalidOperationException("Source failure details must survive refresh and page navigation.");
+                    sourceOutput.Select(0, 0);
+                    RefreshSourceLog(true);
+                    if (sourceOutput.SelectionStart != 0)
+                        throw new InvalidOperationException("Unchanged source logs must not reset the reader's selection.");
+                    SetSourceStatus(OperationResult.Fail("Git 拉取失败（退出码 128）。未执行构建。请检查网络或 Git 代理后重试。详细原因见运行日志。"));
+                }
+                else if (captureMode) sourceOutput.Text = CaptureLogSample("DSH 源码构建日志");
                 sourceNav.Focus();
             }
             else if (!firstShow && String.Equals(page, "plugins", StringComparison.OrdinalIgnoreCase))
@@ -1742,8 +1774,12 @@ namespace DshEnhanced.WindowsLauncher
             else if (activePage == sourcePage)
             {
                 EnsureContained(sourceCard, sourcePathLabel, "DSH source path");
-                EnsureContained(sourceCard, buildDshButton, "DSH source action");
+                EnsureContained(sourceCard, sourceActions, "DSH source actions");
+                EnsureContained(sourceActions, buildDshButton, "DSH source action");
+                EnsureContained(sourceCard, sourceStatusLabel, "DSH source status");
                 EnsureContained(sourceCard, sourceLogShell, "DSH source log");
+                if (sourceStatusLabel.Top < sourceActions.Bottom || sourceLogShell.Top < sourceStatusLabel.Bottom)
+                    throw new InvalidOperationException("Source actions, result and log must not overlap.");
             }
             else if (activePage == pluginPage)
             {
@@ -1842,6 +1878,10 @@ namespace DshEnhanced.WindowsLauncher
             }
             if (Interlocked.CompareExchange(ref buildInProgress, 1, 0) != 0) return;
             buildDshButton.Enabled = false;
+            buildDshButton.Text = "更新与构建中…";
+            sourceStatusLabel.Text = "执行中 · " + (updateSource ? "拉取成功后才会开始构建，请稍候…" : "已跳过 Git，正在构建本地源码…");
+            sourceStatusLabel.ForeColor = UiTheme.Primary;
+            LayoutSource();
             sourceOutput.Text = (updateSource ? "正在拉取最新 DSH 源码并构建…" : "未检测到 Git，正在仅构建 DSH 源码…")
                 + Environment.NewLine + "源码目录: " + source + Environment.NewLine
                 + "日志将自动刷新，无需离开当前页面。";
@@ -1868,11 +1908,20 @@ namespace DshEnhanced.WindowsLauncher
                         sourceOutput.SelectionStart = sourceOutput.TextLength;
                         sourceOutput.ScrollToCaret();
                         buildDshButton.Enabled = runtime.ResolveDshSource() != null;
+                        buildDshButton.Text = "拉取最新源码并构建";
+                        SetSourceStatus(result);
                         ShowToast(result);
                     }));
                 }
                 catch (InvalidOperationException) { }
             });
+        }
+
+        private void SetSourceStatus(OperationResult result)
+        {
+            sourceStatusLabel.Text = result.Message;
+            sourceStatusLabel.ForeColor = result.Success ? UiTheme.Success : UiTheme.Danger;
+            if (activePage == sourcePage) LayoutSource();
         }
 
         private void UpdateSourcePath()
@@ -1884,7 +1933,9 @@ namespace DshEnhanced.WindowsLauncher
 
         private void RefreshSourceLog(bool followTail)
         {
-            string log = runtime.DshSourceBuildLog();
+            // RichEdit normalizes CRLF to LF. Comparing unnormalized file text
+            // would replace the whole document on every idle refresh.
+            string log = runtime.DshSourceBuildLog().Replace("\r\n", "\n");
             if (String.Equals(sourceOutput.Text, log, StringComparison.Ordinal)) return;
             sourceOutput.Text = log;
             if (followTail)
