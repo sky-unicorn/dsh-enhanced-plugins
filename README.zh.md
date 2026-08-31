@@ -130,7 +130,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
   源码操作进程会临时设置 `pnpm_config_verify_deps_before_run=false`，防止 pnpm 的[脚本前自动安装](https://pnpm.io/settings/build#verifydepsbeforerun)在明确的冻结安装步骤前改写锁文件；不会修改仓库或全局 pnpm 配置。
 
 - **诊断：** 汇总命令、端口、工作目录、运行状态和日志，并提供独立的 DSH 源码页。
-- **桌面体验：** 系统托盘、可选登录启动、各尺寸统一的居中纵向布局、逐显示器 DPI 缩放，以及不受 Windows 主题影响的统一圆角页面与文本区域滚动条；日志与诊断、任务输入/输出、源码构建日志和插件运行日志均使用相同样式，并支持滚轮、触控板、拖动、轨道翻页与键盘滚动。Launcher 会记住最后使用的显示器和正常窗口位置，显示器拓扑或工作区变化后会自动收回可见区域。
+- **桌面体验：** 系统托盘、可选登录启动、各尺寸统一的居中纵向布局、逐显示器 DPI 缩放，以及不受 Windows 主题影响的统一圆角页面与文本区域滚动条；日志与诊断、任务输入/输出、源码构建日志和插件运行日志均使用相同样式，并支持滚轮、触控板、拖动、轨道翻页与键盘滚动。所有日志视图会过滤文本框无法解释的 ANSI／ECMA-48 终端控制序列，保留可读内容且不改写原始 UTF-8 日志文件。Launcher 会记住最后使用的显示器和正常窗口位置，显示器拓扑或工作区变化后会自动收回可见区域。
 
 <details>
 <summary><strong>进程所有权、退出与后台行为</strong></summary>

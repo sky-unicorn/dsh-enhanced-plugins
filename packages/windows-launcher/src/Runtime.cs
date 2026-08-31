@@ -924,7 +924,8 @@ namespace DshEnhanced.WindowsLauncher
                     Task.WaitAll(stdoutRead, stderrRead);
                     string stdout = stdoutRead.Result;
                     string stderr = stderrRead.Result;
-                    output = stdout + (String.IsNullOrWhiteSpace(stderr) ? String.Empty : Environment.NewLine + stderr);
+                    output = TerminalText.ForDisplay(stdout
+                        + (String.IsNullOrWhiteSpace(stderr) ? String.Empty : Environment.NewLine + stderr));
                     if (process.ExitCode != 0)
                         return OperationResult.Fail("命令执行失败，退出码 " + process.ExitCode.ToString() + "。");
                 }
@@ -1023,7 +1024,7 @@ namespace DshEnhanced.WindowsLauncher
                         tail.Enqueue(line);
                         if (tail.Count > lines) tail.Dequeue();
                     }
-                    return String.Join(Environment.NewLine, tail.ToArray());
+                    return TerminalText.ForDisplay(String.Join(Environment.NewLine, tail.ToArray()));
                 }
             }
             catch (Exception error)

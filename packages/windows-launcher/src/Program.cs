@@ -88,6 +88,7 @@ namespace DshEnhanced.WindowsLauncher
                     && WindowPlacementGeometry.SelfTest()
                     && ModernScrollPage.SelfTest()
                     && ModernTextAreaScroll.SelfTest()
+                    && TerminalText.SelfTest()
                     && LauncherRuntime.SourceLogSelfTest();
                 File.WriteAllText(args[1], complete ? "SELF_TEST_OK" : "SELF_TEST_INCOMPLETE", new UTF8Encoding(false));
                 return complete ? 0 : 1;

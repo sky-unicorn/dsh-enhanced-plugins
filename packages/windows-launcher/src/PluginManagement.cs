@@ -346,7 +346,8 @@ namespace DshEnhanced.WindowsLauncher
                 }
                 string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
                 int tailStart = Math.Max(0, lines.Length - 280);
-                string tail = String.Join(Environment.NewLine, lines, tailStart, lines.Length - tailStart);
+                string tail = TerminalText.ForDisplay(
+                    String.Join(Environment.NewLine, lines, tailStart, lines.Length - tailStart));
                 return truncated ? "…较早日志已省略，完整日志请打开请求目录查看…" + Environment.NewLine + tail : tail;
             }
             catch (Exception error)
