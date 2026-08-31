@@ -11,7 +11,6 @@
  */
 
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 
 /** The `serverName` contract, mirrored by the Web card's client-side check. */
 export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
@@ -75,7 +74,7 @@ export const ServerDefinition = z.union([
 ]) as unknown as z<ServerDefinition>
 
 /** Settings namespace key for the `mcp` section. */
-export const MCP_SETTINGS_NAMESPACE = settingsNamespace('mcp')
+export const MCP_SETTINGS_NAMESPACE = 'mcp'
 
 /** The `mcp` settings namespace schema. */
 export const Config = z.object({

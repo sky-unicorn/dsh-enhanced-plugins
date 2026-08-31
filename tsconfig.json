@@ -41,6 +41,7 @@
     }
   },
   "include": [
+    "src/dsh-alpha2-settings.d.ts",
     "src/index.ts",
     "src/agent-team-monitor/shared.ts",
     "src/agent-team-monitor/host/**/*.ts",

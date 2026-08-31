@@ -135,15 +135,29 @@ function Get-ProfileDependencies {
     throw "Cannot inspect DSH profile '$ProfileName'; list exited with code $listExitCode."
   }
 
-  $output = $outputLines -join [Environment]::NewLine
-  $jsonStart = $output.IndexOf('[')
-  $jsonEnd = $output.LastIndexOf(']')
-  if ($jsonStart -lt 0 -or $jsonEnd -lt $jsonStart) {
+  # A newly initialized DSH profile may emit a prefixed `[WARN]` line before
+  # the pretty-printed JSON array. Match the root delimiters as complete lines
+  # so a log-level bracket can never become the JSON start.
+  $jsonStartLine = -1
+  $jsonEndLine = -1
+  for ($index = 0; $index -lt $outputLines.Count; $index += 1) {
+    if ([string] $outputLines[$index] -eq '[') {
+      $jsonStartLine = $index
+      break
+    }
+  }
+  for ($index = $outputLines.Count - 1; $index -ge 0; $index -= 1) {
+    if ([string] $outputLines[$index] -eq ']') {
+      $jsonEndLine = $index
+      break
+    }
+  }
+  if ($jsonStartLine -lt 0 -or $jsonEndLine -lt $jsonStartLine) {
     throw "Cannot parse the dependency list returned for DSH profile '$ProfileName'."
   }
 
   try {
-    $inventory = $output.Substring($jsonStart, $jsonEnd - $jsonStart + 1) |
+    $inventory = ($outputLines[$jsonStartLine..$jsonEndLine] -join [Environment]::NewLine) |
       ConvertFrom-Json
   } catch {
     throw "Cannot parse the dependency list returned for DSH profile '$ProfileName': $($_.Exception.Message)"

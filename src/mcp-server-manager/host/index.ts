@@ -18,7 +18,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import { McpServerManager } from './manager.js'
 import { McpConfigRemote } from './remote.js'
 import { MCP_SETTINGS_NAMESPACE, Config, type Config as McpConfig } from './schema.js'
@@ -61,12 +61,14 @@ export function apply(ctx: Context, config: McpConfig): void {
   const manager = new McpServerManager(ctx)
   let current: () => McpConfig = () => config
 
-  installSettingsSection(ctx, MCP_SETTINGS_NAMESPACE, Config, config, {
-    validate: assertMcpConfigValid,
-    setSource: (source) => { current = source },
-    // The settings seam reports every resolved change; reconcile against the
-    // latest value. Unchanged servers are left alone (deep-equal short-circuit).
-    onChange: () => { manager.reconcile(current()) },
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, MCP_SETTINGS_NAMESPACE, Config, config, {
+      validate: assertMcpConfigValid,
+      setSource: (source) => { current = source },
+      // The settings seam reports every resolved change; reconcile against the
+      // latest value. Unchanged servers are left alone (deep-equal short-circuit).
+      onChange: () => { manager.reconcile(current()) },
+    })
   })
 
   // Serve the composition base even before a settings provider attaches; the

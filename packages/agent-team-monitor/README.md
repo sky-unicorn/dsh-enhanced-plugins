@@ -1,6 +1,6 @@
 # Official Agent Teams monitor / 官方团队监控
 
-Read-only Host adapter and Web panel for DSH `0.1.2-alpha.1` (ABI `b150a551`).
+Read-only Host adapter and Web panel for DSH `0.1.2-alpha.2` (ABI `0a53fb55`).
 The session-owned icon appears in the composer's model/context group when workflow, Agent Teams or native child-session records exist. Click to open; switching sessions closes and clears it.
 Standard workflow monitoring needs no experimental Team runtime. Agent Teams itself must be enabled separately in the DSH source profile.
 This bundle never enables it, creates agents, adds model tools, changes tasks, or schedules work.

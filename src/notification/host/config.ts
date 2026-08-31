@@ -1,7 +1,6 @@
 /** Host-owned schema and namespace for desktop notifications. */
 
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   NOTIFICATION_SETTINGS_NAMESPACE,
@@ -57,7 +56,7 @@ const Size = z.union([
   z.const(176),
 ]) as unknown as z<PetSize>
 
-export const SETTINGS_NAMESPACE = settingsNamespace(NOTIFICATION_SETTINGS_NAMESPACE)
+export const SETTINGS_NAMESPACE = NOTIFICATION_SETTINGS_NAMESPACE
 
 export const Config: z<NotificationSettings> = z.object({
   completionSound: Sound.default(DEFAULT_NOTIFICATION_SETTINGS.completionSound)

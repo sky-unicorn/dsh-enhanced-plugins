@@ -1,7 +1,7 @@
 /** Task sounds and native desktop-pet Host plugin. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type { NotificationSettings } from '../shared.js'
 import { Config, SETTINGS_NAMESPACE } from './config.js'
@@ -52,12 +52,14 @@ export function apply(ctx: Context, config: NotificationSettings): void {
 
   ctx.effect(() => async () => { await migrationTail }, 'desktop notification settings migration')
 
-  installSettingsSection(ctx, SETTINGS_NAMESPACE, Config, config, {
-    setSource: (source) => { current = source },
-    onChange: () => {
-      companion.configure(current())
-      scheduleSettingsMigration()
-    },
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, SETTINGS_NAMESPACE, Config, config, {
+      setSource: (source) => { current = source },
+      onChange: () => {
+        companion.configure(current())
+        scheduleSettingsMigration()
+      },
+    })
   })
 
   // The standard Host settings RPC deliberately hides third-party namespaces.

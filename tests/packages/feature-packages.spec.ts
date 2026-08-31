@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { relative, resolve } from 'node:path'
+import { relative, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -114,19 +114,33 @@ describe('selective feature packages', () => {
     for (const feature of expectedFeatures) expect(listed.stdout).toContain(`${feature}\t`)
     expect(listed.stdout).not.toContain('referenced-file\t')
 
-    const selected = spawnSync('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-      '-Features', 'notification,mcp-server-manager', '-WhatIf',
-    ], { cwd: root, encoding: 'utf8' })
-    expect(selected.status, selected.stderr).toBe(0)
-    expect(selected.stdout).toContain("feature set 'mcp-server-manager,notification,windows-launcher'")
+    const whatIfHome = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-what-if-'))
+    try {
+      const env = {
+        ...process.env,
+        DSH_HOME: whatIfHome,
+        DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(whatIfHome, 'launcher'),
+      }
+      const selected = spawnSync('powershell.exe', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+        '-Features', 'notification,mcp-server-manager', '-WhatIf',
+      ], { cwd: root, encoding: 'utf8', env })
+      expect(selected.status, `${selected.stdout}\n${selected.stderr}`).toBe(0)
+      expect(selected.stdout).toContain("feature set 'mcp-server-manager,notification,windows-launcher'")
 
-    const none = spawnSync('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-      '-Features', 'none', '-WhatIf',
-    ], { cwd: root, encoding: 'utf8' })
-    expect(none.status, none.stderr).toBe(0)
-    expect(none.stdout).toContain("feature set 'none (+required windows-launcher)'")
+      const none = spawnSync('powershell.exe', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+        '-Features', 'none', '-WhatIf',
+      ], { cwd: root, encoding: 'utf8', env })
+      expect(none.status, `${none.stdout}\n${none.stderr}`).toBe(0)
+      expect(none.stdout).toContain("feature set 'none (+required windows-launcher)'")
+    } finally {
+      if (!whatIfHome.startsWith(resolve(tmpdir()) + sep)
+        || !whatIfHome.includes(`${sep}dsh-enhanced-what-if-`)) {
+        throw new Error('Refusing cleanup outside the what-if fixture directory')
+      }
+      rmSync(whatIfHome, { recursive: true, force: true })
+    }
 
     const managerDirectory = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-manager-catalog-'))
     try {
