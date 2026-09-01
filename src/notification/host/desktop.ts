@@ -184,6 +184,7 @@ export class DesktopCompanion {
         },
         graceMs: 1_500,
       })
+      this.attachInput(handle)
       this.handle = handle
       this.attachOutput(handle)
       void handle.done.then(
@@ -237,6 +238,15 @@ export class DesktopCompanion {
       ...(blockedCustomSoundPath === undefined ? {} : { blockedCustomSoundPath }),
       ...(placementState.activeDisplay === '' ? {} : { placementState }),
     }
+  }
+
+  private attachInput(handle: SubprocessHandle): void {
+    const stdin = handle.stdin
+    if (stdin === undefined) throw new Error('companion stdin is unavailable')
+    // A write callback observes the operation failure, but Node also emits the
+    // same pipe failure as an EventEmitter error. Retain this listener for the
+    // stream lifetime so shutdown races cannot surface as an uncaught EPIPE.
+    stdin.on('error', () => { /* Per-write callbacks and handle.done remain authoritative. */ })
   }
 
   private async loadPlacement(): Promise<void> {

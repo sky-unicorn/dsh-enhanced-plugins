@@ -17,6 +17,7 @@ if ($args.Count -ge 1 -and $args[0] -eq 'web') {
   $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $port)
   try {
     $listener.Start()
+    Write-Output "dsh web: http://127.0.0.1:$port/?token=LauncherFixtureToken_0123456789-abcdef"
     Write-Output "fixture web $ChineseListening on $port"
     while ($true) { Start-Sleep -Milliseconds 250 }
   } finally {

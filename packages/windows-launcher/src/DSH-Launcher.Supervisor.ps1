@@ -43,6 +43,7 @@ $requestId = [Guid]::Empty
 if (-not [Guid]::TryParse([string] $request.requestId, [ref] $requestId)) { throw 'Request id is invalid.' }
 $statePath = [string] $request.statePath
 $stopPath = [string] $request.stopPath
+$accessPath = [string] $request.accessPath
 $commandScript = Join-Path $PSScriptRoot 'DSH-Launcher.Command.ps1'
 if (-not (Test-Path -LiteralPath $commandScript -PathType Leaf)) { throw 'Launcher command engine is missing.' }
 
@@ -104,5 +105,6 @@ try {
 } finally {
   $runner.Dispose()
   Remove-Item -LiteralPath $stopPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $accessPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
 }

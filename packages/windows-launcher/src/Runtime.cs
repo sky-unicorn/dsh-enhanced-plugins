@@ -61,6 +61,7 @@ namespace DshEnhanced.WindowsLauncher
         public string resultPath { get; set; }
         public string statePath { get; set; }
         public string stopPath { get; set; }
+        public string accessPath { get; set; }
         public string task { get; set; }
         public string profile { get; set; }
         public string sourceDirectory { get; set; }
@@ -87,6 +88,14 @@ namespace DshEnhanced.WindowsLauncher
         public bool stoppedByLauncher { get; set; }
         public int port { get; set; }
         public string logPath { get; set; }
+    }
+
+    internal sealed class LauncherWebAccess
+    {
+        public string requestId { get; set; }
+        public int port { get; set; }
+        public string token { get; set; }
+        public string readyAtUtc { get; set; }
     }
 
     internal enum WebOwnership
@@ -192,6 +201,7 @@ namespace DshEnhanced.WindowsLauncher
         internal static readonly string Settings = Path.Combine(DataRoot, "settings.json");
         internal static readonly string State = Path.Combine(Run, "web-state.json");
         internal static readonly string Stop = Path.Combine(Run, "web-stop.txt");
+        internal static readonly string Access = Path.Combine(Run, "web-access.json");
         internal static readonly string ServerLog = Path.Combine(Logs, "dsh-web.log");
         internal static readonly string BuildLog = Path.Combine(Logs, "dsh-build.log");
         internal static readonly string LauncherLog = Path.Combine(Logs, "launcher.log");
@@ -539,8 +549,10 @@ namespace DshEnhanced.WindowsLauncher
             request.logPath = LauncherPaths.ServerLog;
             request.statePath = LauncherPaths.State;
             request.stopPath = LauncherPaths.Stop;
+            request.accessPath = LauncherPaths.Access;
             JsonFile.Write(requestPath, request);
             TryDelete(LauncherPaths.Stop);
+            TryDelete(LauncherPaths.Access);
 
             LauncherState pending = new LauncherState
             {
@@ -640,16 +652,58 @@ namespace DshEnhanced.WindowsLauncher
             WebStatusSnapshot status = Snapshot();
             if (status.Ownership == WebOwnership.Stopped || status.Ownership == WebOwnership.Starting)
                 return OperationResult.Fail("Web 尚未就绪。");
-            string url = "http://127.0.0.1:" + settings.Port.ToString();
+            string url = "http://127.0.0.1:" + settings.Port.ToString() + "/";
+            if (status.Ownership == WebOwnership.Owned)
+            {
+                url = WaitForOwnedWebUrl(status, 2000);
+                if (url == null)
+                    return OperationResult.Fail("Web 已监听，但当前进程的认证入口尚未就绪；请稍后重试。");
+            }
             try
             {
                 Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                return OperationResult.Ok("已打开 " + url);
+                return OperationResult.Ok("已打开 Web 页面。");
             }
             catch (Exception error)
             {
                 return OperationResult.Fail("无法打开浏览器：" + error.Message);
             }
+        }
+
+        private static string WaitForOwnedWebUrl(WebStatusSnapshot status, int timeoutMilliseconds)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+            do
+            {
+                string url = WebAccessUrl(JsonFile.Read<LauncherWebAccess>(LauncherPaths.Access),
+                    status.RequestId, status.Port);
+                if (url != null) return url;
+                Thread.Sleep(50);
+            }
+            while (DateTime.UtcNow < deadline);
+            return null;
+        }
+
+        private static string WebAccessUrl(LauncherWebAccess access, string requestId, int port)
+        {
+            if (access == null || String.IsNullOrEmpty(requestId)
+                || !String.Equals(access.requestId, requestId, StringComparison.Ordinal)
+                || access.port != port || !IsBase64UrlToken(access.token)) return null;
+            return "http://127.0.0.1:" + port.ToString() + "/?token=" + Uri.EscapeDataString(access.token);
+        }
+
+        private static bool IsBase64UrlToken(string value)
+        {
+            if (String.IsNullOrEmpty(value) || value.Length < 20 || value.Length > 256) return false;
+            foreach (char character in value)
+            {
+                bool allowed = character >= 'A' && character <= 'Z'
+                    || character >= 'a' && character <= 'z'
+                    || character >= '0' && character <= '9'
+                    || character == '_' || character == '-';
+                if (!allowed) return false;
+            }
+            return true;
         }
 
         internal OperationResult RunHeadless(string task, out string output)
@@ -894,6 +948,7 @@ namespace DshEnhanced.WindowsLauncher
                 logPath = LauncherPaths.ServerLog,
                 statePath = LauncherPaths.State,
                 stopPath = LauncherPaths.Stop,
+                accessPath = LauncherPaths.Access,
                 task = String.Empty,
                 profile = String.Empty,
                 sourceDirectory = String.Empty,
@@ -1051,6 +1106,26 @@ namespace DshEnhanced.WindowsLauncher
                 }
             }
             finally { TryDelete(path); }
+        }
+
+        internal static bool WebAccessSelfTest()
+        {
+            LauncherWebAccess valid = new LauncherWebAccess
+            {
+                requestId = "request-a",
+                port = 3080,
+                token = "LauncherFixtureToken_0123456789-abcdef",
+            };
+            return WebAccessUrl(valid, "request-a", 3080)
+                    == "http://127.0.0.1:3080/?token=LauncherFixtureToken_0123456789-abcdef"
+                && WebAccessUrl(valid, "request-b", 3080) == null
+                && WebAccessUrl(valid, "request-a", 3081) == null
+                && WebAccessUrl(new LauncherWebAccess
+                {
+                    requestId = "request-a",
+                    port = 3080,
+                    token = "not a token",
+                }, "request-a", 3080) == null;
         }
 
         private static void TryDelete(string path)

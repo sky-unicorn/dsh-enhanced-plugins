@@ -123,7 +123,7 @@ If a prerequisite step fails, the installer does not dismantle the previously wo
 
 A Windows control center outside the Cordis plugin tree for local DSH users who do not want to keep a terminal open.
 
-- **Web control:** inspect status, start, open, restart, or stop Web; identify services already bound to the port without taking ownership of them.
+- **Web control:** inspect status, start, open, restart, or stop Web; identify services already bound to the port without taking ownership of them. Even when browser auto-open is disabled, **Open Page** uses the authentication entry for the current Launcher-owned DSH process, and launch tokens are not written to Launcher logs.
 - **Tasks and profiles:** run one-shot Headless tasks and background profiles with unified UTF-8 results and logs.
 - **Source maintenance:** run `git pull --ff-only` against the bound DSH checkout, then `pnpm run clean`, `pnpm install --frozen-lockfile`, and `pnpm run build` in order. Without Git, confirmation skips only the pull and still runs all three pnpm steps. Before cleaning, Launcher checks the updated checkout for clean/build scripts and a lockfile, and verifies that pnpm is available. Any failed step stops the remaining steps; lockfile errors never fall back to an unfrozen install. Git progress and pnpm warnings are not treated as failures: the real exit code determines the outcome. The page distinguishes pull, clean, dependency-install, build, and environment failures, with larger log text and an Open Log Folder action. Full UTF-8 output, command-engine errors, and the final outcome remain in `logs/dsh-build.log` across refreshes and page navigation. Stop DSH instances using this checkout before running: clean removes existing build artifacts, which are not restored if a later step fails. Launcher does not automatically stop or restart DSH for this action; start it manually after a successful build.
 
@@ -175,7 +175,7 @@ Settings, runtime state, install state, update requests, and logs live under `%L
 
 The pet can be dragged across monitors and stores normalized per-monitor positions. Resolution, scale, work-area, or display-topology changes remap it into a visible area; changing the startup corner clears the drag record. The pet stays out of the taskbar and Alt+Tab task switcher; disable it in Settings when you want to hide it. Windows “Show animations” accessibility preferences reduce every state to a representative still frame when animations are disabled.
 
-Both the resident pet and short-lived sound processes are owned by the DSH subprocess service and exit cooperatively when disabled. A known retired pet ID is migrated to Flat Whale on the next launch; other unknown values continue to fail validation.
+Both the resident pet and short-lived sound processes are owned by the DSH subprocess service and exit cooperatively when disabled. Companion pipe closure during Ctrl+C, plugin reload, or ordinary shutdown is treated as a normal teardown condition. A known retired pet ID is migrated to Flat Whale on the next launch; other unknown values continue to fail validation.
 
 ### 3. Plugin Community
 
@@ -267,7 +267,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** plugin `0.4.0` targets DSH `0.1.2-alpha.3`, source commit `dd6322d604e00eec1ba5e0c8541159906a21094a`; its release tag is `0.4.0/dsh-0.1.2-alpha.3`. The aggregate, all seven standalone bundles, and Windows Launcher use `0.4.0`.
+- **Version pairing:** plugin `0.4.2` targets DSH `0.1.2-alpha.3`, source commit `dd6322d604e00eec1ba5e0c8541159906a21094a`; its release tag is `0.4.2/dsh-0.1.2-alpha.3`. The aggregate, all seven standalone bundles, and Windows Launcher use `0.4.2`.
 - **Installation preflight:** the installer and Launcher plugin updater read `dshEnhanced.compatibility` from the root `package.json` before building, stopping services, or changing a profile. A DSH version mismatch, missing declaration, or mixed plugin package versions stops installation. A matching version with a different Git commit, local source changes, or no Git metadata produces an unverified-source warning, not a claim of verified compatibility.
 - **Current interfaces:** Client features use `client-store`, `ui-session`, `ui-chat`, and public Remotes, without the removed `dsh-client-runtime`, `connection.api`, or `hostDescription`. Host settings owners pass validated namespace literals and use `SettingsProvider.installSection()` from the alpha.3 seam; Team Monitor replays cold history through the public Session projection registry. Some online cookbook examples still reference older APIs; this project follows the public interfaces of the source commit above.
 - **Provider provenance:** the `subagent-codex` and `subagent-claude-code` Loader IDs are unchanged. Their official implementations are re-exported through this package's `sub-agent/codex` and `sub-agent/claude-code` entries (`./codex` and `./claude-code` in the standalone bundle), so the new DeepSeek active-package inventory can resolve ownership without being disabled or changing DSH.

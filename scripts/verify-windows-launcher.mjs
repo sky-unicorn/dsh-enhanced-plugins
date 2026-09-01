@@ -482,6 +482,13 @@ try {
     if (status.status !== 0) return false
     return (await readJson(statusOutput)).ownership === 'Owned'
   }, 'launcher-owned Web readiness')
+  const ownedState = await readJson(resolve(dataRoot, 'run/web-state.json'))
+  const accessPath = resolve(dataRoot, 'run/web-access.json')
+  await waitFor(async () => stat(accessPath).then(() => true).catch(() => false), 'current Web authentication entry')
+  const access = await readJson(accessPath)
+  assert.equal(access.requestId, ownedState.requestId)
+  assert.equal(access.port, port)
+  assert.equal(access.token, 'LauncherFixtureToken_0123456789-abcdef')
 
   const stopOutput = resolve(temporary, 'stop.json')
   const stop = run(executable, ['--automation', 'stop-and-wait', stopOutput], { env: environment })
@@ -494,9 +501,13 @@ try {
   }, 'launcher-owned Web shutdown')
   started = false
   const webLogText = await readFile(resolve(dataRoot, 'logs/dsh-web.log'), 'utf8')
-  if (!webLogText.includes(`fixture web 中文监听 on ${port}`) || webLogText.includes('\0')) {
+  if (!webLogText.includes(`fixture web 中文监听 on ${port}`)
+      || !webLogText.includes(`http://127.0.0.1:${port}/?token=<redacted>`)
+      || webLogText.includes('LauncherFixtureToken_0123456789-abcdef')
+      || webLogText.includes('\0')) {
     throw new Error(`Web log was not written as UTF-8: ${webLogText}`)
   }
+  assert.equal(await stat(accessPath).then(() => true).catch(() => false), false)
 
   const screenshot = resolve(temporary, 'launcher.png')
   const capture = run(executable, ['--screenshot', screenshot], { env: environment })

@@ -32,7 +32,7 @@ for (const name of readdirSync(resolve(root, 'packages'))) {
   const entries = manifest.dshEnhanced.runtimeEntries ?? Object.values(manifest.exports).filter(value => value.startsWith('./lib/'))
   for (const entry of entries) assert.ok(existsSync(resolve(workspace, entry)), `${manifest.name}: missing ${entry}`)
   const repacked = JSON.parse(run(process.execPath, [npm, 'pack', '--dry-run', '--ignore-scripts', '--json'], workspace))[0]
-  assert.equal(repacked.version, '0.4.0')
+  assert.equal(repacked.version, '0.4.2')
   report.push({ name: manifest.name, version: manifest.version, prepare: 'passed', files: repacked.files.length })
   console.log(`${manifest.name}: isolated prepare and pack passed`)
 }

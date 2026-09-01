@@ -123,7 +123,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 独立于 Cordis 插件树的 Windows 控制中心，适合不想长期守着终端的本地 DSH 用户。
 
-- **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。
+- **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。即使关闭了启动时自动打开浏览器，“打开页面”也会使用当前 Launcher-owned DSH 进程的认证入口，启动 token 不会写入 Launcher 日志。
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
 - **源码维护：** 对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后依次运行 `pnpm run clean`、`pnpm install --frozen-lockfile`、`pnpm run build`。无 Git 时经确认只跳过拉取，仍执行这三个 pnpm 步骤；清理前会检查更新后的 checkout 是否具备 clean/build 脚本和锁文件，以及 pnpm 是否可用。任一步失败即停止后续步骤，锁文件错误不会降级为非冻结安装。Git 进度和 pnpm 警告不会被误判为失败，操作以真实退出码为准。页面会区分拉取、清理、依赖安装、构建与环境错误，放大的日志文字和“打开日志目录”入口便于排查；完整 UTF-8 输出、命令引擎错误及最终结果保存在 `logs/dsh-build.log`，刷新或重新进入页面不会丢失。运行前请先停止使用此 checkout 的 DSH：清理会删除现有构建产物，后续步骤失败时旧产物不会恢复。本操作不会自动停止或重启 DSH，请在构建成功后手动启动服务。
 
@@ -175,7 +175,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 桌宠可跨显示器拖动，并按显示器保存归一化位置；分辨率、缩放、工作区或显示器连接变化后会重新换算到可见区域。修改启动角落会清除拖动记录。桌宠不会出现在任务栏或 Alt+Tab 任务切换器中；需要隐藏时请在设置中关闭桌宠。Windows 开启“减弱动画”后，每种状态会使用代表静态帧。
 
-常驻宠物和短生命周期提示音进程都由 DSH subprocess service 管理，关闭功能时会协作式退出。若旧配置保存了已经退役的已知桌宠 ID，下次启动会迁移为“平面小鲸”；其他未知值仍会校验失败。
+常驻宠物和短生命周期提示音进程都由 DSH subprocess service 管理，关闭功能时会协作式退出；Ctrl+C、插件重载或正常关闭期间的 companion 管道断开会按正常清理处理。若旧配置保存了已经退役的已知桌宠 ID，下次启动会迁移为“平面小鲸”；其他未知值仍会校验失败。
 
 ### 3. 插件社区
 
@@ -267,7 +267,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `0.4.0` 对应 DSH `0.1.2-alpha.3`，源码基线 commit 为 `dd6322d604e00eec1ba5e0c8541159906a21094a`；插件发布 tag 为 `0.4.0/dsh-0.1.2-alpha.3`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `0.4.0`。
+- **版本对应：** 插件 `0.4.2` 对应 DSH `0.1.2-alpha.3`，源码基线 commit 为 `dd6322d604e00eec1ba5e0c8541159906a21094a`；插件发布 tag 为 `0.4.2/dsh-0.1.2-alpha.3`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `0.4.2`。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 Git commit 不同、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告，不将它描述为已验证兼容。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 alpha.3 的 `SettingsProvider.installSection()`；Team Monitor 通过公开 Session projection registry 回放冷历史。在线 cookbook 中仍有旧接口示例，本项目以以上源码 commit 的公开接口为准。
 - **提供方来源：** `subagent-codex`、`subagent-claude-code` 的 Loader ID 不变，改由本包的 `sub-agent/codex`、`sub-agent/claude-code` 入口转出官方提供方；独立包对应 `./codex`、`./claude-code`。这样新版 DeepSeek 请求的活动插件清单能解析其包来源，无需关闭该功能或修改 DSH。

@@ -13,6 +13,41 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
 
+function Publish-WebAccess {
+  param(
+    [string] $Line,
+    [string] $AccessPath,
+    [string] $RequestId,
+    [int] $ExpectedPort
+  )
+
+  if ([string]::IsNullOrWhiteSpace($AccessPath) -or
+    [string]::IsNullOrWhiteSpace($RequestId) -or $ExpectedPort -le 0) { return }
+  $escapedPort = [regex]::Escape([string] $ExpectedPort)
+  $match = [regex]::Match($Line,
+    '^dsh web: http://127\.0\.0\.1:' + $escapedPort + '/\?token=([A-Za-z0-9_-]{20,256})(?:\s|$)')
+  if (-not $match.Success) { return }
+
+  $directory = Split-Path -Parent $AccessPath
+  if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+    [void](New-Item -ItemType Directory -Force -Path $directory)
+  }
+  $temporary = $AccessPath + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+  $value = [ordered]@{
+    requestId = $RequestId
+    port = $ExpectedPort
+    token = $match.Groups[1].Value
+    readyAtUtc = [DateTime]::UtcNow.ToString('o')
+  }
+  [System.IO.File]::WriteAllText($temporary, ($value | ConvertTo-Json -Compress), $Utf8NoBom)
+  Move-Item -LiteralPath $temporary -Destination $AccessPath -Force
+}
+
+function Protect-LoggedWebUrl {
+  param([string] $Line)
+  return [regex]::Replace($Line, '([?&]token=)[A-Za-z0-9_-]+', '$1<redacted>')
+}
+
 function Invoke-LoggedDsh {
   param(
     [Parameter(Mandatory = $true)]
@@ -25,7 +60,13 @@ function Invoke-LoggedDsh {
     [string] $LogPath,
 
     [Parameter(Mandatory = $true)]
-    [string] $Header
+    [string] $Header,
+
+    [string] $AccessPath = '',
+
+    [string] $RequestId = '',
+
+    [int] $ExpectedPort = 0
   )
 
   $logDirectory = Split-Path -Parent $LogPath
@@ -43,9 +84,11 @@ function Invoke-LoggedDsh {
     $ErrorActionPreference = 'Continue'
     & $Command @Arguments 2>&1 | ForEach-Object {
       $line = [string] $_
-      $writer.WriteLine($line)
+      Publish-WebAccess $line $AccessPath $RequestId $ExpectedPort
+      $logLine = Protect-LoggedWebUrl $line
+      $writer.WriteLine($logLine)
       $writer.Flush()
-      $tail.Enqueue($line)
+      $tail.Enqueue($logLine)
       if ($tail.Count -gt 24) { [void] $tail.Dequeue() }
     }
     $code = $LASTEXITCODE
@@ -250,7 +293,10 @@ try {
         -Command $dsh `
         -Arguments $arguments `
         -LogPath $logPath `
-        -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) dsh web --port $port ====="
+        -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) dsh web --port $port =====" `
+        -AccessPath ([string] $request.accessPath) `
+        -RequestId ([string] $request.requestId) `
+        -ExpectedPort $port
       exit $webResult.code
     }
   }
