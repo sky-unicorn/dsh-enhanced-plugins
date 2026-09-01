@@ -16,6 +16,10 @@ class FakeSession {
   readonly surface = { nodes: [] as number[] }
   readonly header = { id: 'session-1' }
 
+  eventAt(seq: number): FakeEvent | undefined {
+    return this.events[seq]
+  }
+
   append(type: string, data: Record<string, unknown>, options?: {
     surfaceOp: 'append' | { op: 'replace'; start: number; end: number }
     sourceEventSeqs?: number[]

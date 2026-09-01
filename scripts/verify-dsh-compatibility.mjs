@@ -21,7 +21,7 @@ const packages = readdirSync(resolve(root, 'packages'))
 const allNames = [manifest.name, ...packages.map(value => value.name)]
 const scratch = resolve(root, '.verify-dsh-home')
 mkdirSync(scratch, { recursive: true })
-const home = mkdtempSync(resolve(scratch, 'selection-040-'))
+const home = mkdtempSync(resolve(scratch, 'selection-050-'))
 const env = { ...process.env, DSH_HOME: home,
   DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(home, 'launcher'),
   DEEPSEEK_API_KEY: 'compatibility-fixture', DEEPSEEK_BASE_URL: 'http://127.0.0.1:1/v1' }

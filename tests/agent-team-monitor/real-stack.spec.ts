@@ -57,17 +57,17 @@ it('observes real continuable teammates, unloads without affecting them, and rep
     const task = await ctx.agentTeams.createTask(lead, { subject: 'Read contracts', description: 'Inspect public ABI', writeScopes: ['src'] })
     await ctx.agentTeams.updateTask(lead, { taskId: task.id, expectedRevision: task.revision, action: 'reassign', owner: 'researcher' })
     const remote = ctx.get('agentTeamMonitor') as Monitor.AgentTeamMonitorRemote
-    const before = lead.session.events.length
+    const before = lead.session.seq
     const view = await remote.describe({ sessionId: lead.id }, new AbortController().signal)
     expect(view).toMatchObject({ kind: 'team', source: 'live', counts: { members: 2, tasks: 1 } })
-    expect(lead.session.events.length).toBe(before)
+    expect(lead.session.seq).toBe(before)
     if (view.kind !== 'team') throw new Error('Expected real Team view')
     expect(view.members[1]).toMatchObject({ name: 'researcher', status: 'inactive' })
     expect(view.catalog).toMatchObject({ state: 'ready', total: 1, sessions: [{ id: created.member.id, status: 'completed', navigable: true }] })
     await monitorFiber.dispose()
     expect(ctx.agents.get(lead.id)).toBe(lead)
     expect(ctx.agentTeams.listTasks(lead)[0]?.status).toBe('in_progress')
-    expect(lead.session.events.length).toBe(before)
+    expect(lead.session.seq).toBe(before)
     expect(ctx.get('agentTeamMonitor')).toBeUndefined()
     await ctx.fiber.dispose(); contexts.pop()
     const { ctx: cold } = await stack(root); contexts.push(cold)

@@ -1,6 +1,6 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionSeq, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   EDIT_LAST_MESSAGE_PLUGIN, editLastMessageSource,
 } from '../shared.js'
@@ -43,8 +43,8 @@ function isHumanEditSource(source: unknown): boolean {
   return editLastMessageSource(source) !== undefined
 }
 
-function editableTarget(session: Session, messageSeq: number): EditableTarget {
-  const event = session.events[messageSeq]
+function editableTarget(session: Session, messageSeq: SessionSeq): EditableTarget {
+  const event = session.eventAt(messageSeq)
   if (event === undefined || event.seq !== messageSeq || event.type !== 'user/message') {
     throw new Error('the edited message is no longer available')
   }
@@ -52,7 +52,7 @@ function editableTarget(session: Session, messageSeq: number): EditableTarget {
     throw new Error('the addressed message is not editable user input')
   }
   const latest = [...session.surface.nodes].reverse().find((seq) => {
-    const candidate = session.events[seq]
+    const candidate = session.eventAt(seq)
     return candidate?.type === 'user/message' && isHumanEditSource(candidate.data.source)
   })
   if (latest !== messageSeq) throw new Error('the message is no longer the latest user message')
@@ -72,12 +72,12 @@ interface AppendInterception {
 }
 
 interface ReplacementPlan {
-  readonly start: number
-  readonly end: number
-  readonly sourceEventSeqs: readonly number[]
+  readonly start: SessionSeq
+  readonly end: SessionSeq
+  readonly sourceEventSeqs: readonly SessionSeq[]
 }
 
-function replacementPlan(session: Session, targetSeq: number): ReplacementPlan {
+function replacementPlan(session: Session, targetSeq: SessionSeq): ReplacementPlan {
   const nodes = session.surface.nodes
   const startIndex = nodes.indexOf(targetSeq)
   if (startIndex < 0) throw new Error('the edited message left the current model context')
@@ -154,7 +154,8 @@ export async function rewriteLastMessage(
   if (text.trim().length === 0) throw new Error('replacement message is empty')
   if (agent.status !== 'idle') throw new Error('the session is still running')
   if (agent.inbox.nextTurn.length > 0) throw new Error('the session already has queued user messages')
-  const target = editableTarget(agent.session, request.messageSeq)
+  const targetSeq = SessionSeq(request.messageSeq)
+  const target = editableTarget(agent.session, targetSeq)
   const message = createUserMessage({
     content: [{ type: 'text', text }],
     source: {
@@ -173,8 +174,8 @@ export async function rewriteLastMessage(
       signal?.throwIfAborted()
       maintenanceSignal.throwIfAborted()
       if (agent.inbox.nextTurn.length > 0) throw new Error('the session already has queued user messages')
-      editableTarget(agent.session, request.messageSeq)
-      const plan = replacementPlan(agent.session, request.messageSeq)
+      editableTarget(agent.session, targetSeq)
+      const plan = replacementPlan(agent.session, targetSeq)
       interception = interceptReplacementAppend(agent.session, plan, String(message.id))
       agent.followup(message)
     })

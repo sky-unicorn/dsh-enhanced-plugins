@@ -74,7 +74,7 @@ export class NotificationStateTracker {
     for (const session of sessions) {
       const activity = activityOf(session)
       this.sessions.set(session.id, activity)
-      for (const event of session.events) this.apply(activity, event, false)
+      for (const event of session.snapshotEvents()) this.apply(activity, event, false)
     }
     return this.current()
   }

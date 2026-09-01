@@ -154,7 +154,7 @@ function session(id: string, origin?: 'subagent', events: SessionEvent[] = []): 
   return {
     id,
     header: { ...(origin === undefined ? {} : { origin }) },
-    events,
+    snapshotEvents: () => events,
   } as unknown as Session
 }
 

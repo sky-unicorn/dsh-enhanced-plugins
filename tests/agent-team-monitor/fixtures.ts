@@ -1,4 +1,7 @@
-import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
+import {
+  SessionId, SessionSeq,
+  type SessionEvent, type SessionHeader, type SessionLogOffset,
+} from '@deepseek-ai/dsh-session'
 import {
   TeamId,
   TeamTaskId,
@@ -12,7 +15,12 @@ import type { TeamProjectionState } from '../../src/agent-team-monitor/host/snap
 
 export const rootId = SessionId('team-root')
 export const memberId = SessionId('team-researcher')
-export const meta = { id: rootId, version: 1, createdAt: 1000 } as SessionHeader
+export const meta = {
+  id: rootId,
+  version: 1,
+  createdAt: 1000,
+  isSeeded: false,
+} as SessionHeader
 export const member: TeamMemberSnapshot = { id: memberId, name: 'researcher', description: 'Research the ABI', provider: 'spawn', context: 'fresh', phase: 'provisioning' }
 
 /** Valid version-one domain log, checked by the official replay function in tests. */
@@ -27,11 +35,19 @@ export function teamEvents(): SessionEvent[] {
     { type: 'team/task', data: { version: 1, teamId, task: { ...task, id: TeamTaskId('task-2'), subject: 'Build monitor', blockedBy: [TeamTaskId('task-1')], writeScopes: ['src/client'] } } },
     { type: 'team/message/queued', data: { version: 1, teamId, message: { id: TeamMessageId('mail-1'), senderId: rootId, senderName: 'lead', targetId: memberId, delivery: 'quiet', content: [{ type: 'text', text: 'PRIVATE_MAILBOX_BODY' }] } } },
   ]
-  return values.map((value, seq) => ({ ...value, seq, time: 1000 + seq })) as SessionEvent[]
+  return values.map((value, seq) => ({
+    ...value,
+    seq: SessionSeq(seq),
+    time: 1000 + seq,
+  })) as SessionEvent[]
 }
 
 /** Small fixture projector; real-stack coverage exercises DSH's registered projection implementation. */
-export function teamProjection(meta: SessionHeader, events: readonly SessionEvent[]): TeamProjectionState {
+export function teamProjection(
+  meta: SessionHeader,
+  _inheritedEventCount: SessionLogOffset,
+  events: readonly SessionEvent[],
+): TeamProjectionState {
   const members = new Map<string, TeamMemberSnapshot>()
   const tasks = new Map<string, TeamTaskSnapshot>()
   const messages = new Map<string, TeamMessageSnapshot>()

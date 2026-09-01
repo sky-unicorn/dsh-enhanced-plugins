@@ -1,5 +1,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+import type {
+  SessionEvent, SessionHeader, SessionId, SessionLogOffset,
+} from '@deepseek-ai/dsh-session'
 import type {
   ToolWorkflowRunStartData, ToolWorkflowAgentStartData, ToolWorkflowAgentEndData, ToolWorkflowRunEndData,
 } from '@deepseek-ai/dsh-tool-workflow/types'
@@ -36,13 +38,16 @@ function memberSequence(value: unknown): number {
  * No script evaluation, child enumeration, Agent activation, or inferred future phases.
  */
 export function describeWorkflows(
-  meta: SessionHeader, events: readonly SessionEvent[], agent: (id: SessionId) => Agent | undefined,
+  meta: SessionHeader,
+  inheritedEventCount: SessionLogOffset,
+  events: readonly SessionEvent[],
+  agent: (id: SessionId) => Agent | undefined,
 ): WorkflowActivity | undefined {
   const runs = new Map<string, RunState>()
   let turn: number | undefined
   let step: number | undefined
   let last: SessionEvent | undefined
-  for (const event of events.slice(meta.seedLength ?? 0)) {
+  for (const event of events.slice(inheritedEventCount)) {
     if (event.type === 'session/end-seed') {
       // A new activation of the parent cannot attest a previous workflow's
       // liveness. Keep unmatched seeded records unknown, never completed.

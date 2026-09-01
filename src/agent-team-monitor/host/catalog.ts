@@ -76,7 +76,7 @@ export async function describeCatalog(reads: CatalogReads, scopeId: SessionId, s
         if (inspected.meta.id !== entry.id || inspected.meta.origin !== 'subagent' || inspected.meta.parentSession !== entry.parentId) {
           row.diagnostic = 'corrupt'; continue
         }
-        const own = inspected.events.slice(inspected.meta.seedLength ?? 0)
+        const own = inspected.events.slice(inspected.inheritedEventCount)
         const title = ownTitle(own)
         if (title !== undefined) row.title = title
         row.createdAt = inspected.meta.createdAt

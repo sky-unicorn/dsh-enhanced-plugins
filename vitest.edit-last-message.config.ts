@@ -3,11 +3,13 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 const root = import.meta.dirname
+const dsh = resolve(root, '../deepseek-harness')
 
 export default defineConfig({
   resolve: {
     alias: exactDshAliases({
       '@deepseek-ai/dsh-llm': resolve(root, 'tests/edit-last-message/stubs/dsh-llm.ts'),
+      '@deepseek-ai/dsh-session': resolve(dsh, 'packages/core/session/lib/index.js'),
       '@deepseek-ai/dsh-client-ui-primitives': resolve(root, 'tests/edit-last-message/stubs/dsh-ui-primitives.tsx'),
       '@deepseek-ai/dsh-client-ui-attachment': resolve(root, 'tests/edit-last-message/stubs/dsh-ui-attachment.tsx')
     }),

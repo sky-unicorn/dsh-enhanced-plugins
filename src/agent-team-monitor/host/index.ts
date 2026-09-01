@@ -3,7 +3,7 @@ import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-subagent'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { describeMonitor, type CatalogReads } from './catalog.js'
 import { teamProjectionState } from './snapshot.js'
@@ -26,19 +26,31 @@ export class AgentTeamMonitorRemote extends TypertRemoteService {
       teamService: agent => agent?.ctx.get('agentTeams') ?? ctx.get('agentTeams'),
       inspect: async (id, signal) => {
         const live = ctx.sessions.get(id)
-        if (live !== undefined) return { meta: live.header, events: [...live.events] }
+        if (live !== undefined) {
+          return {
+            meta: live.header,
+            inheritedEventCount: live.inheritedEventCount,
+            events: live.snapshotEvents(),
+          }
+        }
         const persistence = ctx.get('sessionPersistence')
         if (persistence === undefined) throw new Error('session persistence unavailable')
         // inspect(), unlike load()/prepare(), never commits recovery or publishes an Agent.
         return persistence.inspect(id, signal)
       },
-      project: (meta, events) => {
+      project: (meta, inheritedEventCount, events) => {
         // The Team runtime owns and registers this host-only projection. The
         // public registry folds the cold log without publishing a Session or
         // activating an Agent; an absent runtime means the capability is absent.
         const projections = ctx.get('sessionProjections')
         if (projections === undefined) return undefined
-        const row = projections.restore({}, events, 0, meta).checkpoint.agentTeam
+        const row = projections.restore(
+          {},
+          events,
+          SessionLogOffset(0),
+          meta,
+          inheritedEventCount,
+        ).checkpoint.agentTeam
         return teamProjectionState(row?.val)
       },
     }

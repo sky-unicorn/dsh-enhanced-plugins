@@ -1,13 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { TeamService } from '@deepseek-ai/dsh-experimental-agent-team'
-import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import {
+  SessionId, SessionLogOffset, SessionSeq,
+  type SessionEvent, type SessionHeader,
+} from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { describeTeam, type MonitorReads } from '../../src/agent-team-monitor/host/snapshot.ts'
 import { meta, rootId, memberId, teamEvents, teamProjection } from './fixtures.ts'
 
+const inspection = (
+  header: SessionHeader,
+  events: readonly SessionEvent[],
+  inheritedEventCount = SessionLogOffset(0),
+) => ({ meta: header, inheritedEventCount, events })
+
 function reads(): MonitorReads {
   return { agent: () => undefined, teamService: () => undefined, project: teamProjection,
-    inspect: async id => id === rootId ? { meta, events: teamEvents() } : undefined }
+    inspect: async id => id === rootId ? inspection(meta, teamEvents()) : undefined }
 }
 const signal = () => new AbortController().signal
 
@@ -35,13 +44,17 @@ describe('official Team read model', () => {
   })
   it('does not mistake inherited events in a new root fork for the ancestor Team', async () => {
     const id = SessionId('fork')
-    const result = await describeTeam({ ...reads(), inspect: async () => ({ meta: { ...meta, id, parentSession: rootId }, events: teamEvents() }) }, id, signal())
+    const result = await describeTeam({ ...reads(), inspect: async () => inspection(
+      { ...meta, id, parentSession: rootId, isSeeded: true },
+      teamEvents(),
+      SessionLogOffset(teamEvents().length),
+    ) }, id, signal())
     expect(result).toMatchObject({ kind: 'unavailable', reason: 'not-team' })
   })
   it('accepts roster children but refuses ordinary subagents', async () => {
     const base = reads()
     const inspect: MonitorReads['inspect'] = async (id, signal) => id === rootId ? base.inspect(id, signal)
-      : { meta: { ...meta, id, origin: 'subagent', parentSession: rootId }, events: [] }
+      : inspection({ ...meta, id, origin: 'subagent', parentSession: rootId }, [])
     expect(await describeTeam({ ...base, inspect }, memberId, signal())).toMatchObject({ kind: 'team', teamId: rootId, sessionId: memberId })
     expect(await describeTeam({ ...base, inspect }, SessionId('other'), signal())).toMatchObject({ kind: 'unavailable', reason: 'not-team' })
   })
@@ -51,8 +64,8 @@ describe('official Team read model', () => {
     expect(result).toMatchObject({ kind: 'unavailable', reason: 'incompatible' })
     expect(JSON.stringify(result)).not.toContain('PRIVATE_BAD_EVENT')
     expect(await describeTeam({ ...reads(), project: () => undefined }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
-    const malformed = [{ type: 'team/member', seq: 0, time: 1000, data: { version: 1 } }] as SessionEvent[]
-    expect(await describeTeam({ ...reads(), inspect: async () => ({ meta, events: malformed }) }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
+    const malformed = [{ type: 'team/member', seq: SessionSeq(0), time: 1000, data: { version: 1 } }] as SessionEvent[]
+    expect(await describeTeam({ ...reads(), inspect: async () => inspection(meta, malformed) }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
   })
   it('cancels before accessing the store and reports missing storage distinctly', async () => {
     const inspect = vi.fn(reads().inspect)
@@ -63,10 +76,10 @@ describe('official Team read model', () => {
   it('unlocks downstream tasks after completion and counts only unacknowledged messages', async () => {
     const events = teamEvents()
     const taskEvent = events[3] as SessionEvent<'team/task'>
-    events.push({ ...taskEvent, seq: 6, time: 1006, data: { ...taskEvent.data, task: { ...taskEvent.data.task, revision: 3, status: 'completed' } } })
+    events.push({ ...taskEvent, seq: SessionSeq(6), time: 1006, data: { ...taskEvent.data, task: { ...taskEvent.data.task, revision: 3, status: 'completed' } } })
     const queued = events[5] as SessionEvent<'team/message/queued'>
-    events.push({ type: 'team/message/delivered', seq: 7, time: 1007, data: { version: 1, teamId: queued.data.teamId, messageId: queued.data.message.id, targetId: memberId } })
-    const result = await describeTeam({ ...reads(), inspect: async () => ({ meta, events }) }, rootId, signal())
+    events.push({ type: 'team/message/delivered', seq: SessionSeq(7), time: 1007, data: { version: 1, teamId: queued.data.teamId, messageId: queued.data.message.id, targetId: memberId } })
+    const result = await describeTeam({ ...reads(), inspect: async () => inspection(meta, events) }, rootId, signal())
     expect(result).toMatchObject({ counts: { completed: 1, blocked: 0, pendingMessages: 0 } })
     if (result.kind !== 'team') throw new Error('Expected team')
     expect(result.tasks[1]).toMatchObject({ ready: true, overlappingTaskIds: [] })

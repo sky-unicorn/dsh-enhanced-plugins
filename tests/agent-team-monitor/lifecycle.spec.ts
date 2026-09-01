@@ -1,4 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
+import { SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import { describe, expect, it } from 'vitest'
 import * as Host from '../../src/agent-team-monitor/host/index.ts'
@@ -9,7 +10,11 @@ describe('monitor Host fiber', () => {
     const ctx = new Context()
     const dependencies = ctx.plugin({ apply(scope: Context) {
       scope.reflect.provide('agents', { get: () => undefined })
-      scope.reflect.provide('sessions', { get: () => ({ header: meta, events: [] }) })
+      scope.reflect.provide('sessions', { get: () => ({
+        header: meta,
+        inheritedEventCount: SessionLogOffset(0),
+        snapshotEvents: () => [],
+      }) })
     } })
     await dependencies.await()
     const fiber = ctx.plugin(Host)

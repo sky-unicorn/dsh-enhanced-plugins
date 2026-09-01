@@ -1,5 +1,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { SessionHeader, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type {
+  SessionEvent, SessionHeader, SessionId, SessionLogOffset,
+} from '@deepseek-ai/dsh-session'
 import type {
   TeamMemberSnapshot,
   TeamMessageId,
@@ -10,7 +12,11 @@ import type {
 import { MONITOR_PROTOCOL, type MonitorMember, type MonitorSnapshot, type MonitorTask } from '../shared.js'
 import { describeWorkflows } from './workflow.js'
 
-type Inspection = { readonly meta: SessionHeader; readonly events: readonly SessionEvent[] }
+type Inspection = {
+  readonly meta: SessionHeader
+  readonly inheritedEventCount: SessionLogOffset
+  readonly events: readonly SessionEvent[]
+}
 
 /** Host-only state produced by the official registered `agentTeam` projection. */
 export interface TeamProjectionState {
@@ -42,7 +48,11 @@ export interface MonitorReads {
   agent(id: SessionId): Agent | undefined
   inspect(id: SessionId, signal: AbortSignal): Promise<Inspection | undefined>
   teamService(agent?: Agent): TeamService | undefined
-  project(meta: SessionHeader, events: readonly SessionEvent[]): TeamProjectionState | undefined
+  project(
+    meta: SessionHeader,
+    inheritedEventCount: SessionLogOffset,
+    events: readonly SessionEvent[],
+  ): TeamProjectionState | undefined
 }
 
 const MEMBER_LIMIT = 256
@@ -67,7 +77,14 @@ export async function describeTeam(reads: MonitorReads, sessionId: SessionId, si
   }
   if (selected === undefined) return unavailable('no-session')
   let workflows: ReturnType<typeof describeWorkflows>
-  try { workflows = describeWorkflows(selected.meta, selected.events, id => reads.agent(id)) } catch { return unavailable('incompatible') }
+  try {
+    workflows = describeWorkflows(
+      selected.meta,
+      selected.inheritedEventCount,
+      selected.events,
+      id => reads.agent(id),
+    )
+  } catch { return unavailable('incompatible') }
   const withoutTeam = (reason: 'not-team' | 'incompatible' = 'not-team'): MonitorSnapshot => workflows === undefined
     ? unavailable(reason)
     : { protocol: MONITOR_PROTOCOL, sessionId, enabled, kind: 'workflow',
@@ -94,7 +111,9 @@ export async function describeTeam(reads: MonitorReads, sessionId: SessionId, si
     && typeof event.data === 'object' && event.data !== null
     && 'teamId' in event.data && String(event.data.teamId) === String(root.meta.id))
   let state: TeamProjectionState | undefined
-  try { state = reads.project(root.meta, events) } catch { return unavailable('incompatible') }
+  try {
+    state = reads.project(root.meta, root.inheritedEventCount, events)
+  } catch { return unavailable('incompatible') }
   if (state === undefined || state.failure !== undefined || state.id !== root.meta.id) return unavailable('incompatible')
   // Validate even inherited/corrupt Team records before deciding there is no
   // Team. A malformed selector must not be disguised as an ordinary session.
