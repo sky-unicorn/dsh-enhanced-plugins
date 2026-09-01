@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { foldTeam, type TeamService } from '@deepseek-ai/dsh-experimental-agent-team'
+import type { TeamService } from '@deepseek-ai/dsh-experimental-agent-team'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { describeTeam, type MonitorReads } from '../../src/agent-team-monitor/host/snapshot.ts'
-import { meta, rootId, memberId, teamEvents } from './fixtures.ts'
+import { meta, rootId, memberId, teamEvents, teamProjection } from './fixtures.ts'
 
 function reads(): MonitorReads {
-  return { agent: () => undefined, teamService: () => undefined, fold: async () => foldTeam,
+  return { agent: () => undefined, teamService: () => undefined, project: teamProjection,
     inspect: async id => id === rootId ? { meta, events: teamEvents() } : undefined }
 }
 const signal = () => new AbortController().signal
@@ -46,11 +46,11 @@ describe('official Team read model', () => {
     expect(await describeTeam({ ...base, inspect }, SessionId('other'), signal())).toMatchObject({ kind: 'unavailable', reason: 'not-team' })
   })
   it('does not silently render corrupt or unsupported logs as empty', async () => {
-    const fold = () => { throw new Error('PRIVATE_BAD_EVENT') }
-    const result = await describeTeam({ ...reads(), fold: async () => fold }, rootId, signal())
+    const project = () => { throw new Error('PRIVATE_BAD_EVENT') }
+    const result = await describeTeam({ ...reads(), project }, rootId, signal())
     expect(result).toMatchObject({ kind: 'unavailable', reason: 'incompatible' })
     expect(JSON.stringify(result)).not.toContain('PRIVATE_BAD_EVENT')
-    expect(await describeTeam({ ...reads(), fold: async () => undefined }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
+    expect(await describeTeam({ ...reads(), project: () => undefined }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
     const malformed = [{ type: 'team/member', seq: 0, time: 1000, data: { version: 1 } }] as SessionEvent[]
     expect(await describeTeam({ ...reads(), inspect: async () => ({ meta, events: malformed }) }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
   })

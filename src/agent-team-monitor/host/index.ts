@@ -1,13 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-subagent'
-import type { foldTeam } from '@deepseek-ai/dsh-experimental-agent-team'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { describeMonitor, type CatalogReads } from './catalog.js'
+import { teamProjectionState } from './snapshot.js'
 import type { MonitorSnapshot } from '../shared.js'
 
 export const name = 'agent-team-monitor'
@@ -33,16 +32,14 @@ export class AgentTeamMonitorRemote extends TypertRemoteService {
         // inspect(), unlike load()/prepare(), never commits recovery or publishes an Agent.
         return persistence.inspect(id, signal)
       },
-      fold: async () => {
-        // Experimental packages are not on npm. Resolve the public entry from
-        // the running profile, never from a guessed checkout/source path.
-        try {
-          const require = createRequire(ctx.baseUrl ?? import.meta.url)
-          const exported: unknown = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-experimental-agent-team')).href)
-          if (typeof exported !== 'object' || exported === null || !('foldTeam' in exported)
-            || typeof exported.foldTeam !== 'function') return undefined
-          return exported.foldTeam as typeof foldTeam
-        } catch { return undefined }
+      project: (meta, events) => {
+        // The Team runtime owns and registers this host-only projection. The
+        // public registry folds the cold log without publishing a Session or
+        // activating an Agent; an absent runtime means the capability is absent.
+        const projections = ctx.get('sessionProjections')
+        if (projections === undefined) return undefined
+        const row = projections.restore({}, events, 0, meta).checkpoint.agentTeam
+        return teamProjectionState(row?.val)
       },
     }
     // Source-mode Typert marker, preserving Node 22 compatibility (no native decorators).

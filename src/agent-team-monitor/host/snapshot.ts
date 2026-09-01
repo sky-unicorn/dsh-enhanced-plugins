@@ -1,18 +1,48 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionHeader, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
-import type { TeamService, foldTeam } from '@deepseek-ai/dsh-experimental-agent-team'
+import type {
+  TeamMemberSnapshot,
+  TeamMessageId,
+  TeamMessageSnapshot,
+  TeamService,
+  TeamTaskSnapshot,
+} from '@deepseek-ai/dsh-experimental-agent-team'
 import { MONITOR_PROTOCOL, type MonitorMember, type MonitorSnapshot, type MonitorTask } from '../shared.js'
 import { describeWorkflows } from './workflow.js'
 
-type Fold = typeof foldTeam
 type Inspection = { readonly meta: SessionHeader; readonly events: readonly SessionEvent[] }
+
+/** Host-only state produced by the official registered `agentTeam` projection. */
+export interface TeamProjectionState {
+  readonly id: string
+  readonly members: readonly TeamMemberSnapshot[]
+  readonly tasks: readonly TeamTaskSnapshot[]
+  readonly messages: readonly TeamMessageSnapshot[]
+  readonly delivered: readonly TeamMessageId[]
+  readonly nextTaskNumber: number
+  readonly failure?: string
+}
+
+/** Narrow one public projection checkpoint value before this plugin consumes it. */
+export function teamProjectionState(value: unknown): TeamProjectionState | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const candidate = value as Partial<TeamProjectionState>
+  if (typeof candidate.id !== 'string'
+    || !Array.isArray(candidate.members)
+    || !Array.isArray(candidate.tasks)
+    || !Array.isArray(candidate.messages)
+    || !Array.isArray(candidate.delivered)
+    || !Number.isSafeInteger(candidate.nextTaskNumber)
+    || (candidate.failure !== undefined && typeof candidate.failure !== 'string')) return undefined
+  return candidate as TeamProjectionState
+}
 
 /** Public DSH read seams; kept injectable for lifecycle and side-effect tests. */
 export interface MonitorReads {
   agent(id: SessionId): Agent | undefined
   inspect(id: SessionId, signal: AbortSignal): Promise<Inspection | undefined>
   teamService(agent?: Agent): TeamService | undefined
-  fold(): Promise<Fold | undefined>
+  project(meta: SessionHeader, events: readonly SessionEvent[]): TeamProjectionState | undefined
 }
 
 const MEMBER_LIMIT = 256
@@ -30,10 +60,6 @@ export async function describeTeam(reads: MonitorReads, sessionId: SessionId, si
   let enabled = reads.teamService(reads.agent(sessionId)) !== undefined
   const unavailable = (reason: Extract<MonitorSnapshot, { kind: 'unavailable' }>['reason']): MonitorSnapshot =>
     ({ protocol: MONITOR_PROTOCOL, sessionId, enabled, kind: 'unavailable', reason })
-  // Resolve code before sampling the log. No asynchronous boundary separates
-  // the final root snapshot, its fold and the runtime-enriched roster read.
-  const fold = await reads.fold()
-  signal.throwIfAborted()
   let selected: Inspection | undefined
   try { selected = await reads.inspect(sessionId, signal) } catch {
     signal.throwIfAborted()
@@ -67,16 +93,17 @@ export async function describeTeam(reads: MonitorReads, sessionId: SessionId, si
   const owned = events.filter(event => TEAM_EVENTS.has(event.type)
     && typeof event.data === 'object' && event.data !== null
     && 'teamId' in event.data && String(event.data.teamId) === String(root.meta.id))
-  if (fold === undefined) return unavailable('incompatible')
-  let state: ReturnType<Fold>
-  try { state = fold(root.meta.id, events) } catch { return unavailable('incompatible') }
+  let state: TeamProjectionState | undefined
+  try { state = reads.project(root.meta, events) } catch { return unavailable('incompatible') }
+  if (state === undefined || state.failure !== undefined || state.id !== root.meta.id) return unavailable('incompatible')
   // Validate even inherited/corrupt Team records before deciding there is no
   // Team. A malformed selector must not be disguised as an ordinary session.
   if (owned.length === 0) return withoutTeam()
-  if (selected.meta.origin === 'subagent' && !state.members.has(selected.meta.id)) return withoutTeam()
+  if (selected.meta.origin === 'subagent' && !state.members.some(member => member.id === selected.meta.id)) return withoutTeam()
   const pending = new Map<string, number>()
-  for (const [id, message] of state.messages) {
-    if (!state.delivered.has(id)) pending.set(message.targetId, (pending.get(message.targetId) ?? 0) + 1)
+  const delivered = new Set(state.delivered)
+  for (const message of state.messages) {
+    if (!delivered.has(message.id)) pending.set(message.targetId, (pending.get(message.targetId) ?? 0) + 1)
   }
   let liveMembers: ReturnType<TeamService['listMembers']> | undefined
   if (agent !== undefined && service !== undefined) {
@@ -86,7 +113,7 @@ export async function describeTeam(reads: MonitorReads, sessionId: SessionId, si
   }
   const members: MonitorMember[] = liveMembers === undefined ? [
     { id: root.meta.id, name: 'lead', role: 'lead', status: 'inactive', description: '', pendingMessages: pending.get(root.meta.id) ?? 0, diagnosticCount: 0 },
-    ...[...state.members.values()].map((member): MonitorMember => ({
+    ...state.members.map((member): MonitorMember => ({
       id: member.id, name: member.name, role: 'teammate',
       status: member.phase === 'active' ? 'inactive' : member.phase,
       description: member.description, context: member.context,
@@ -104,16 +131,17 @@ export async function describeTeam(reads: MonitorReads, sessionId: SessionId, si
     }
   })
   const names = new Map(members.map(member => [member.id, member.name]))
-  const active = [...state.tasks.values()].filter(task => task.status === 'in_progress')
+  const taskById = new Map(state.tasks.map(task => [task.id, task]))
+  const active = state.tasks.filter(task => task.status === 'in_progress')
   const tasks: MonitorTask[] = []
-  for (const task of state.tasks.values()) {
+  for (const task of state.tasks) {
     if (task.status === 'deleted') continue
     const ownerName = task.ownerId === undefined ? undefined : names.get(task.ownerId)
     tasks.push({
       id: task.id, revision: task.revision, subject: task.subject, description: task.description,
       status: task.status, ...(ownerName === undefined ? {} : { ownerName }),
       blockedBy: [...task.blockedBy], writeScopes: [...task.writeScopes],
-      ready: task.status === 'pending' && task.blockedBy.every(id => state.tasks.get(id)?.status === 'completed'),
+      ready: task.status === 'pending' && task.blockedBy.every(id => taskById.get(id)?.status === 'completed'),
       overlappingTaskIds: active.filter(other => other.id !== task.id
         && task.writeScopes.some(scope => other.writeScopes.some(candidate => overlaps(scope, candidate)))).map(other => other.id),
     })

@@ -1,10 +1,9 @@
 import { expect, it } from 'vitest'
-import { foldTeam } from '@deepseek-ai/dsh-experimental-agent-team'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { describeTeam, type MonitorReads } from '../../src/agent-team-monitor/host/snapshot.ts'
 import { describeWorkflows } from '../../src/agent-team-monitor/host/workflow.ts'
-import { meta, teamEvents } from './fixtures.ts'
+import { meta, teamEvents, teamProjection } from './fixtures.ts'
 
 const event = (type: string, data: unknown, seq = 0): SessionEvent => ({ type, data, seq, time: 1000 + seq }) as SessionEvent
 function events(): SessionEvent[] {
@@ -18,7 +17,7 @@ const live = (id: string) => ({ id, status: 'running', options: { model: id === 
 const agent: MonitorReads['agent'] = id => id === meta.id ? live(id) : undefined
 const signal = () => new AbortController().signal
 function reads(log = events()): MonitorReads {
-  return { agent, teamService: () => undefined, fold: async () => undefined,
+  return { agent, teamService: () => undefined, project: () => undefined,
     inspect: async id => id === meta.id ? { meta, events: log } : undefined }
 }
 
@@ -65,7 +64,7 @@ it('scopes workflow discovery to the exact session suffix and does not inherit p
 })
 it('retains independent workflow information when a conversation also has an official task board', async () => {
   const log = [...events(), ...teamEvents().map((item, index) => ({ ...item, seq: index + 4 }))]
-  expect(await describeTeam({ ...reads(log), fold: async () => foldTeam }, meta.id, signal())).toMatchObject({ kind: 'team', workflows: { counts: { members: 1 } }, counts: { tasks: 2 } })
+  expect(await describeTeam({ ...reads(log), project: teamProjection }, meta.id, signal())).toMatchObject({ kind: 'team', workflows: { counts: { members: 1 } }, counts: { tasks: 2 } })
 })
 it('rejects corrupt extension records and unknown outcomes without leaking raw payloads', async () => {
   const bad = [

@@ -1,6 +1,14 @@
 import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
-import { TeamId, TeamTaskId, TeamMessageId, type TeamMemberSnapshot, type TeamTaskSnapshot } from '@deepseek-ai/dsh-experimental-agent-team'
+import {
+  TeamId,
+  TeamTaskId,
+  TeamMessageId,
+  type TeamMemberSnapshot,
+  type TeamMessageSnapshot,
+  type TeamTaskSnapshot,
+} from '@deepseek-ai/dsh-experimental-agent-team'
 import { MONITOR_PROTOCOL, type TeamSnapshot, type MonitorSnapshot } from '../../src/agent-team-monitor/shared.ts'
+import type { TeamProjectionState } from '../../src/agent-team-monitor/host/snapshot.ts'
 
 export const rootId = SessionId('team-root')
 export const memberId = SessionId('team-researcher')
@@ -20,6 +28,44 @@ export function teamEvents(): SessionEvent[] {
     { type: 'team/message/queued', data: { version: 1, teamId, message: { id: TeamMessageId('mail-1'), senderId: rootId, senderName: 'lead', targetId: memberId, delivery: 'quiet', content: [{ type: 'text', text: 'PRIVATE_MAILBOX_BODY' }] } } },
   ]
   return values.map((value, seq) => ({ ...value, seq, time: 1000 + seq })) as SessionEvent[]
+}
+
+/** Small fixture projector; real-stack coverage exercises DSH's registered projection implementation. */
+export function teamProjection(meta: SessionHeader, events: readonly SessionEvent[]): TeamProjectionState {
+  const members = new Map<string, TeamMemberSnapshot>()
+  const tasks = new Map<string, TeamTaskSnapshot>()
+  const messages = new Map<string, TeamMessageSnapshot>()
+  const delivered = new Set<ReturnType<typeof TeamMessageId>>()
+  for (const event of events) {
+    if (!['team/member', 'team/task', 'team/message/queued', 'team/message/delivered'].includes(String(event.type))) continue
+    if (event.data === null || typeof event.data !== 'object' || !('version' in event.data)
+      || event.data.version !== 1 || !('teamId' in event.data)) throw new TypeError('invalid Team fixture event')
+    if (String(event.data.teamId) !== String(meta.id)) continue
+    switch (event.type) {
+      case 'team/member':
+        members.set(event.data.member.id, event.data.member)
+        break
+      case 'team/task':
+        tasks.set(event.data.task.id, event.data.task)
+        break
+      case 'team/message/queued':
+        messages.set(event.data.message.id, event.data.message)
+        break
+      case 'team/message/delivered':
+        delivered.add(event.data.messageId)
+        break
+      default:
+        break
+    }
+  }
+  return {
+    id: meta.id,
+    members: [...members.values()],
+    tasks: [...tasks.values()],
+    messages: [...messages.values()],
+    delivered: [...delivered],
+    nextTaskNumber: 1,
+  }
 }
 
 export const wireTeam: TeamSnapshot = {

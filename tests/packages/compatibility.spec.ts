@@ -44,11 +44,11 @@ afterEach(() => {
   }
 })
 
-describe('0.3.0 release compatibility', () => {
+describe('0.4.0 release compatibility', () => {
   it('keeps the aggregate, standalone packages, native version and DSH peers aligned', () => {
-    expect(release.version).toBe('0.3.0')
+    expect(release.version).toBe('0.4.0')
     expect(release.dshEnhanced.compatibility).toEqual({
-      dshVersion: '0.1.2-alpha.2', sourceCommit: '0a53fb55bea101816fa226bb964ae2bed71c343b',
+      dshVersion: '0.1.2-alpha.3', sourceCommit: 'dd6322d604e00eec1ba5e0c8541159906a21094a',
     })
     for (const manifest of [release, ...packages.map(name => JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf8')))]) {
       expect(manifest.version, manifest.name).toBe(release.version)
@@ -73,13 +73,13 @@ describe('0.3.0 release compatibility', () => {
     const source = fixture()
     const result = check(source)
     expect(result.status, result.output).toBe(0)
-    expect(result.output).toContain('Compatibility OK: plugin 0.3.0 -> DSH 0.1.2-alpha.2')
+    expect(result.output).toContain('Compatibility OK: plugin 0.4.0 -> DSH 0.1.2-alpha.3')
     expect(result.output).toContain('source commit cannot be verified')
     expect(readdirSync(source.plugin).sort()).toEqual(['package.json', 'packages'])
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
   })
 
-  it.runIf(process.platform === 'win32').each(['0.1.1-rc.2', '0.1.2-alpha.1', '0.1.2'])('rejects DSH %s before build or installation', (version) => {
+  it.runIf(process.platform === 'win32').each(['0.1.1-rc.2', '0.1.2-alpha.1', '0.1.2-alpha.2', '0.1.2'])('rejects DSH %s before build or installation', (version) => {
     const source = fixture(version)
     const result = check(source, ['-Features', 'notification', '-SkipBuild'])
     expect(result.status).not.toBe(0)
@@ -108,7 +108,7 @@ describe('0.3.0 release compatibility', () => {
     writeFileSync(path, JSON.stringify(manifest))
     expect(check(source).output).toContain('has no dshEnhanced.compatibility')
     copyFileSync(resolve(root, 'package.json'), path)
-    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.2-alpha.2' }))
+    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.2-alpha.3' }))
     expect(check(source).output).toContain('Cannot identify the DSH source version')
   })
 

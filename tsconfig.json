@@ -37,11 +37,11 @@
       "@deepseek-ai/dsh-tool-subagent": ["../deepseek-harness/packages/subagent/tool-subagent/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-subagent-codex": ["../deepseek-harness/packages/subagent/subagent-codex/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-subagent-claude-code": ["../deepseek-harness/packages/subagent/subagent-claude-code/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-session-projection": ["../deepseek-harness/packages/session/session-projection/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-typert-protocol": ["../deepseek-harness/packages/typert/protocol/lib/types/index.d.ts"]
     }
   },
   "include": [
-    "src/dsh-alpha2-settings.d.ts",
     "src/index.ts",
     "src/agent-team-monitor/shared.ts",
     "src/agent-team-monitor/host/**/*.ts",
