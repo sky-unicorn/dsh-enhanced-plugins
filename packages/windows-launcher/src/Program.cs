@@ -62,6 +62,7 @@ namespace DshEnhanced.WindowsLauncher
                 else if (action == "stop-and-wait") result = runtime.StopWebAndWait();
                 else if (action == "restart") result = runtime.RestartWeb();
                 else if (action == "build") result = runtime.BuildDshSource(out operationOutput);
+                else if (action == "build-only") result = runtime.BuildDshSource(false, out operationOutput);
                 else if (action == "status") result = OperationResult.Ok("状态读取完成。");
                 else result = OperationResult.Fail("未知自动化操作：" + action);
                 status = runtime.Snapshot();
@@ -506,6 +507,7 @@ namespace DshEnhanced.WindowsLauncher
         private readonly ModernRichTextBox diagnosticsOutput;
         private readonly ModernRichTextBox sourceOutput;
         private readonly ModernButton buildDshButton;
+        private readonly ModernButton buildDshOnlyButton;
         private readonly Label toast;
         private readonly System.Windows.Forms.Timer refreshTimer;
         private HeroPanel hero;
@@ -651,7 +653,8 @@ namespace DshEnhanced.WindowsLauncher
             diagnosticsOutput = new ModernRichTextBox();
             BuildDiagnosticsPage();
             sourceOutput = new ModernRichTextBox();
-            buildDshButton = NewButton("拉取最新源码并构建", ModernButtonKind.Primary, 184);
+            buildDshButton = NewButton("更新源码并构建", ModernButtonKind.Primary, 184);
+            buildDshOnlyButton = NewButton("仅构建", ModernButtonKind.Secondary, 110);
             BuildSourcePage();
             BuildPluginManagerPage();
 
@@ -1108,18 +1111,19 @@ namespace DshEnhanced.WindowsLauncher
         {
             sourceCard = new RoundedPanel();
             sourcePage.Content.Controls.Add(sourceCard);
-            AddCardTitle(sourceCard, "更新并构建 DSH", "安全拉取源码后，依次清理旧产物、按锁文件安装依赖并构建");
+            AddCardTitle(sourceCard, "更新并构建 DSH", "可更新源码或仅构建，均会清理旧产物、按锁文件安装依赖并构建");
 
             sourcePathLabel = NewLabel(String.Empty, 8.5f, FontStyle.Regular, UiTheme.Muted);
             sourcePathLabel.AutoSize = false;
             sourcePathLabel.AutoEllipsis = true;
             sourceCard.Controls.Add(sourcePathLabel);
 
-            buildDshButton.Click += delegate { RunDshBuild(); };
-            buildDshButton.Enabled = runtime.ResolveDshSource() != null;
+            buildDshButton.Click += delegate { RunDshBuild(true); };
+            buildDshOnlyButton.Click += delegate { RunDshBuild(false); };
             sourceActions = new FlowLayoutPanel();
             sourceActions.BackColor = UiTheme.Surface;
             sourceActions.Controls.Add(buildDshButton);
+            sourceActions.Controls.Add(buildDshOnlyButton);
             ModernButton openSourceLogs = NewButton("打开日志目录", ModernButtonKind.Secondary, 126);
             openSourceLogs.Click += delegate { runtime.OpenLogFolder(); };
             sourceActions.Controls.Add(openSourceLogs);
@@ -1777,7 +1781,8 @@ namespace DshEnhanced.WindowsLauncher
             {
                 EnsureContained(sourceCard, sourcePathLabel, "DSH source path");
                 EnsureContained(sourceCard, sourceActions, "DSH source actions");
-                EnsureContained(sourceActions, buildDshButton, "DSH source action");
+                foreach (Control action in sourceActions.Controls)
+                    EnsureContained(sourceActions, action, "DSH source action");
                 EnsureContained(sourceCard, sourceStatusLabel, "DSH source status");
                 EnsureContained(sourceCard, sourceLogShell, "DSH source log");
                 if (sourceStatusLabel.Top < sourceActions.Bottom || sourceLogShell.Top < sourceStatusLabel.Bottom)
@@ -1851,30 +1856,32 @@ namespace DshEnhanced.WindowsLauncher
             });
         }
 
-        private void RunDshBuild()
+        private void RunDshBuild(bool requestSourceUpdate)
         {
+            if (Interlocked.CompareExchange(ref buildInProgress, 0, 0) != 0) return;
             string source = runtime.ResolveDshSource();
             if (source == null)
             {
                 ShowToast(OperationResult.Fail("未配置有效的 DSH 源码目录；请通过本地 checkout 重新运行安装脚本。"));
                 return;
             }
-            bool updateSource = runtime.IsGitAvailable();
+            bool updateSource = requestSourceUpdate && runtime.IsGitAvailable();
             string buildCommands = "pnpm run clean" + Environment.NewLine
                 + "pnpm install --frozen-lockfile" + Environment.NewLine
                 + "pnpm run build";
             string confirmation = updateSource
                 ? "即将依次执行：" + Environment.NewLine + Environment.NewLine
                     + "git pull --ff-only" + Environment.NewLine + buildCommands
-                : "未检测到 Git，无法拉取最新源码。" + Environment.NewLine + Environment.NewLine
+                : (requestSourceUpdate ? "未检测到 Git，无法更新源码。" : "仅构建当前本地源码，不执行 Git 更新。")
+                    + Environment.NewLine + Environment.NewLine
                     + "本次跳过 Git 更新，依次执行：" + Environment.NewLine + buildCommands;
             confirmation += Environment.NewLine + Environment.NewLine
                 + "源码目录：" + source + Environment.NewLine + Environment.NewLine
                 + "清理会删除现有构建产物，请先停止使用此源码的 DSH。"
                 + "任一步失败即停止，不会忽略锁文件错误。"
                 + "本操作不会自动停止或重启 DSH；成功后请手动启动服务。确定运行吗？";
-            DialogResult confirmed = MessageBox.Show(this, confirmation, "更新并构建 DSH",
-                MessageBoxButtons.YesNo, updateSource ? MessageBoxIcon.Question : MessageBoxIcon.Warning,
+            DialogResult confirmed = MessageBox.Show(this, confirmation, requestSourceUpdate ? "更新并构建 DSH" : "仅构建 DSH",
+                MessageBoxButtons.YesNo, requestSourceUpdate && !updateSource ? MessageBoxIcon.Warning : MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2);
             if (confirmed != DialogResult.Yes)
             {
@@ -1883,11 +1890,13 @@ namespace DshEnhanced.WindowsLauncher
             }
             if (Interlocked.CompareExchange(ref buildInProgress, 1, 0) != 0) return;
             buildDshButton.Enabled = false;
-            buildDshButton.Text = "更新与构建中…";
+            buildDshOnlyButton.Enabled = false;
+            ModernButton activeBuildButton = requestSourceUpdate ? buildDshButton : buildDshOnlyButton;
+            activeBuildButton.Text = updateSource ? "更新与构建中…" : "构建中…";
             sourceStatusLabel.Text = "执行中 · " + (updateSource ? "拉取后依次清理、安装依赖并构建…" : "已跳过 Git，依次清理、安装依赖并构建…");
             sourceStatusLabel.ForeColor = UiTheme.Primary;
             LayoutSource();
-            sourceOutput.Text = (updateSource ? "正在更新、清理、安装依赖并构建 DSH 源码…" : "未检测到 Git，正在清理、安装依赖并构建本地 DSH 源码…")
+            sourceOutput.Text = (updateSource ? "正在更新、清理、安装依赖并构建 DSH 源码…" : "已跳过 Git 更新，正在清理、安装依赖并构建本地 DSH 源码…")
                 + Environment.NewLine + "源码目录: " + source + Environment.NewLine
                 + "日志将自动刷新，无需离开当前页面。";
             sourceOutput.SelectionStart = sourceOutput.TextLength;
@@ -1901,7 +1910,7 @@ namespace DshEnhanced.WindowsLauncher
                 catch (Exception error)
                 {
                     output = error.ToString();
-                    result = OperationResult.Fail("DSH 源码更新或构建失败：" + error.Message);
+                    result = OperationResult.Fail((updateSource ? "DSH 源码更新或构建失败：" : "DSH 源码构建失败：") + error.Message);
                 }
                 Interlocked.Exchange(ref buildInProgress, 0);
                 if (IsDisposed || !IsHandleCreated) return;
@@ -1912,8 +1921,9 @@ namespace DshEnhanced.WindowsLauncher
                         sourceOutput.Text = String.IsNullOrWhiteSpace(output) ? result.Message : output.Trim();
                         sourceOutput.SelectionStart = sourceOutput.TextLength;
                         sourceOutput.ScrollToCaret();
-                        buildDshButton.Enabled = runtime.ResolveDshSource() != null;
-                        buildDshButton.Text = "拉取最新源码并构建";
+                        buildDshButton.Text = "更新源码并构建";
+                        buildDshOnlyButton.Text = "仅构建";
+                        UpdateSourcePath();
                         SetSourceStatus(result);
                         ShowToast(result);
                     }));
@@ -1934,6 +1944,7 @@ namespace DshEnhanced.WindowsLauncher
             string source = runtime.ResolveDshSource();
             sourcePathLabel.Text = "源码目录：" + (source ?? "未配置有效的本地 DSH checkout");
             buildDshButton.Enabled = Interlocked.CompareExchange(ref buildInProgress, 0, 0) == 0 && source != null;
+            buildDshOnlyButton.Enabled = buildDshButton.Enabled;
         }
 
         private void RefreshSourceLog(bool followTail)
@@ -1992,7 +2003,7 @@ namespace DshEnhanced.WindowsLauncher
             if (page == overviewPage) pageSubtitle.Text = "本机 DSH 服务与任务控制中心";
             else if (page == tasksPage) pageSubtitle.Text = "安全运行单次任务或启动独立 Profile";
             else if (page == diagnosticsPage) pageSubtitle.Text = "查看运行记录并检查本机环境";
-            else if (page == sourcePage) pageSubtitle.Text = "拉取最新代码并构建安装时确认的本地 checkout";
+            else if (page == sourcePage) pageSubtitle.Text = "更新源码并构建，或仅构建安装时确认的本地 checkout";
             else pageSubtitle.Text = "按 Profile 管理本项目源码、独立功能包与 Launcher 更新";
             if (page == diagnosticsPage) diagnosticsOutput.Text = runtime.RecentLogs();
             if (page == sourcePage)

@@ -216,7 +216,7 @@ try {
           exit $gitResult.code
         }
       } else {
-        $skipHeader = "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) Git unavailable: skipping source update; running clean, frozen install, and build ($workingDirectory) ====="
+        $skipHeader = "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) Skipping Git source update; running clean, frozen install, and build ($workingDirectory) ====="
         [System.IO.File]::AppendAllText($logPath, $skipHeader + [Environment]::NewLine, $Utf8NoBom)
       }
 

@@ -201,15 +201,30 @@ try {
   const expectedPnpmSteps = ['run clean', 'install --frozen-lockfile', 'run build']
   assert.deepEqual(await readPnpmSteps(dshSource), expectedPnpmSteps, 'Git-less clean/install/build order')
   if (!buildOnlyResult.output.includes('BUILD_FIXTURE_OK')
-      || !buildOnlyLog.includes('Git unavailable: skipping source update; running clean, frozen install, and build')
+      || !buildOnlyLog.includes('Skipping Git source update; running clean, frozen install, and build')
       || buildOnlyLog.includes('git pull --ff-only')
       || buildOnlyMarker.trim() !== 'BUILD_FIXTURE_OK') {
     throw new Error(`launcher Git-less DSH source build failed: ${JSON.stringify(buildOnlyResult)}\n${buildOnly.stderr}`)
   }
 
+  // Explicit build-only must also skip an installed Git, even when pulling would fail.
+  const explicitBuildOnlyPath = resolve(temporary, 'explicit-build-only-result.json')
+  const explicitBuildOnly = run(executable, ['--automation', 'build-only', explicitBuildOnlyPath], {
+    env: { ...environment, DSH_LAUNCHER_VERIFY_GIT_FAILURE: '1' },
+  })
+  const explicitBuildOnlyResult = await readJson(explicitBuildOnlyPath)
+  const explicitBuildOnlyLog = (await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')).slice(buildOnlyLog.length)
+  assert.equal(explicitBuildOnly.status, 0, JSON.stringify(explicitBuildOnlyResult))
+  assert.equal(explicitBuildOnlyResult.success, true)
+  assert.match(explicitBuildOnlyLog, /Skipping Git source update/)
+  assert.doesNotMatch(explicitBuildOnlyLog, /git pull --ff-only|Git unavailable|GIT_PULL_FIXTURE_OK/)
+  assert.equal(await stat(resolve(dshSource, 'git-pull-marker.txt')).then(() => true, () => false), false)
+  assert.deepEqual((await readPnpmSteps(dshSource)).slice(expectedPnpmSteps.length), expectedPnpmSteps,
+    'explicit build-only clean/install/build order with Git installed')
+
   const buildResultPath = resolve(temporary, 'build-result.json')
   const priorBuildSteps = await readPnpmSteps(dshSource)
-  const priorBuildLog = buildOnlyLog.length
+  const priorBuildLog = buildOnlyLog.length + explicitBuildOnlyLog.length
   const build = run(executable, ['--automation', 'build', buildResultPath], { env: environment })
   const buildResult = await readJson(buildResultPath)
   const buildLog = (await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')).slice(priorBuildLog)

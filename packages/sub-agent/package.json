@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-sub-agent",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Selective DSH bundle for Claude Code and Codex product-subagent toggles",
   "type": "module",
   "main": "./lib/sub-agent/host.js",
