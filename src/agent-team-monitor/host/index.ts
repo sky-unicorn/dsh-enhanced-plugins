@@ -39,7 +39,7 @@ export class AgentTeamMonitorRemote extends TypertRemoteService {
         }
         const query = ctx.get('sessionQuery')
         if (query === undefined) throw new Error('session query unavailable')
-        // Both alpha.5 builds expose this read-only observation API. The query
+        // The public observation API reads history without activation. The query
         // owner handles persistence access and balances interrupted logs in memory.
         const observation = await query.observeSession(id, { signal, projectionMode: 'none' })
         try {

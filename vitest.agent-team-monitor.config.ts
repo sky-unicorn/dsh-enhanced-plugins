@@ -1,7 +1,7 @@
-import { exactDshAliases } from './tests/dsh-aliases.ts'
+import { dshCheckout, exactDshAliases } from './tests/dsh-aliases.ts'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
-const dsh = resolve(import.meta.dirname, '../deepseek-harness')
+const dsh = dshCheckout
 export default defineConfig({
   resolve: { alias: exactDshAliases({
       '@deepseek-ai/cordis': resolve(dsh, 'vendor/cordis/lib/index.js'),

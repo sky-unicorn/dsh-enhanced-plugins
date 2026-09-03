@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, type Config, type MarketSyncStatus } from '../../src/plugin-market/index.ts'
@@ -42,7 +43,7 @@ function channel() {
   }
 }
 
-function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+function createHandler(onDispose?: (dispose: () => Promise<void>) => void): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   let handler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined
   const ctx = {
     credentials: { resolve: vi.fn(async () => undefined) },
@@ -53,7 +54,7 @@ function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise
         return () => {}
       }),
     },
-    effect: (setup: () => () => void) => { setup() },
+    effect: (setup: () => () => Promise<void>) => { const dispose = setup(); onDispose?.(dispose) },
   } as unknown as Context
   apply(ctx, config)
   if (handler === undefined) throw new Error('market route was not registered')
@@ -145,20 +146,38 @@ describe('mirrored channel synchronization', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('uses the standard proxy environment for Host downloads', async () => {
-    const previousHttpsProxy = process.env.HTTPS_PROXY
-    process.env.HTTPS_PROXY = 'http://127.0.0.1:7897'
+  it('uses the launcher transport after HTTPS proxy rejection and leaves it open on unload', async () => {
+    const proxyNames = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']
+    const previousEnvironment = new Map(proxyNames.map(name => [name, process.env[name]]))
+    for (const name of proxyNames) delete process.env[name]
+    // DSH keeps the accepted HTTP proxy but clears HTTPS after rejecting its
+    // value. Its installed dispatcher, rather than another env parser, owns routing.
+    process.env.HTTP_PROXY = 'http://127.0.0.1:1'
+    const previousDispatcher = getGlobalDispatcher()
+    const transport = new MockAgent()
+    transport.disableNetConnect()
+    const upstream = transport.get(new URL(config.channelUrl).origin)
+    upstream.intercept({ path: '/plugins-cache.json', method: 'GET' }).reply(200, channel())
+    upstream.intercept({ path: '/after-dispose', method: 'GET' }).reply(200, 'still open')
+    setGlobalDispatcher(transport)
+    let dispose: (() => Promise<void>) | undefined
     try {
-      const fetchMock = vi.fn(async () => new Response(JSON.stringify(channel()), { status: 200 }))
-      vi.stubGlobal('fetch', fetchMock)
-      const handler = createHandler()
+      const handler = createHandler(cleanup => { dispose = cleanup })
 
       expect(await request(handler, 'POST', 'sync')).toMatchObject({ status: 202 })
       expect(await waitForSync(handler)).toMatchObject({ state: 'completed' })
-      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ dispatcher: expect.anything() })
+      await dispose?.()
+      dispose = undefined
+      expect(await (await fetch(new URL('/after-dispose', config.channelUrl))).text()).toBe('still open')
+      transport.assertNoPendingInterceptors()
     } finally {
-      if (previousHttpsProxy === undefined) delete process.env.HTTPS_PROXY
-      else process.env.HTTPS_PROXY = previousHttpsProxy
+      await dispose?.()
+      setGlobalDispatcher(previousDispatcher)
+      await transport.close()
+      for (const [name, value] of previousEnvironment) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
     }
   })
 })

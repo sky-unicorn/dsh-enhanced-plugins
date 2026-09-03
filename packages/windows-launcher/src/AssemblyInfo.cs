@@ -8,5 +8,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("Copyright © dsh-enhanced-plugins contributors")]
 [assembly: ComVisible(false)]
 [assembly: Guid("f432661b-c39b-4e6f-8a46-35f96bc2ca8e")]
-[assembly: AssemblyVersion("2.5.1.0")]
-[assembly: AssemblyFileVersion("2.5.1.0")]
+[assembly: AssemblyVersion("3.1.0.0")]
+[assembly: AssemblyFileVersion("3.1.0.0")]

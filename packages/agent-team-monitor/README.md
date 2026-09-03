@@ -1,14 +1,14 @@
 # Official Agent Teams monitor / 官方团队监控
 
-Read-only Host adapter and Web panel for DSH `0.1.2-alpha.5` (ABI `49a606bc`).
+Read-only Host adapter and Web panel for DSH `0.1.2-rc.1` (ABI `76fda729`).
 The session-owned icon appears in the composer's model/context group when workflow, Agent Teams or native child-session records exist. Click to open; switching sessions closes and clears it.
 Standard workflow monitoring needs no experimental Team runtime. Agent Teams itself must be enabled separately in the DSH source profile.
-Historical reads require the public `sessionQuery` service supplied by the standard Web profile. Its `observeSession()` API works across the alpha.5 release tag and source baseline, preserves fork boundaries, and balances interrupted logs in memory. The monitor releases every observation and waits for cancelled reads on unload. Team history rejected by the official projection is shown as incompatible; the monitor does not migrate it.
+Historical reads require the public `sessionQuery` service supplied by the standard Web profile. Its public `observeSession()` API preserves fork boundaries and balances interrupted logs in memory. The monitor releases every observation and waits for cancelled reads on unload. Team history rejected by the official projection is shown as incompatible; the monitor does not migrate it.
 This bundle never enables it, creates agents, adds model tools, changes tasks, or schedules work.
 
 只读 Host 适配器与 Web 面板。当前对话存在工作流、Agent Teams 或原生子代理会话时，在输入框右侧模型／上下文同组显示团队图标；点击才展开，切换会话立即关闭并清空。
 标准工作流无需实验性 Team 运行时；Agent Teams 请单独在 DSH 源码 profile 中启用。本插件不会自动启用、组队或调度。
-历史读取需要标准 Web profile 提供的公开 `sessionQuery` 服务。共有的 `observeSession()` API 兼容 alpha.5 发布标签与源码基线，保留 fork 继承边界，仅在内存中配平中断日志。监控释放每次 observation，卸载时等待取消中的读取结束。官方投影拒绝的 Team 历史显示为不兼容，监控不迁移日志。
+历史读取需要标准 Web profile 提供的公开 `sessionQuery` 服务。公开 `observeSession()` API 保留 fork 继承边界，仅在内存中配平中断日志。监控释放每次 observation，卸载时等待取消中的读取结束。官方投影拒绝的 Team 历史显示为不兼容，监控不迁移日志。
 
 Live members come from `ctx.agentTeams`; historical roster/tasks/mailbox counts are replayed through public `ctx.sessionProjections.restore()` using the `agentTeam` projection owned and registered by the official runtime.
 No private source imports or workspace-local state files. Mail bodies and provider errors are not sent to the browser.

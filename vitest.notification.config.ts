@@ -1,9 +1,9 @@
-import { exactDshAliases } from './tests/dsh-aliases.ts'
+import { dshCheckout, exactDshAliases } from './tests/dsh-aliases.ts'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 const root = import.meta.dirname
-const dsh = resolve(root, '../deepseek-harness')
+const dsh = dshCheckout
 
 export default defineConfig({
   resolve: {

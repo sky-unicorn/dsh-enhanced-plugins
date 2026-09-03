@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { expect, it, vi } from 'vitest'
+import { dshCheckout } from '../dsh-aliases.ts'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -37,7 +38,7 @@ async function storedBytes(root: string): Promise<Record<string, string>> {
 
 async function stack(root: string) {
   const ctx = new Context()
-  ctx.baseUrl = pathToFileURL(resolve(import.meta.dirname, '../../../deepseek-harness/examples/package.json')).href
+  ctx.baseUrl = pathToFileURL(resolve(dshCheckout, 'examples/package.json')).href
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(SessionProjections)
   await ctx.plugin(JsonlSessionPersistence, { root })

@@ -8,7 +8,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const dsh = resolve(root, '../deepseek-harness')
+const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepseek-harness'))
 const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
 const cli = resolve(dsh, 'apps/cli/src/bin.ts')
 const cliArgs = ['--import', pathToFileURL(resolve(dsh, 'node_modules/tsx/dist/esm/index.mjs')).href, cli]
@@ -21,9 +21,10 @@ const packages = readdirSync(resolve(root, 'packages'))
 const allNames = [manifest.name, ...packages.map(value => value.name)]
 const scratch = resolve(root, '.verify-dsh-home')
 mkdirSync(scratch, { recursive: true })
-const home = mkdtempSync(resolve(scratch, 'selection-250-'))
+const home = mkdtempSync(resolve(scratch, 'selection-310-'))
 const env = { ...process.env, DSH_HOME: home,
   DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(home, 'launcher'),
+  DSH_TELEMETRY_MODE: 'DISABLED',
   DEEPSEEK_API_KEY: 'compatibility-fixture', DEEPSEEK_BASE_URL: 'http://127.0.0.1:1/v1' }
 const redact = text => text.replace(/token=[^\s"'&]+/g, 'token=[redacted]')
 const report = []

@@ -8,7 +8,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import { EnvHttpProxyAgent, type Dispatcher } from 'undici'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type {
@@ -255,27 +254,6 @@ function abortableDelay(milliseconds: number, signal?: AbortSignal): Promise<voi
   })
 }
 
-function environmentValue(lowercase: string, uppercase: string): string | undefined {
-  return process.env[lowercase] ?? process.env[uppercase]
-}
-
-function createProxyDispatcher(): Dispatcher | undefined {
-  const allProxy = environmentValue('all_proxy', 'ALL_PROXY')
-  const httpProxy = environmentValue('http_proxy', 'HTTP_PROXY') ?? allProxy
-  const httpsProxy = environmentValue('https_proxy', 'HTTPS_PROXY') ?? allProxy
-  const noProxy = environmentValue('no_proxy', 'NO_PROXY')
-  if (httpProxy === undefined && httpsProxy === undefined) return undefined
-  try {
-    return new EnvHttpProxyAgent({
-      ...(httpProxy === undefined ? {} : { httpProxy }),
-      ...(httpsProxy === undefined ? {} : { httpsProxy }),
-      ...(noProxy === undefined ? {} : { noProxy }),
-    })
-  } catch {
-    throw new Error('HTTP_PROXY、HTTPS_PROXY 或 ALL_PROXY 配置无效。')
-  }
-}
-
 function upstreamFailureMessage(error: unknown): string {
   const name = error instanceof Error ? error.name : ''
   const cause = error instanceof Error && error.cause instanceof Error ? error.cause : undefined
@@ -291,7 +269,6 @@ async function fetchWithRetry(
   init: Omit<RequestInit, 'signal'>,
   timeoutMs: number,
   signal?: AbortSignal,
-  dispatcher?: Dispatcher,
 ): Promise<Response> {
   let lastError: unknown
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -300,10 +277,9 @@ async function fetchWithRetry(
       const requestSignal = signal === undefined
         ? AbortSignal.timeout(timeoutMs)
         : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-      const requestInit: RequestInit & { readonly dispatcher?: Dispatcher } = {
+      const requestInit: RequestInit = {
         ...init,
         signal: requestSignal,
-        ...(dispatcher === undefined ? {} : { dispatcher }),
       }
       const response = await fetch(url, requestInit)
       const rateLimited = response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0'
@@ -344,9 +320,8 @@ async function githubJson<T>(
   url: string,
   config: Config,
   signal?: AbortSignal,
-  dispatcher?: Dispatcher,
 ): Promise<{ value: T; remaining: number | null }> {
-  const response = await fetchWithRetry(url, { headers: await authHeaders(ctx, config) }, 15_000, signal, dispatcher)
+  const response = await fetchWithRetry(url, { headers: await authHeaders(ctx, config) }, 15_000, signal)
   const remainingHeader = response.headers.get('x-ratelimit-remaining')
   const remaining = remainingHeader === null ? null : Number.parseInt(remainingHeader, 10)
   if (response.ok) return { value: await response.json() as T, remaining }
@@ -363,10 +338,9 @@ async function repositoryManifest(
   config: Config,
   headers?: Record<string, string>,
   signal?: AbortSignal,
-  dispatcher?: Dispatcher,
 ): Promise<PackageManifest | null> {
   const url = `https://raw.githubusercontent.com/${fullName}/${encodeURIComponent(ref)}/package.json`
-  const response = await fetchWithRetry(url, { headers: headers ?? await authHeaders(ctx, config) }, 10_000, signal, dispatcher)
+  const response = await fetchWithRetry(url, { headers: headers ?? await authHeaders(ctx, config) }, 10_000, signal)
   if (response.status === 404) return null
   if (!response.ok) throw new HttpError(502, 'GITHUB_MANIFEST', `读取 ${fullName} 的 package.json 时 GitHub 返回 ${response.status}。`)
   try {
@@ -526,7 +500,6 @@ async function syncChannel(
   config: Config,
   report: (event: SyncProgressEvent) => void,
   signal?: AbortSignal,
-  dispatcher?: Dispatcher,
 ): Promise<MarketSyncResult> {
   const metadata = await readChannelMetadata(config)
   const headers: Record<string, string> = {
@@ -534,7 +507,7 @@ async function syncChannel(
     'user-agent': 'dsh-enhanced-plugins',
     ...(metadata === undefined ? {} : { 'if-none-match': metadata.etag }),
   }
-  const response = await fetchWithRetry(config.channelUrl, { headers }, 30_000, signal, dispatcher)
+  const response = await fetchWithRetry(config.channelUrl, { headers }, 30_000, signal)
   if (response.status === 304) {
     const channel = await readChannel(config)
     report({ kind: 'channel', total: channel.repositories.length })
@@ -650,7 +623,6 @@ async function resolveNpmPackage(
   repo: GitHubRepository,
   rootManifest: PackageManifest | null,
   signal?: AbortSignal,
-  dispatcher?: Dispatcher,
 ): Promise<{ packageName: string; version: string; integrity?: string; manifest: PackageManifest } | null> {
   const candidates = [...new Set([
     ...npmPackageCandidates(repo.market?.installCommands ?? [], rootManifest?.name),
@@ -659,7 +631,7 @@ async function resolveNpmPackage(
   for (const packageName of candidates) {
     const response = await fetchWithRetry(`https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`, {
       headers: { accept: 'application/json', 'user-agent': 'dsh-enhanced-plugins' },
-    }, 10_000, signal, dispatcher)
+    }, 10_000, signal)
     if (response.status === 404) continue
     if (!response.ok) throw new HttpError(502, 'NPM_REGISTRY', `npm registry 返回 ${response.status}。`)
     const manifest = await response.json() as PackageManifest
@@ -695,14 +667,12 @@ async function resolveInstallPlan(
   config: Config,
   catalogRepo: GitHubRepository,
   signal?: AbortSignal,
-  dispatcher?: Dispatcher,
 ): Promise<MarketInstallPlan> {
   const repoResult = await githubJson<GitHubRepository>(
     ctx,
     `https://api.github.com/repos/${catalogRepo.full_name}`,
     config,
     signal,
-    dispatcher,
   )
   if (repoResult.value.full_name.toLocaleLowerCase() !== catalogRepo.full_name.toLocaleLowerCase()) {
     throw new HttpError(502, 'GITHUB_IDENTITY_MISMATCH', 'GitHub 返回的仓库身份与插件渠道不一致。')
@@ -712,16 +682,15 @@ async function resolveInstallPlan(
     `https://api.github.com/repos/${catalogRepo.full_name}/commits/${encodeURIComponent(repoResult.value.default_branch)}`,
     config,
     signal,
-    dispatcher,
   )
   if (!/^[0-9a-f]{40}$/i.test(commit.value.sha)) {
     throw new HttpError(502, 'INVALID_COMMIT', 'GitHub 返回了无效的 commit 标识。')
   }
-  const manifest = await repositoryManifest(ctx, repoResult.value.full_name, commit.value.sha, config, undefined, signal, dispatcher)
+  const manifest = await repositoryManifest(ctx, repoResult.value.full_name, commit.value.sha, config, undefined, signal)
   const installRepo: GitHubRepository = catalogRepo.market === undefined
     ? repoResult.value
     : { ...repoResult.value, market: catalogRepo.market }
-  const npmPackage = await resolveNpmPackage(installRepo, manifest, signal, dispatcher)
+  const npmPackage = await resolveNpmPackage(installRepo, manifest, signal)
   if (npmPackage !== null) {
     if (hasInstallLifecycleScripts(npmPackage.manifest, 'npm')) {
       return {
@@ -888,7 +857,6 @@ export function apply(ctx: Context, config: Config): void {
   const startInstallPlan = (
     fullName: string,
     repo: GitHubRepository,
-    dispatcher?: Dispatcher,
   ): MarketInstallPlanJob => {
     const id = randomUUID()
     const createdAt = new Date().toISOString()
@@ -898,7 +866,7 @@ export function apply(ctx: Context, config: Config): void {
       status: { id, fullName, createdAt, state: 'running' },
     }
     planJobs.set(id, entry)
-    const task = resolveInstallPlan(ctx, config, repo, controller.signal, dispatcher).then(
+    const task = resolveInstallPlan(ctx, config, repo, controller.signal).then(
       (plan) => {
         entry.status = { id, fullName, createdAt, state: 'completed', completedAt: new Date().toISOString(), plan }
       },
@@ -977,11 +945,10 @@ export function apply(ctx: Context, config: Config): void {
     confirmSource: boolean,
     signal: AbortSignal,
     phase: (value: MarketMutationPhase) => void,
-    dispatcher?: Dispatcher,
   ): Promise<MarketMutationResult> => {
     phase('preflight')
     const catalogRepo = catalogRepository(await channel(), fullName)
-    const plan = await resolveInstallPlan(ctx, config, catalogRepo, signal, dispatcher)
+    const plan = await resolveInstallPlan(ctx, config, catalogRepo, signal)
     if (plan.kind === 'manual') {
       throw new HttpError(400, 'MANUAL_INSTALL_REQUIRED', '该插件需要按照仓库安装说明手工处理。')
     }
@@ -1040,7 +1007,6 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   ctx.effect(() => {
-    const dispatcher = createProxyDispatcher()
     const disposeRoute = ctx.webServer.register({
     kind: 'prefix',
     path: '/api/plugin-market',
@@ -1085,7 +1051,7 @@ export function apply(ctx: Context, config: Config): void {
                 checked: event.total,
                 verified: event.total,
               }
-            }, syncController.signal, dispatcher).then(
+            }, syncController.signal).then(
               (result) => {
                 channelSnapshot = undefined
                 syncStatus = { state: 'completed', result }
@@ -1114,7 +1080,7 @@ export function apply(ctx: Context, config: Config): void {
           const token = request.token.trim()
           const probe = await fetchWithRetry('https://api.github.com/rate_limit', {
             headers: await authHeaders(ctx, config, token),
-          }, 15_000, undefined, dispatcher)
+          }, 15_000)
           if (!probe.ok) throw new HttpError(400, 'TOKEN_REJECTED', 'GitHub 拒绝了这个 Token，请检查后重试。')
           await ctx.credentials.set(credentialRef(config.githubTokenEnv), token)
           const info = await ctx.credentials.describe(credentialRef(config.githubTokenEnv))
@@ -1132,7 +1098,7 @@ export function apply(ctx: Context, config: Config): void {
           if (!isRepositoryFullName(request.fullName)) throw new HttpError(400, 'INVALID_REPOSITORY', '仓库名称无效。')
           const fullName = request.fullName
           const repo = catalogRepository(await channel(), fullName)
-          json(res, 202, startInstallPlan(fullName, repo, dispatcher))
+          json(res, 202, startInstallPlan(fullName, repo))
           return
         }
         const planJobMatch = /^\/api\/plugin-market\/install-plans\/([0-9a-f-]+)$/.exec(pathname)
@@ -1178,7 +1144,6 @@ export function apply(ctx: Context, config: Config): void {
             request.confirmSource === true,
             signal,
             phase,
-            dispatcher,
           ))
           json(res, 202, job)
           return
@@ -1231,7 +1196,6 @@ export function apply(ctx: Context, config: Config): void {
         ...mutationTasks,
         ...planTasks,
       ])
-      await dispatcher?.close()
     }
   }, 'plugin-market: HTTP API')
 }
