@@ -44,11 +44,12 @@ afterEach(() => {
   }
 })
 
-describe('0.5.0 release compatibility', () => {
+describe('2.5.0 release compatibility', () => {
   it('keeps the aggregate, standalone packages, native version and DSH peers aligned', () => {
-    expect(release.version).toBe('0.5.0')
+    expect(release.version).toBe('2.5.0')
     expect(release.dshEnhanced.compatibility).toEqual({
-      dshVersion: '0.1.2-alpha.4', sourceCommit: '4e84901e6471b79ec0338099867ebb4606d12bb5',
+      dshVersion: '0.1.2-alpha.5', sourceCommit: '49a606bc5b5934603f22a26957a07dc799ab0291',
+      additionalSourceCommits: ['db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5'],
     })
     for (const manifest of [release, ...packages.map(name => JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf8')))]) {
       expect(manifest.version, manifest.name).toBe(release.version)
@@ -73,7 +74,7 @@ describe('0.5.0 release compatibility', () => {
     const source = fixture()
     const result = check(source)
     expect(result.status, result.output).toBe(0)
-    expect(result.output).toContain('Compatibility OK: plugin 0.5.0 -> DSH 0.1.2-alpha.4')
+    expect(result.output).toContain('Compatibility OK: plugin 2.5.0 -> DSH 0.1.2-alpha.5')
     expect(result.output).toContain('source commit cannot be verified')
     expect(readdirSync(source.plugin).sort()).toEqual(['package.json', 'packages'])
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
@@ -84,6 +85,7 @@ describe('0.5.0 release compatibility', () => {
     '0.1.2-alpha.1',
     '0.1.2-alpha.2',
     '0.1.2-alpha.3',
+    '0.1.2-alpha.4',
     '0.1.2',
   ])('rejects DSH %s before build or installation', (version) => {
     const source = fixture(version)
@@ -114,7 +116,7 @@ describe('0.5.0 release compatibility', () => {
     writeFileSync(path, JSON.stringify(manifest))
     expect(check(source).output).toContain('has no dshEnhanced.compatibility')
     copyFileSync(resolve(root, 'package.json'), path)
-    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.2-alpha.4' }))
+    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.2-alpha.5' }))
     expect(check(source).output).toContain('Cannot identify the DSH source version')
   })
 
@@ -131,5 +133,16 @@ describe('0.5.0 release compatibility', () => {
     expect(result.status, result.output).toBe(0)
     expect(result.output).toContain('differs from verified')
     expect(result.output).toContain('this source revision is unverified')
-  })
+    const manifestPath = resolve(source.plugin, 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: source.dsh, encoding: 'utf8' }).stdout.trim()
+    manifest.dshEnhanced.compatibility.additionalSourceCommits = [head]
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    const verified = check(source)
+    expect(verified.status, verified.output).toBe(0)
+    expect(verified.output).not.toContain('this source revision is unverified')
+    manifest.dshEnhanced.compatibility.additionalSourceCommits = ['invalid']
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    expect(check(source).output).toContain('invalid additionalSourceCommits')
+  }, 30_000)
 })

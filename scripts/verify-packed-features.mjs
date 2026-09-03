@@ -10,7 +10,7 @@ const npm = process.env.npm_execpath
 if (!npm) throw new Error('Use npm run verify:pack to select the repository package manager.')
 const scratch = resolve(root, '.verify-dsh-home')
 mkdirSync(scratch, { recursive: true })
-const directory = mkdtempSync(resolve(scratch, 'packed-050-'))
+const directory = mkdtempSync(resolve(scratch, 'packed-250-'))
 const report = []
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 120_000 })
@@ -32,7 +32,7 @@ for (const name of readdirSync(resolve(root, 'packages'))) {
   const entries = manifest.dshEnhanced.runtimeEntries ?? Object.values(manifest.exports).filter(value => value.startsWith('./lib/'))
   for (const entry of entries) assert.ok(existsSync(resolve(workspace, entry)), `${manifest.name}: missing ${entry}`)
   const repacked = JSON.parse(run(process.execPath, [npm, 'pack', '--dry-run', '--ignore-scripts', '--json'], workspace))[0]
-  assert.equal(repacked.version, '0.5.0')
+  assert.equal(repacked.version, '2.5.0')
   report.push({ name: manifest.name, version: manifest.version, prepare: 'passed', files: repacked.files.length })
   console.log(`${manifest.name}: isolated prepare and pack passed`)
 }

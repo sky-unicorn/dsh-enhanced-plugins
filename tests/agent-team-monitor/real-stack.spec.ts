@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -23,6 +24,15 @@ class KeylessAdapter extends LlmAdapter {
     yield { type: 'block-end', index: 0, block: { type: 'text', text: 'Fixture work complete.' } }
     yield { type: 'finish', reason: { kind: 'stop' } }
   }
+}
+
+async function storedBytes(root: string): Promise<Record<string, string>> {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true })
+  const pairs = await Promise.all(entries.filter(entry => entry.isFile()).map(async entry => {
+    const path = join(entry.parentPath, entry.name)
+    return [path, createHash('sha256').update(await readFile(path)).digest('hex')] as const
+  }))
+  return Object.fromEntries(pairs)
 }
 
 async function stack(root: string) {
@@ -71,10 +81,14 @@ it('observes real continuable teammates, unloads without affecting them, and rep
     expect(ctx.get('agentTeamMonitor')).toBeUndefined()
     await ctx.fiber.dispose(); contexts.pop()
     const { ctx: cold } = await stack(root); contexts.push(cold)
+    const persistedBefore = await storedBytes(root)
+    const observe = vi.spyOn(cold.sessionQuery, 'observeSession')
     const restored = await (cold.get('agentTeamMonitor') as Monitor.AgentTeamMonitorRemote).describe({ sessionId: lead.id }, new AbortController().signal)
     expect(restored).toMatchObject({ kind: 'team', source: 'persisted', counts: { members: 2, tasks: 1 } })
     expect(cold.agents.list()).toHaveLength(0)
     expect(restored.catalog).toMatchObject({ state: 'ready', total: 1, sessions: [{ id: created.member.id, status: 'completed', navigable: true }] })
+    expect(observe).toHaveBeenCalledWith(lead.id, { signal: expect.any(AbortSignal), projectionMode: 'none' })
+    expect(await storedBytes(root)).toEqual(persistedBefore)
   } finally {
     for (const ctx of contexts.reverse()) await ctx.fiber.dispose()
     await rm(root, { recursive: true, force: true })

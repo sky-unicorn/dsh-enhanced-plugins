@@ -67,6 +67,19 @@ function Assert-DshCompatibility {
   }
   $expectedVersion = [string] $versionProperty.Value
   $expectedCommit = [string] $commitProperty.Value
+  $verifiedCommits = @($expectedCommit)
+  $additionalCommits = $compatibility.Value.PSObject.Properties['additionalSourceCommits']
+  if ($null -ne $additionalCommits) {
+    if ($additionalCommits.Value -isnot [array]) {
+      throw 'Plugin release has an invalid additionalSourceCommits declaration.'
+    }
+    foreach ($commit in $additionalCommits.Value) {
+      if ($commit -isnot [string] -or $commit -notmatch '^[0-9a-f]{40}$') {
+        throw 'Plugin release has an invalid additionalSourceCommits declaration.'
+      }
+      $verifiedCommits += $commit
+    }
+  }
   foreach ($feature in $Catalog) {
     if ($feature.Manifest.version -ne $PluginManifest.version) {
       throw "Mixed plugin release: '$($feature.PackageName)' is $($feature.Manifest.version), expected $($PluginManifest.version). Re-extract or update the complete plugin release."
@@ -84,7 +97,7 @@ function Assert-DshCompatibility {
     throw "Cannot identify the DSH source version at '$Checkout'; expected @deepseek-ai/dsh-root."
   }
   if ($version.Value -cne $expectedVersion) {
-    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $expectedVersion, but '$Checkout' is $($version.Value). Use the matching DSH release or plugin tag '$($PluginManifest.version)/dsh-$expectedVersion'. Nothing was installed or removed."
+    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $expectedVersion, but '$Checkout' is $($version.Value). Use the matching DSH release or plugin tag '$($PluginManifest.version)/$expectedVersion'. Nothing was installed or removed."
   }
   Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $expectedVersion."
 
@@ -106,7 +119,7 @@ function Assert-DshCompatibility {
   $head = ($headOutput -join '').Trim()
   if ($headCode -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') {
     Write-Warning "DSH version matches, but Git commit could not be read. Verified commit: $expectedCommit."
-  } elseif ($head -cne $expectedCommit) {
+  } elseif ($verifiedCommits -cnotcontains $head) {
     Write-Warning "DSH version matches, but commit $head differs from verified $expectedCommit; this source revision is unverified."
   }
   if ($dirtyCode -ne 0) {

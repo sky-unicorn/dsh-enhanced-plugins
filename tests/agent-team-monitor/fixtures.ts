@@ -23,17 +23,17 @@ export const meta = {
 } as SessionHeader
 export const member: TeamMemberSnapshot = { id: memberId, name: 'researcher', description: 'Research the ABI', provider: 'spawn', context: 'fresh', phase: 'provisioning' }
 
-/** Valid version-one domain log, checked by the official replay function in tests. */
+/** Version-two domain fixture; real-stack tests use records emitted by the active official runtime. */
 export function teamEvents(): SessionEvent[] {
   const task: TeamTaskSnapshot = { id: TeamTaskId('task-1'), revision: 1, subject: 'Inspect interfaces', description: 'Check public contracts', status: 'pending', blockedBy: [], writeScopes: ['src'] }
   const teamId = TeamId(rootId)
   const values = [
-    { type: 'team/member', data: { version: 1, teamId, member } },
-    { type: 'team/member', data: { version: 1, teamId, member: { ...member, phase: 'active' } } },
-    { type: 'team/task', data: { version: 1, teamId, task } },
-    { type: 'team/task', data: { version: 1, teamId, task: { ...task, revision: 2, status: 'in_progress', ownerId: memberId } } },
-    { type: 'team/task', data: { version: 1, teamId, task: { ...task, id: TeamTaskId('task-2'), subject: 'Build monitor', blockedBy: [TeamTaskId('task-1')], writeScopes: ['src/client'] } } },
-    { type: 'team/message/queued', data: { version: 1, teamId, message: { id: TeamMessageId('mail-1'), senderId: rootId, senderName: 'lead', targetId: memberId, delivery: 'quiet', content: [{ type: 'text', text: 'PRIVATE_MAILBOX_BODY' }] } } },
+    { type: 'team/member', data: { version: 2, teamId, member } },
+    { type: 'team/member', data: { version: 2, teamId, member: { ...member, phase: 'active' } } },
+    { type: 'team/task', data: { version: 2, teamId, task } },
+    { type: 'team/task', data: { version: 2, teamId, task: { ...task, revision: 2, status: 'in_progress', ownerId: memberId } } },
+    { type: 'team/task', data: { version: 2, teamId, task: { ...task, id: TeamTaskId('task-2'), subject: 'Build monitor', blockedBy: [TeamTaskId('task-1')], writeScopes: ['src/client'] } } },
+    { type: 'team/message/queued', data: { version: 2, teamId, message: { id: TeamMessageId('mail-1'), senderId: rootId, senderName: 'lead', targetId: memberId, content: [{ type: 'text', text: 'PRIVATE_MAILBOX_BODY' }] } } },
   ]
   return values.map((value, seq) => ({
     ...value,
@@ -55,7 +55,7 @@ export function teamProjection(
   for (const event of events) {
     if (!['team/member', 'team/task', 'team/message/queued', 'team/message/delivered'].includes(String(event.type))) continue
     if (event.data === null || typeof event.data !== 'object' || !('version' in event.data)
-      || event.data.version !== 1 || !('teamId' in event.data)) throw new TypeError('invalid Team fixture event')
+      || event.data.version !== 2 || !('teamId' in event.data)) throw new TypeError('invalid Team fixture event')
     if (String(event.data.teamId) !== String(meta.id)) continue
     switch (event.type) {
       case 'team/member':

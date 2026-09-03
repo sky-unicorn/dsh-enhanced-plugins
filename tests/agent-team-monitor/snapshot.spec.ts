@@ -64,7 +64,7 @@ describe('official Team read model', () => {
     expect(result).toMatchObject({ kind: 'unavailable', reason: 'incompatible' })
     expect(JSON.stringify(result)).not.toContain('PRIVATE_BAD_EVENT')
     expect(await describeTeam({ ...reads(), project: () => undefined }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
-    const malformed = [{ type: 'team/member', seq: SessionSeq(0), time: 1000, data: { version: 1 } }] as SessionEvent[]
+    const malformed = [{ type: 'team/member', seq: SessionSeq(0), time: 1000, data: { version: 2 } }] as SessionEvent[]
     expect(await describeTeam({ ...reads(), inspect: async () => inspection(meta, malformed) }, rootId, signal())).toMatchObject({ reason: 'incompatible' })
   })
   it('cancels before accessing the store and reports missing storage distinctly', async () => {
@@ -78,7 +78,7 @@ describe('official Team read model', () => {
     const taskEvent = events[3] as SessionEvent<'team/task'>
     events.push({ ...taskEvent, seq: SessionSeq(6), time: 1006, data: { ...taskEvent.data, task: { ...taskEvent.data.task, revision: 3, status: 'completed' } } })
     const queued = events[5] as SessionEvent<'team/message/queued'>
-    events.push({ type: 'team/message/delivered', seq: SessionSeq(7), time: 1007, data: { version: 1, teamId: queued.data.teamId, messageId: queued.data.message.id, targetId: memberId } })
+    events.push({ type: 'team/message/delivered', seq: SessionSeq(7), time: 1007, data: { version: 2, teamId: queued.data.teamId, messageId: queued.data.message.id, targetId: memberId } })
     const result = await describeTeam({ ...reads(), inspect: async () => inspection(meta, events) }, rootId, signal())
     expect(result).toMatchObject({ counts: { completed: 1, blocked: 0, pendingMessages: 0 } })
     if (result.kind !== 'team') throw new Error('Expected team')

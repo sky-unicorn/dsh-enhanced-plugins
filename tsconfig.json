@@ -26,7 +26,7 @@
       "@deepseek-ai/dsh-subagent": ["../deepseek-harness/packages/subagent/subagent/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-experimental-agent-team": ["../deepseek-harness/packages/experimental/agent-team/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-tool-workflow/types": ["../deepseek-harness/packages/workflow/tool-workflow/lib/types/types.d.ts"],
-      "@deepseek-ai/dsh-session-persistence": ["../deepseek-harness/packages/session/session-persistence/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-session-query": ["../deepseek-harness/packages/session-query/session-query/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-credentials": ["../deepseek-harness/packages/credentials/credentials/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-host-webserver": ["../deepseek-harness/packages/host/webserver/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-llm": ["../deepseek-harness/packages/llm/llm/lib/types/index.d.ts"],

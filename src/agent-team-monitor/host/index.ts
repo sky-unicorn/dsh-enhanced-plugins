@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
-import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-subagent'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
@@ -12,14 +12,18 @@ import type { MonitorSnapshot } from '../shared.js'
 export const name = 'agent-team-monitor'
 export const inject = ['agents', 'sessions']
 
-/** Read-only adapter. Agent Teams and persistence are optional, queried per request for HMR. */
+/** Read-only adapter. Agent Teams and session queries are optional, queried per request for HMR. */
 export class AgentTeamMonitorRemote extends TypertRemoteService {
   private readonly reads: CatalogReads
   private readonly lifetime = new AbortController()
+  private readonly pending = new Set<Promise<MonitorSnapshot>>()
 
   constructor(ctx: Context) {
     super(ctx, 'agentTeamMonitor')
-    ctx.effect(() => () => this.lifetime.abort(), 'team monitor: cancel outstanding reads')
+    ctx.effect(() => async () => {
+      this.lifetime.abort()
+      await Promise.allSettled(this.pending)
+    }, 'team monitor: cancel and release outstanding reads')
     this.reads = {
       agent: id => ctx.agents.get(id),
       descendants: async (id, signal) => ctx.get('subagents')?.listDescendants(id, signal),
@@ -33,10 +37,21 @@ export class AgentTeamMonitorRemote extends TypertRemoteService {
             events: live.snapshotEvents(),
           }
         }
-        const persistence = ctx.get('sessionPersistence')
-        if (persistence === undefined) throw new Error('session persistence unavailable')
-        // inspect(), unlike load()/prepare(), never commits recovery or publishes an Agent.
-        return persistence.inspect(id, signal)
+        const query = ctx.get('sessionQuery')
+        if (query === undefined) throw new Error('session query unavailable')
+        // Both alpha.5 builds expose this read-only observation API. The query
+        // owner handles persistence access and balances interrupted logs in memory.
+        const observation = await query.observeSession(id, { signal, projectionMode: 'none' })
+        try {
+          signal.throwIfAborted()
+          return {
+            meta: observation.header,
+            inheritedEventCount: observation.inheritedEventCount,
+            events: observation.events,
+          }
+        } finally {
+          observation[Symbol.dispose]()
+        }
       },
       project: (meta, inheritedEventCount, events) => {
         // The Team runtime owns and registers this host-only projection. The
@@ -68,7 +83,13 @@ export class AgentTeamMonitorRemote extends TypertRemoteService {
       || request.sessionId.length === 0 || request.sessionId.length > 512) {
       throw new TypeError('agentTeamMonitor/describe: invalid sessionId')
     }
-    return describeMonitor(this.reads, SessionId(request.sessionId), AbortSignal.any([signal, this.lifetime.signal]))
+    const pending = describeMonitor(this.reads, SessionId(request.sessionId), AbortSignal.any([signal, this.lifetime.signal]))
+    this.pending.add(pending)
+    try {
+      return await pending
+    } finally {
+      this.pending.delete(pending)
+    }
   }
 }
 
