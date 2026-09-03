@@ -147,6 +147,36 @@ namespace DshEnhanced.WindowsLauncher
 
     internal sealed class PluginManagerRuntime
     {
+        private static int cleanupQueued;
+
+        internal void QueueLegacyUpdateCleanup()
+        {
+            if (Interlocked.CompareExchange(ref cleanupQueued, 1, 0) != 0) return;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    // Result publication can precede coordinator exit. Wait
+                    // until its files are no longer needed before cleanup.
+                    while (true)
+                    {
+                        while (HasActiveCoordinator()) Thread.Sleep(1000);
+                        PluginApplyResult result;
+                        OperationResult operation = RunMachine("Cleanup", String.Empty, "web", null, out result);
+                        if (!operation.Success || result == null || !result.success)
+                        {
+                            LauncherLog.Write("legacy update cleanup failed: " + operation.Message);
+                            return;
+                        }
+                        if (result.stage != "busy") return;
+                        Thread.Sleep(1000);
+                    }
+                }
+                catch (Exception error) { LauncherLog.Write("legacy update cleanup failed: " + error.Message); }
+                finally { Interlocked.Exchange(ref cleanupQueued, 0); }
+            });
+        }
+
         private string ScriptPath
         {
             get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DSH-Launcher.PluginManager.ps1"); }
@@ -188,9 +218,33 @@ namespace DshEnhanced.WindowsLauncher
             bool updateSource, PluginManagementPlan plan, out PendingPluginOperation pending)
         {
             pending = null;
+            // Serialize preparation through the coordinator PID handoff. The
+            // coordinator itself keeps using the existing management mutex.
+            using (Mutex mutex = new Mutex(false, "Local\\DSH.Enhanced.WindowsLauncher.UpdateWorkspace"))
+            {
+                bool taken = false;
+                try
+                {
+                    try { taken = mutex.WaitOne(0); }
+                    catch (AbandonedMutexException) { taken = true; }
+                    if (!taken || HasActiveCoordinator())
+                        return OperationResult.Fail("已有插件管理操作正在运行。");
+                    return StartApplyInWorkspace(repositoryRoot, profile, desired, updateSource, plan, out pending);
+                }
+                catch (IOException error) { return OperationResult.Fail(error.Message); }
+                catch (UnauthorizedAccessException error) { return OperationResult.Fail(error.Message); }
+                finally { if (taken) mutex.ReleaseMutex(); }
+            }
+        }
+
+        private OperationResult StartApplyInWorkspace(string repositoryRoot, string profile, IEnumerable<string> desired,
+            bool updateSource, PluginManagementPlan plan, out PendingPluginOperation pending)
+        {
+            pending = null;
             if (!File.Exists(ScriptPath)) return OperationResult.Fail("插件管理组件缺失，请从项目源码重新安装 Launcher。");
             string requestId = Guid.NewGuid().ToString("D");
-            string requestDirectory = Path.Combine(LauncherPaths.Updates, requestId);
+            string requestDirectory = Path.GetFullPath(Path.Combine(LauncherPaths.Updates, "current"));
+            ClearUpdateWorkspace(requestDirectory);
             Directory.CreateDirectory(requestDirectory);
             string requestPath = Path.Combine(requestDirectory, "request.json");
             string resultPath = Path.Combine(requestDirectory, "result.json");
@@ -215,7 +269,7 @@ namespace DshEnhanced.WindowsLauncher
             Process process = Process.Start(startInfo);
             if (process == null) return OperationResult.Fail("无法启动外部插件更新协调器。");
             int coordinatorPid = process.Id;
-            DateTime startedAtUtc = DateTime.UtcNow;
+            DateTime startedAtUtc = process.StartTime.ToUniversalTime();
             JsonFile.Write(Path.Combine(requestDirectory, "pending.json"), new PendingPluginOperationRecord
             {
                 requestId = requestId,
@@ -239,12 +293,78 @@ namespace DshEnhanced.WindowsLauncher
                 : "插件构建与目标状态调和已交给外部协调器。");
         }
 
+        private static void ClearUpdateWorkspace(string directory)
+        {
+            string owner = Path.GetFullPath(LauncherPaths.Updates).TrimEnd(Path.DirectorySeparatorChar);
+            if (!String.Equals(Path.GetFullPath(directory), Path.Combine(owner, "current"), StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Invalid update workspace path.");
+            // Reject junctions before enumerating or recursively deleting anything.
+            RejectUpdateLinks(new DirectoryInfo(owner));
+            if (!Directory.Exists(directory)) return;
+            RejectUpdateTreeLinks(new DirectoryInfo(directory));
+            foreach (string file in Directory.GetFiles(directory)) File.Delete(file);
+            foreach (string child in Directory.GetDirectories(directory)) Directory.Delete(child, true);
+        }
+
+        private static void RejectUpdateLinks(FileSystemInfo entry)
+        {
+            if (entry.Exists && (entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Update workspace contains a filesystem link: " + entry.FullName);
+        }
+
+        private static void RejectUpdateTreeLinks(DirectoryInfo directory)
+        {
+            RejectUpdateLinks(directory);
+            foreach (FileSystemInfo entry in directory.GetFileSystemInfos())
+            {
+                RejectUpdateLinks(entry);
+                DirectoryInfo child = entry as DirectoryInfo;
+                if (child != null) RejectUpdateTreeLinks(child);
+            }
+        }
+
+        private static bool IsCoordinatorActive(int pid, DateTime startedAtUtc)
+        {
+            if (pid <= 0) return false;
+            try
+            {
+                using (Process process = Process.GetProcessById(pid))
+                    return !process.HasExited
+                        && Math.Abs((process.StartTime.ToUniversalTime() - startedAtUtc.ToUniversalTime()).TotalMinutes) < 2;
+            }
+            catch (ArgumentException) { return false; }
+            catch (InvalidOperationException) { return false; }
+            // If process inspection is denied, keep its workspace intact.
+            catch (System.ComponentModel.Win32Exception) { return true; }
+        }
+
+        private static bool HasActiveCoordinator()
+        {
+            if (!Directory.Exists(LauncherPaths.Updates)) return false;
+            // Include completed results: the coordinator may still be exiting.
+            // Scan legacy GUID directories as well during a Launcher upgrade.
+            foreach (string directory in Directory.GetDirectories(LauncherPaths.Updates))
+            {
+                PendingPluginOperationRecord record = JsonFile.Read<PendingPluginOperationRecord>(Path.Combine(directory, "pending.json"));
+                if (record == null) continue;
+                DateTime startedAtUtc;
+                if (!DateTime.TryParse(record.startedAtUtc, null,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out startedAtUtc))
+                    startedAtUtc = Directory.GetCreationTimeUtc(directory);
+                if (IsCoordinatorActive(record.coordinatorPid, startedAtUtc)) return true;
+            }
+            return false;
+        }
+
         internal bool TryReadResult(PendingPluginOperation pending, out PluginApplyResult result)
         {
             result = null;
             if (pending == null) return false;
+            PluginApplyRequest request = JsonFile.Read<PluginApplyRequest>(Path.Combine(pending.RequestDirectory, "request.json"));
+            if (request == null || !String.Equals(request.requestId, pending.RequestId, StringComparison.Ordinal)) return false;
             if (!File.Exists(pending.ResultPath))
             {
+                pending.IsInterrupted = !IsCoordinatorActive(pending.CoordinatorPid, pending.StartedAtUtc);
                 if (!pending.IsInterrupted) return false;
                 result = new PluginApplyResult
                 {
@@ -259,7 +379,10 @@ namespace DshEnhanced.WindowsLauncher
                 return true;
             }
             result = JsonFile.Read<PluginApplyResult>(pending.ResultPath);
-            return result != null;
+            return result != null && (String.Equals(result.requestId, pending.RequestId, StringComparison.Ordinal)
+                // Older coordinators omitted requestId from failure results.
+                || (String.IsNullOrEmpty(result.requestId)
+                    && String.Equals(Path.GetFileName(pending.RequestDirectory), pending.RequestId, StringComparison.Ordinal)));
         }
 
         internal PendingPluginOperation LatestPendingOperation()
@@ -278,16 +401,7 @@ namespace DshEnhanced.WindowsLauncher
                 if (!DateTime.TryParse(record.startedAtUtc, null,
                     System.Globalization.DateTimeStyles.RoundtripKind, out startedAtUtc))
                     startedAtUtc = directory.CreationTimeUtc;
-                bool active = false;
-                try
-                {
-                    using (Process process = Process.GetProcessById(record.coordinatorPid))
-                    {
-                        active = !process.HasExited
-                            && Math.Abs((process.StartTime.ToUniversalTime() - startedAtUtc.ToUniversalTime()).TotalMinutes) < 2;
-                    }
-                }
-                catch { active = false; }
+                bool active = IsCoordinatorActive(record.coordinatorPid, startedAtUtc);
                 return new PendingPluginOperation
                 {
                     RequestId = record.requestId,
@@ -389,7 +503,10 @@ namespace DshEnhanced.WindowsLauncher
                 using (Process process = Process.Start(startInfo))
                 {
                     if (process == null) return OperationResult.Fail("无法启动插件管理协议进程。");
-                    if (!process.WaitForExit(60000))
+                    // Old builds can contain hundreds of thousands of files;
+                    // background maintenance needs more time than catalog reads.
+                    int timeout = operation == "Cleanup" ? 600000 : 60000;
+                    if (!process.WaitForExit(timeout))
                     {
                         try { process.Kill(); } catch { }
                         return OperationResult.Fail("插件管理协议读取超时。");
@@ -847,6 +964,9 @@ namespace DshEnhanced.WindowsLauncher
                             ? "检测到异常中断的更新请求" : "外部更新协调器仍在运行…");
                     }
                 }
+                // Discover/resume a legacy operation before scheduling any
+                // cleanup, so its result cannot disappear before UI delivery.
+                if (!captureMode && pendingPluginOperation == null) pluginRuntime.QueueLegacyUpdateCleanup();
             }
             LayoutPluginManager();
         }
@@ -1204,6 +1324,7 @@ namespace DshEnhanced.WindowsLauncher
             ShowToast(result.success ? OperationResult.Ok(result.message) : OperationResult.Fail(result.message));
             if (result.success && result.snapshot != null) ApplyPluginSnapshot(result.snapshot);
             else RefreshPluginManager(true);
+            pluginRuntime.QueueLegacyUpdateCleanup();
         }
 
         private void SetPluginBusy(bool busy, string status)

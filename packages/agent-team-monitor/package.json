@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-agent-team-monitor",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Per-conversation Web monitor for DSH Agent Teams and workflow members",
   "type": "module",
   "main": "./lib/agent-team-monitor/host/index.js",

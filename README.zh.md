@@ -150,7 +150,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 程序使用版本化目录部署，开始菜单和登录启动项在升级后都会指向新版本，不依赖 profile 内的 `node_modules`。安装器保留用户显式配置的 DSH 命令；使用本地 DSH checkout 安装时，则生成并验证直接调用该 checkout CLI 的安全入口，并将它记录为唯一允许执行源码构建的根目录。
 
-设置、运行状态、安装状态、更新请求与日志统一位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。Launcher 在管理页中始终必选；控制中心不提供自卸载按钮，需要移除程序文件、快捷方式和登录启动项时，在项目源码中运行 `migrate-to-enhanced-plugin.ps1 -UninstallLauncher`。日志与用户设置默认保留。
+设置、运行状态、安装状态、更新请求与日志统一位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`。托盘更新和应用插件变更复用固定的 `updates\current` 工作目录；下一次操作开始前会清理其中的旧请求、结果、日志和源码 ZIP，只保留最近一次操作记录。更新协调器仍在运行时不能覆盖该目录，Launcher 重启后仍会继续跟踪操作。打开控制中心读取安装状态后，以及更新操作结束后，会在后台自动删除旧版本不再使用的 GUID 更新目录，包括其中的构建文件、`node_modules` 和日志；仍有协调器运行、被源码绑定或任意 Profile 引用的目录会保留，稍后打开控制中心或更新结束时再次检查。旧更新目录中的源码绑定会在成功安装时迁移到 `sources` 快照；活动插件快照仍由 `sources` 管理。清理支持长路径，不跟随目录链接；无法确认安全或删除失败时保留目录并记录日志，不影响已成功的安装。Launcher 在管理页中始终必选；控制中心不提供自卸载按钮，需要移除程序文件、快捷方式和登录启动项时，在项目源码中运行 `migrate-to-enhanced-plugin.ps1 -UninstallLauncher`。日志与用户设置默认保留。
 
 </details>
 
@@ -267,7 +267,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `3.1.0` 对应 DSH `0.1.2-rc.1`，源码基线 commit 为 `76fda729799fe9b3848dbe2c211d4b231032b81e`；插件发布 tag 为 `3.1.0/0.1.2-rc.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `3.1.0`。
+- **版本对应：** 插件 `3.1.1` 对应 DSH `0.1.2-rc.1`，源码基线 commit 为 `76fda729799fe9b3848dbe2c211d4b231032b81e`；插件发布 tag 为 `3.1.1/0.1.2-rc.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `3.1.1`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。

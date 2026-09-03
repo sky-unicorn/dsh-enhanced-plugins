@@ -3,7 +3,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('Catalog', 'Snapshot', 'CheckUpdate', 'Bind', 'ImportZip', 'Plan', 'Apply')]
+  [ValidateSet('Catalog', 'Snapshot', 'CheckUpdate', 'Bind', 'ImportZip', 'Plan', 'Apply', 'Cleanup')]
   [string] $Operation,
 
   [string] $RepositoryRoot = '',
@@ -40,6 +40,12 @@ function Assert-OwnedPath {
     throw "Refusing to write outside '$owner': '$candidate'."
   }
   $candidate
+}
+
+function Get-UpdateWorkspace {
+  param([string] $LauncherRoot)
+  # Launcher clears this workspace only after the previous coordinator exits.
+  Assert-OwnedPath (Join-Path (Join-Path $LauncherRoot 'updates') 'current') $LauncherRoot
 }
 
 function Read-JsonFile {
@@ -700,7 +706,7 @@ function New-LocalSnapshot {
     Write-SourceRevisionMarker $target $revision $catalog.repository $catalog.defaultRef
     return $target
   }
-  $temporary = Join-Path (Join-Path (Join-Path $LauncherRoot 'updates') $RequestId) 'local-snapshot'
+  $temporary = Join-Path (Get-UpdateWorkspace $LauncherRoot) 'local-snapshot'
   [void](Assert-OwnedPath $temporary $LauncherRoot)
   if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
   [void](Copy-SafeSourceTree $Root $temporary)
@@ -803,6 +809,155 @@ function Remove-UnreferencedRuntimeSources {
   }
 }
 
+function Remove-UpdateTree {
+  param([string] $ExtendedPath)
+  # The caller validates the owned root. Never traverse a junction or symlink;
+  # remove only the link itself. Extended paths support old node_modules trees.
+  foreach ($entry in [System.IO.Directory]::GetFileSystemEntries($ExtendedPath)) {
+    $attributes = [System.IO.File]::GetAttributes($entry)
+    $isLink = ($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+    if (($attributes -band [System.IO.FileAttributes]::Directory) -ne 0) {
+      if ($isLink) { [System.IO.Directory]::Delete($entry, $false) }
+      else { Remove-UpdateTree $entry }
+    } else {
+      if (-not $isLink -and ($attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
+        [System.IO.File]::SetAttributes($entry, ($attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)))
+      }
+      [System.IO.File]::Delete($entry)
+    }
+  }
+  [System.IO.Directory]::Delete($ExtendedPath, $false)
+}
+
+function Test-UpdateCoordinatorActive {
+  param([string] $Directory)
+  $record = Read-JsonFile (Join-Path $Directory 'pending.json')
+  if ($null -eq $record) { return $false }
+  $coordinatorPid = [int](Get-OptionalProperty $record 'coordinatorPid' 0)
+  $startedAt = [DateTime]::MinValue
+  if ($coordinatorPid -le 0 -or -not [DateTime]::TryParse(
+    [string](Get-OptionalProperty $record 'startedAtUtc' ''),
+    [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$startedAt)) {
+    throw 'Cannot verify the legacy update coordinator record.'
+  }
+  $process = $null
+  try {
+    $process = [System.Diagnostics.Process]::GetProcessById($coordinatorPid)
+    -not $process.HasExited -and
+      [Math]::Abs(($process.StartTime.ToUniversalTime() - $startedAt.ToUniversalTime()).TotalMinutes) -lt 2
+  } catch [System.ArgumentException] { $false }
+  catch [System.InvalidOperationException] { $false }
+  finally { if ($null -ne $process) { $process.Dispose() } }
+}
+
+function Remove-LegacyUpdateDirectories {
+  param([string] $LauncherRoot, [string[]] $RetainedPaths, [string] $LogPath)
+  # The caller holds the management mutex. Collect all references before
+  # deleting anything; an unreadable inventory cancels cleanup.
+  try {
+    $updatesRoot = (Assert-OwnedPath (Join-Path $LauncherRoot 'updates') $LauncherRoot).TrimEnd('\')
+    if (-not (Test-Path -LiteralPath $updatesRoot -PathType Container)) { return }
+    if (((Get-Item -LiteralPath $updatesRoot).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw 'Refusing legacy cleanup through an updates directory link.'
+    }
+    $state = Read-JsonFile (Join-Path $LauncherRoot 'install-state.json')
+    if ([bool](Get-OptionalProperty (Get-OptionalProperty $state 'recovery') 'required' $false)) {
+      throw 'Install-state recovery must finish before legacy cleanup.'
+    }
+    $references = New-Object 'System.Collections.Generic.List[string]'
+    $project = Get-OptionalProperty $state 'projectSource'
+    $dsh = Get-OptionalProperty $state 'dsh'
+    $recordedHome = [string](Get-OptionalProperty $dsh 'home' '')
+    foreach ($path in @($RetainedPaths) + @(
+      (Get-OptionalProperty $project 'boundPath' ''),
+      (Get-OptionalProperty $dsh 'checkout' ''), $recordedHome)) {
+      if (-not [string]::IsNullOrWhiteSpace($path)) {
+        $references.Add([System.IO.Path]::GetFullPath($path).TrimEnd('\'))
+      }
+    }
+    $profileHomes = @((Get-DshHome), $recordedHome) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+    foreach ($profileHome in $profileHomes) {
+      $profilesRoot = Join-Path $profileHome 'profiles'
+      if (-not (Test-Path -LiteralPath $profilesRoot -PathType Container)) { continue }
+      foreach ($profileDirectory in @(Get-ChildItem -LiteralPath $profilesRoot -Directory)) {
+        if ($profileDirectory.Name -eq 'node_modules') { continue }
+        $manifest = Read-JsonFile (Join-Path $profileDirectory.FullName 'package.json')
+        foreach ($section in @('dependencies', 'devDependencies', 'optionalDependencies')) {
+          $dependencies = Get-OptionalProperty $manifest $section
+          if ($null -eq $dependencies) { continue }
+          foreach ($dependency in $dependencies.PSObject.Properties) {
+            $specification = [string]$dependency.Value
+            if ($specification -notmatch '^(?:link|file):') { continue }
+            $linkedPath = if ($specification.StartsWith('file://', [StringComparison]::OrdinalIgnoreCase)) {
+              ([Uri]$specification).LocalPath
+            } else { $specification.Substring(5).Replace('/', '\') }
+            if (-not [System.IO.Path]::IsPathRooted($linkedPath)) {
+              $linkedPath = Join-Path $profileDirectory.FullName $linkedPath
+            }
+            $references.Add([System.IO.Path]::GetFullPath($linkedPath).TrimEnd('\'))
+          }
+        }
+      }
+    }
+    foreach ($directory in @(Get-ChildItem -LiteralPath $updatesRoot -Directory)) {
+      $requestGuid = [Guid]::Empty
+      if (-not [Guid]::TryParseExact($directory.Name, 'D', [ref]$requestGuid)) { continue }
+      $candidate = [System.IO.Path]::GetFullPath($directory.FullName).TrimEnd('\')
+      try {
+        if (-not (Split-Path -Parent $candidate).Equals($updatesRoot, [StringComparison]::OrdinalIgnoreCase)) {
+          throw 'Legacy update directory is outside the updates root.'
+        }
+        if (($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+          throw 'Refusing to remove a linked legacy update directory.'
+        }
+        $referenced = @($references | Where-Object {
+          $_.Equals($candidate, [StringComparison]::OrdinalIgnoreCase) -or
+            $_.StartsWith($candidate + '\', [StringComparison]::OrdinalIgnoreCase)
+        }).Count -gt 0
+        if ($referenced -or (Test-UpdateCoordinatorActive $candidate)) {
+          Write-ManagementLog $LogPath "Retained legacy update directory in use: $candidate"
+          continue
+        }
+        $extendedPath = if ($candidate.StartsWith('\\')) { '\\?\UNC\' + $candidate.Substring(2) }
+          else { '\\?\' + $candidate }
+        Remove-UpdateTree $extendedPath
+        Write-ManagementLog $LogPath "Removed legacy update directory: $candidate"
+      } catch {
+        Write-ManagementLog $LogPath "Legacy update cleanup warning for '$candidate': $($_.Exception.Message)"
+      }
+    }
+  } catch {
+    Write-ManagementLog $LogPath "Legacy update cleanup skipped: $($_.Exception.Message)"
+  }
+}
+
+function Invoke-LegacyUpdateCleanup {
+  param([string] $LauncherRoot)
+  $workspaceMutex = New-Object System.Threading.Mutex($false, 'Local\DSH.Enhanced.WindowsLauncher.UpdateWorkspace')
+  $managementMutex = New-Object System.Threading.Mutex($false, 'Local\DSH.Enhanced.WindowsLauncher.PluginManagement')
+  $workspaceTaken = $false
+  $managementTaken = $false
+  try {
+    try { $workspaceTaken = $workspaceMutex.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $workspaceTaken = $true }
+    if ($workspaceTaken) {
+      try { $managementTaken = $managementMutex.WaitOne(0) }
+      catch [System.Threading.AbandonedMutexException] { $managementTaken = $true }
+    }
+    if (-not $workspaceTaken -or -not $managementTaken) {
+      return [pscustomobject]@{ protocolVersion = 1; success = $true; stage = 'busy' }
+    }
+    $logPath = Join-Path $LauncherRoot 'logs\update-cleanup.log'
+    Remove-LegacyUpdateDirectories $LauncherRoot @((Get-UpdateWorkspace $LauncherRoot), $PSScriptRoot) $logPath
+    [pscustomobject]@{ protocolVersion = 1; success = $true; stage = 'complete'; logPath = $logPath }
+  } finally {
+    if ($managementTaken) { $managementMutex.ReleaseMutex() }
+    if ($workspaceTaken) { $workspaceMutex.ReleaseMutex() }
+    $managementMutex.Dispose()
+    $workspaceMutex.Dispose()
+  }
+}
+
 function New-GitSnapshot {
   param([object] $GitInfo, [string] $Root, [string] $LauncherRoot, [string] $RequestId)
   $revision = $GitInfo.latestRevision
@@ -814,7 +969,7 @@ function New-GitSnapshot {
     return $target
   }
   [void](New-Item -ItemType Directory -Force -Path $sourcesRoot)
-  $temporaryRoot = Join-Path (Join-Path $LauncherRoot 'updates') $RequestId
+  $temporaryRoot = Get-UpdateWorkspace $LauncherRoot
   [void](New-Item -ItemType Directory -Force -Path $temporaryRoot)
   $archivePath = Join-Path $temporaryRoot 'source.zip'
   [void](Invoke-GitText $GitInfo.git $Root @('archive', '--format=zip', '--output', $archivePath, $revision))
@@ -839,7 +994,7 @@ function New-DownloadedSnapshot {
     Write-SourceRevisionMarker $target $revision $coordinates $Catalog.defaultRef
     return $target
   }
-  $requestRoot = Join-Path (Join-Path $LauncherRoot 'updates') $RequestId
+  $requestRoot = Get-UpdateWorkspace $LauncherRoot
   [void](New-Item -ItemType Directory -Force -Path $requestRoot)
   $zipPath = Join-Path $requestRoot 'source.zip'
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -1096,7 +1251,7 @@ function Invoke-Apply {
   )
   $requestId = [string](Get-OptionalProperty $Request 'requestId' ([Guid]::NewGuid().ToString('D')))
   if ($requestId -notmatch '^[0-9a-fA-F-]{36}$') { throw '请求 ID 无效。' }
-  $requestRoot = Join-Path (Join-Path $LauncherRoot 'updates') $requestId
+  $requestRoot = Get-UpdateWorkspace $LauncherRoot
   $logPath = Join-Path (Join-Path $requestRoot 'logs') 'update.log'
   [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath))
   Write-ManagementLog $logPath "plugin management request=$requestId started"
@@ -1135,6 +1290,7 @@ function Invoke-Apply {
   if (-not $preflightHasWork) {
     $boundDsh = Get-OptionalProperty $State 'dsh'
     Assert-SourceDshCompatibility $InitialRoot ([string](Get-OptionalProperty $boundDsh 'checkout' '')) $logPath
+    Remove-LegacyUpdateDirectories $LauncherRoot @($InitialRoot, $requestRoot, $PSScriptRoot) $logPath
     return [pscustomobject][ordered]@{
       protocolVersion = 1
       requestId = $requestId
@@ -1221,6 +1377,12 @@ function Invoke-Apply {
     } else { 'current-git-snapshot' }
   }
   $sourceSnapshot = $source
+  # Older versions bound imported/build sources inside an update directory.
+  # Publish the retained snapshot as the new binding before retiring that tree.
+  $updatesPrefix = [System.IO.Path]::GetFullPath((Join-Path $LauncherRoot 'updates')).TrimEnd('\') + '\'
+  if ([System.IO.Path]::GetFullPath($bindingRoot).StartsWith($updatesPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    $bindingRoot = $sourceSnapshot
+  }
   $source = New-BuildWorkspace $sourceSnapshot $LauncherRoot $requestId
   $catalog = Get-Catalog $source
   $validIds = @($catalog.features | Where-Object scope -eq 'profile' | ForEach-Object id)
@@ -1297,6 +1459,7 @@ function Invoke-Apply {
         [System.IO.File]::AppendAllText($logPath,
           ("Runtime source cleanup warning: " + $_.Exception.ToString() + [Environment]::NewLine), $Utf8NoBom)
       }
+      Remove-LegacyUpdateDirectories $LauncherRoot @($source, $bindingRoot, $requestRoot, $PSScriptRoot) $logPath
     } catch {
       [System.IO.File]::AppendAllText($logPath, ($_.Exception.ToString() + [Environment]::NewLine), $Utf8NoBom)
       throw
@@ -1344,9 +1507,11 @@ $statePath = Join-Path $launcherRoot 'install-state.json'
 $request = $null
 
 try {
-  $state = Read-InstallState $statePath $launcherRoot
+  $state = if ($Operation -eq 'Cleanup') { $null } else { Read-InstallState $statePath $launcherRoot }
   $request = if ([string]::IsNullOrWhiteSpace($RequestPath)) { $null } else { Read-JsonFile $RequestPath }
-  if ($Operation -eq 'Bind') {
+  if ($Operation -eq 'Cleanup') {
+    $result = Invoke-LegacyUpdateCleanup $launcherRoot
+  } elseif ($Operation -eq 'Bind') {
     $root = Resolve-RepositoryRoot $RepositoryRoot $state
     $catalog = Get-Catalog $root
     $state = Update-StateBinding $state $root $catalog
@@ -1404,10 +1569,11 @@ try {
 } catch {
   $failureRequestId = if ($null -ne $request) { [string](Get-OptionalProperty $request 'requestId' '') } else { '' }
   $failureLogPath = if ($Operation -eq 'Apply' -and $failureRequestId -match '^[0-9a-fA-F-]{36}$') {
-    Join-Path (Join-Path (Join-Path $launcherRoot 'updates') $failureRequestId) 'logs\update.log'
+    Join-Path (Get-UpdateWorkspace $launcherRoot) 'logs\update.log'
   } else { '' }
   $failure = [pscustomobject][ordered]@{
     protocolVersion = 1
+    requestId = $failureRequestId
     success = $false
     stage = $Operation.ToLowerInvariant()
     message = $_.Exception.Message

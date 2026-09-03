@@ -591,7 +591,7 @@ describe('selective feature packages', () => {
     expect(installer).toContain('[AllowEmptyCollection()][string[]] $DesiredFeatures')
     expect(installer).toContain("Feature 'none'")
     expect(installer).toContain('npm run check')
-    expect(manager).toContain("[ValidateSet('Catalog', 'Snapshot', 'CheckUpdate', 'Bind', 'ImportZip', 'Plan', 'Apply')]")
+    expect(manager).toContain("[ValidateSet('Catalog', 'Snapshot', 'CheckUpdate', 'Bind', 'ImportZip', 'Plan', 'Apply', 'Cleanup')]")
     expect(manager).toContain("'Local\\DSH.Enhanced.WindowsLauncher.PluginManagement'")
     expect(manager).toContain('Expand-SafeZip')
     expect(manager).toContain('Invoke-GitFetchWithRetry')
