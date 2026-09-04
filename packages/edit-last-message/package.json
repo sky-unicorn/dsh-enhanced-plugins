@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-edit-last-message",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "description": "Selective DSH bundle for editing and resending the latest user message",
   "type": "module",
   "main": "./lib/edit-last-message/host/index.js",

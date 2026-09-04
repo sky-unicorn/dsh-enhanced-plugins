@@ -267,7 +267,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `3.1.2` 对应 DSH `0.1.2-rc.1`，源码基线 commit 为 `76fda729799fe9b3848dbe2c211d4b231032b81e`；插件发布 tag 为 `3.1.2/0.1.2-rc.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `3.1.2`。
+- **版本对应：** 插件 `3.1.3` 对应 DSH `0.1.2-rc.1`，源码基线 commit 为 `76fda729799fe9b3848dbe2c211d4b231032b81e`；插件发布 tag 为 `3.1.3/0.1.2-rc.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `3.1.3`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。

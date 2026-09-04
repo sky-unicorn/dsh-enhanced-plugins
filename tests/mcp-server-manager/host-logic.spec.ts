@@ -67,6 +67,36 @@ describe('toMcpClientConfig', () => {
     const config = toMcpClientConfig('demo', http)
     expect(config).toMatchObject({ url: http.url, transport: 'streamable-http' })
   })
+
+  it('detaches nested values from deeply frozen settings definitions', () => {
+    const frozenStdio: StdioServerDefinition = Object.freeze({
+      ...stdio,
+      args: Object.freeze([...stdio.args]),
+      env: Object.freeze({ ...stdio.env }),
+    })
+    const frozenHttp: StreamableHttpServerDefinition = Object.freeze({
+      ...http,
+      headers: Object.freeze({ ...http.headers }),
+    })
+
+    const stdioConfig = toMcpClientConfig('stdio-demo', frozenStdio)
+    const httpConfig = toMcpClientConfig('http-demo', frozenHttp)
+    if (stdioConfig.transport !== 'stdio' || httpConfig.transport !== 'streamable-http') {
+      throw new Error('unreachable')
+    }
+
+    expect(Object.isFrozen(stdioConfig)).toBe(false)
+    expect(Object.isFrozen(stdioConfig.args)).toBe(false)
+    expect(Object.isFrozen(stdioConfig.env)).toBe(false)
+    expect(Object.isFrozen(httpConfig.headers)).toBe(false)
+
+    stdioConfig.args.push('--mutable')
+    stdioConfig.env['EXTRA'] = 'value'
+    httpConfig.headers['X-Test'] = 'value'
+    expect(frozenStdio.args).toEqual(stdio.args)
+    expect(frozenStdio.env).toEqual(stdio.env)
+    expect(frozenHttp.headers).toEqual(http.headers)
+  })
 })
 
 describe('Config schema', () => {

@@ -87,13 +87,17 @@ export const Config = z.object({
  * never gates the plugin activation that mounted it, so a failed initial
  * connection logs and (on mcp-client versions that have one) enters the
  * reconnect loop instead.
+ *
+ * Settings scopes return deeply frozen resolved values. Clone the complete
+ * projection so Schemastery can normalize the child plugin's nested arrays
+ * and records without rejecting an otherwise-valid server definition.
  * @param serverName - the record key, also the model-facing namespace.
  * @param def - the resolved server definition.
- * @returns the `mcp-client` instance config.
+ * @returns a detached, mutable `mcp-client` instance config.
  */
 export function toMcpClientConfig(
   serverName: string,
   def: ServerDefinition,
 ): { serverName: string; failOnStartupError: false } & ServerDefinition {
-  return { serverName, failOnStartupError: false as const, ...def }
+  return structuredClone({ serverName, failOnStartupError: false as const, ...def })
 }
