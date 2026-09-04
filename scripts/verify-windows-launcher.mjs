@@ -125,8 +125,18 @@ try {
   await writeFile(resolve(fakeBin, 'git.cmd'), [
     '@echo off',
     'if /I not "%~1"=="-C" exit /b 51',
+    'if /I "%~3"=="symbolic-ref" (echo master& exit /b 0)',
+    'if /I "%~3"=="config" (echo origin& exit /b 0)',
+    'if /I "%~3"=="remote" (echo https://github.com/deepseek-ai/deepseek-harness.git& exit /b 0)',
+    'if /I "%~3"=="-c" goto proxied-pull',
     'if /I not "%~3"=="pull" exit /b 52',
     'if /I not "%~4"=="--ff-only" exit /b 53',
+    'goto pull',
+    ':proxied-pull',
+    'rem Windows PowerShell 5.1 splits key=URL when invoking a .cmd fixture.',
+    'if /I not "%~6"=="pull" exit /b 54',
+    'if /I not "%~7"=="--ff-only" exit /b 55',
+    ':pull',
     'echo GIT_STDERR_PROGRESS 1>&2',
     'if defined DSH_LAUNCHER_VERIFY_GIT_FAILURE echo fatal: Recv failure: Connection was reset 1>&2',
     'if defined DSH_LAUNCHER_VERIFY_GIT_FAILURE exit /b 128',
@@ -228,11 +238,11 @@ try {
   const build = run(executable, ['--automation', 'build', buildResultPath], { env: environment })
   const buildResult = await readJson(buildResultPath)
   const buildLog = (await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')).slice(priorBuildLog)
-  assert.deepEqual((await readPnpmSteps(dshSource)).slice(priorBuildSteps.length), expectedPnpmSteps,
-    'updated source clean/install/build order')
   if (build.status !== 0 || buildResult.success !== true) {
     throw new Error(`launcher source build stopped before completion: ${JSON.stringify(buildResult)}\n${buildLog}`)
   }
+  assert.deepEqual((await readPnpmSteps(dshSource)).slice(priorBuildSteps.length), expectedPnpmSteps,
+    'updated source clean/install/build order')
   const buildMarker = await readFile(resolve(dshSource, 'build-marker.txt'), 'utf8')
   const gitMarker = await readFile(resolve(dshSource, 'git-pull-marker.txt'), 'utf8')
   if (build.status !== 0 || buildResult.success !== true

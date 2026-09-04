@@ -105,6 +105,7 @@ export async function buildWindowsLauncher() {
   for (const file of [
     'DSH-Launcher.Supervisor.ps1',
     'DSH-Launcher.Command.ps1',
+    'DSH-Launcher.GitProxy.ps1',
     'DSH-Launcher.PluginManager.ps1',
     'DSH-Launcher.exe.config',
   ]) {

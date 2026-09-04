@@ -82,6 +82,7 @@ namespace DshEnhanced.WindowsLauncher
             {
                 string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 bool complete = File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Command.ps1"))
+                    && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.GitProxy.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.Supervisor.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.PluginManager.ps1"))
                     && File.Exists(Path.Combine(baseDirectory, "DSH-Launcher.exe.config"))

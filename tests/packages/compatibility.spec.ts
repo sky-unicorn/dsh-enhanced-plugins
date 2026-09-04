@@ -44,9 +44,9 @@ afterEach(() => {
   }
 })
 
-describe('3.1.1 release compatibility', () => {
+describe('3.1.2 release compatibility', () => {
   it('keeps the aggregate, standalone packages, native version and DSH peers aligned', () => {
-    expect(release.version).toBe('3.1.1')
+    expect(release.version).toBe('3.1.2')
     expect(release.dshEnhanced.compatibility).toEqual({
       dshVersion: '0.1.2-rc.1', sourceCommit: '76fda729799fe9b3848dbe2c211d4b231032b81e',
     })
@@ -73,7 +73,7 @@ describe('3.1.1 release compatibility', () => {
     const source = fixture()
     const result = check(source)
     expect(result.status, result.output).toBe(0)
-    expect(result.output).toContain('Compatibility OK: plugin 3.1.1 -> DSH 0.1.2-rc.1')
+    expect(result.output).toContain('Compatibility OK: plugin 3.1.2 -> DSH 0.1.2-rc.1')
     expect(result.output).toContain('source commit cannot be verified')
     expect(readdirSync(source.plugin).sort()).toEqual(['package.json', 'packages'])
     expect(readdirSync(source.dsh)).toEqual(['package.json'])

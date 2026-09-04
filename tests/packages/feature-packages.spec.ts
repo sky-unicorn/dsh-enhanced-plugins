@@ -97,6 +97,7 @@ describe('selective feature packages', () => {
       './lib/DSH-Launcher.exe.config',
       './lib/DSH-Launcher.Supervisor.ps1',
       './lib/DSH-Launcher.Command.ps1',
+      './lib/DSH-Launcher.GitProxy.ps1',
       './lib/DSH-Launcher.PluginManager.ps1',
     ])
     expect(launcher?.dshEnhanced.manager).toMatchObject({
@@ -313,6 +314,25 @@ describe('selective feature packages', () => {
     }
   }, 30_000)
 
+  it.runIf(process.platform === 'win32')('resolves a Windows proxy only for proxied HTTP remotes', () => {
+    const helper = resolve(packagesRoot, 'windows-launcher', 'src', 'DSH-Launcher.GitProxy.ps1')
+      .replaceAll("'", "''")
+    const script = [
+      `. '${helper}'`,
+      "$proxied = Resolve-SystemGitProxy 'https://github.com/deepseek-ai/deepseek-harness.git' -ProxyFactory { New-Object System.Net.WebProxy('http://127.0.0.1:7890') }",
+      "$direct = Resolve-SystemGitProxy 'https://github.com/deepseek-ai/deepseek-harness.git' -ProxyFactory { New-Object System.Net.WebProxy }",
+      "$ssh = Resolve-SystemGitProxy 'git@github.com:deepseek-ai/deepseek-harness.git' -ProxyFactory { New-Object System.Net.WebProxy('http://127.0.0.1:7890') }",
+      '[ordered]@{ proxied = $proxied; direct = $null -eq $direct; ssh = $null -eq $ssh } | ConvertTo-Json -Compress',
+    ].join('; ')
+    const result = spawnSync('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script,
+    ], { cwd: root, encoding: 'utf8' })
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+    expect(JSON.parse(result.stdout.trim())).toEqual({
+      proxied: 'http://127.0.0.1:7890/', direct: true, ssh: true,
+    })
+  })
+
   it.runIf(process.platform === 'win32')('retries transient GitHub resets with HTTP/1.1 before checking updates', () => {
     const managerDirectory = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-manager-git-retry-'))
     try {
@@ -425,6 +445,7 @@ describe('selective feature packages', () => {
     const appConfig = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.exe.config'), 'utf8')
     const appManifest = readFileSync(resolve(launcherRoot, 'src', 'app.manifest'), 'utf8')
     const command = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.Command.ps1'), 'utf8')
+    const gitProxy = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.GitProxy.ps1'), 'utf8')
     const supervisor = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.Supervisor.ps1'), 'utf8')
     const installer = readFileSync(resolve(root, 'scripts', 'migrate-to-enhanced-plugin.ps1'), 'utf8')
     const manager = readFileSync(resolve(launcherRoot, 'src', 'DSH-Launcher.PluginManager.ps1'), 'utf8')
@@ -556,7 +577,14 @@ describe('selective feature packages', () => {
     expect(command).not.toMatch(/\$LASTEXITCODE\s*=/)
     expect(command).toContain('exit $gitResult.code')
     expect(command).toContain("'build'")
-    expect(command).toContain("@('-C', $workingDirectory, 'pull', '--ff-only')")
+    expect(command).toContain('$gitProxy = Resolve-SystemGitProxy $gitRemoteUrl')
+    expect(command).toContain('$gitArguments += @(\'-c\', "http.proxy=$gitProxy")')
+    expect(command).toContain("$gitArguments += @('pull', '--ff-only')")
+    expect(command).toContain('no Git proxy setting was persisted')
+    expect(command).not.toMatch(/git config\s+--(?:global|local)/i)
+    expect(gitProxy).toContain('[System.Net.WebRequest]::GetSystemWebProxy()')
+    expect(gitProxy).toContain('$systemProxy.IsBypassed($target)')
+    expect(gitProxy).toContain('$systemProxy.GetProxy($target)')
     expect(command).toContain('Skipping Git source update; running clean, frozen install, and build')
     expect(command).toContain("@('run', 'build')")
     expect(command).not.toContain('Read-Host')

@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugin-market",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "description": "Selective DSH bundle for the plugin community",
   "type": "module",
   "main": "./lib/plugin-market/index.js",

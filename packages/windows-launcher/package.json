@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-windows-launcher",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "description": "Standalone Windows tray launcher and control center for DeepSeek Harness",
   "type": "module",
   "dshEnhanced": {
@@ -30,6 +30,7 @@
       "./lib/DSH-Launcher.exe.config",
       "./lib/DSH-Launcher.Supervisor.ps1",
       "./lib/DSH-Launcher.Command.ps1",
+      "./lib/DSH-Launcher.GitProxy.ps1",
       "./lib/DSH-Launcher.PluginManager.ps1"
     ]
   },

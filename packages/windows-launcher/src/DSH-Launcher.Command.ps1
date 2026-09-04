@@ -13,6 +13,12 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
 
+$gitProxyHelper = Join-Path $PSScriptRoot 'DSH-Launcher.GitProxy.ps1'
+if (-not (Test-Path -LiteralPath $gitProxyHelper -PathType Leaf)) {
+  throw "Launcher Git proxy helper does not exist: $gitProxyHelper"
+}
+. $gitProxyHelper
+
 function Publish-WebAccess {
   param(
     [string] $Line,
@@ -206,11 +212,32 @@ try {
         $buildStage = 'Git 拉取'
         $git = Get-Command -Name 'git' -CommandType Application -ErrorAction Stop |
           Select-Object -First 1
-        $gitResult = Invoke-LoggedDsh `
-          -Command $git.Source `
-          -Arguments @('-C', $workingDirectory, 'pull', '--ff-only') `
-          -LogPath $logPath `
-          -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) git pull --ff-only ($workingDirectory) ====="
+        $gitArguments = @('-C', $workingDirectory)
+        $gitRemoteUrl = Get-GitPullTargetUrl $git.Source $workingDirectory
+        $gitProxy = Resolve-SystemGitProxy $gitRemoteUrl
+        $usesTemporaryGitProxy = -not [string]::IsNullOrWhiteSpace($gitProxy)
+        if ($usesTemporaryGitProxy) {
+          # -c is scoped to this Git process. It neither overwrites an existing
+          # user/repository proxy nor leaves a setting behind when pull fails.
+          $gitArguments += @('-c', "http.proxy=$gitProxy")
+          [System.IO.File]::AppendAllText($logPath,
+            '===== Windows system proxy detected; applying it only to this Git pull =====' +
+            [Environment]::NewLine, $Utf8NoBom)
+        }
+        $gitArguments += @('pull', '--ff-only')
+        try {
+          $gitResult = Invoke-LoggedDsh `
+            -Command $git.Source `
+            -Arguments $gitArguments `
+            -LogPath $logPath `
+            -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) git pull --ff-only ($workingDirectory) ====="
+        } finally {
+          if ($usesTemporaryGitProxy) {
+            [System.IO.File]::AppendAllText($logPath,
+              '===== Temporary Git proxy scope ended; no Git proxy setting was persisted =====' +
+              [Environment]::NewLine, $Utf8NoBom)
+          }
+        }
         if ($gitResult.code -ne 0) {
           Write-BuildOutcome $false $gitResult.code (Get-SourceFailureMessage 'Git 拉取' $gitResult)
           exit $gitResult.code
