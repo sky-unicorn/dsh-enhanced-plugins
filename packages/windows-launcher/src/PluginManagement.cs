@@ -182,6 +182,11 @@ namespace DshEnhanced.WindowsLauncher
             get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DSH-Launcher.PluginManager.ps1"); }
         }
 
+        private string GitProxyHelperPath
+        {
+            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DSH-Launcher.GitProxy.ps1"); }
+        }
+
         internal OperationResult Snapshot(string repositoryRoot, string profile, out PluginManagerSnapshot snapshot)
         {
             return RunMachine("Snapshot", repositoryRoot, profile, null, out snapshot);
@@ -241,7 +246,8 @@ namespace DshEnhanced.WindowsLauncher
             bool updateSource, PluginManagementPlan plan, out PendingPluginOperation pending)
         {
             pending = null;
-            if (!File.Exists(ScriptPath)) return OperationResult.Fail("插件管理组件缺失，请从项目源码重新安装 Launcher。");
+            if (!File.Exists(ScriptPath) || !File.Exists(GitProxyHelperPath))
+                return OperationResult.Fail("插件管理组件缺失，请从项目源码重新安装 Launcher。");
             string requestId = Guid.NewGuid().ToString("D");
             string requestDirectory = Path.GetFullPath(Path.Combine(LauncherPaths.Updates, "current"));
             ClearUpdateWorkspace(requestDirectory);
@@ -250,6 +256,7 @@ namespace DshEnhanced.WindowsLauncher
             string resultPath = Path.Combine(requestDirectory, "result.json");
             string coordinatorPath = Path.Combine(requestDirectory, "coordinator.ps1");
             File.Copy(ScriptPath, coordinatorPath, true);
+            File.Copy(GitProxyHelperPath, Path.Combine(requestDirectory, "DSH-Launcher.GitProxy.ps1"), true);
             JsonFile.Write(requestPath, new PluginApplyRequest
             {
                 requestId = requestId,

@@ -503,35 +503,58 @@ function Test-TransientGitNetworkFailure {
 }
 
 function Invoke-GitFetchWithRetry {
-  param([string] $Git, [string] $Root, [string] $Remote = 'origin', [string] $LogPath = '')
+  param(
+    [string] $Git,
+    [string] $Root,
+    [string] $Remote = 'origin',
+    [string] $RemoteUrl = '',
+    [string] $LogPath = ''
+  )
+  $gitProxyHelper = Join-Path $PSScriptRoot 'DSH-Launcher.GitProxy.ps1'
+  if (-not (Test-Path -LiteralPath $gitProxyHelper -PathType Leaf)) {
+    throw "Launcher Git proxy helper does not exist: $gitProxyHelper"
+  }
+  . $gitProxyHelper
+  $gitProxy = Resolve-SystemGitProxy $RemoteUrl
+  $usesTemporaryGitProxy = -not [string]::IsNullOrWhiteSpace($gitProxy)
+  $proxyOptions = if ($usesTemporaryGitProxy) { @('-c', "http.proxy=$gitProxy") } else { @() }
+  if ($usesTemporaryGitProxy) {
+    Write-ManagementLog $LogPath 'Windows system proxy detected; applying it only to this Git fetch operation'
+  }
   $delays = @(0, 800, 2200)
   $lastOutput = ''
-  for ($attempt = 1; $attempt -le $delays.Count; $attempt++) {
-    if ($delays[$attempt - 1] -gt 0) { Start-Sleep -Milliseconds $delays[$attempt - 1] }
-    # Git for Windows can intermittently lose an HTTP/2 connection on some
-    # Win10/Win11 proxy and filtering stacks. Retries use HTTP/1.1 and bounded
-    # low-speed detection without changing the user's global Git config.
-    $networkOptions = if ($attempt -eq 1) { @() } else {
-      @('-c', 'http.version=HTTP/1.1', '-c', 'http.lowSpeedLimit=1024', '-c', 'http.lowSpeedTime=20')
+  try {
+    for ($attempt = 1; $attempt -le $delays.Count; $attempt++) {
+      if ($delays[$attempt - 1] -gt 0) { Start-Sleep -Milliseconds $delays[$attempt - 1] }
+      # Git for Windows can intermittently lose an HTTP/2 connection on some
+      # Win10/Win11 proxy and filtering stacks. Retries use HTTP/1.1 and bounded
+      # low-speed detection without changing the user's global Git config.
+      $retryOptions = if ($attempt -eq 1) { @() } else {
+        @('-c', 'http.version=HTTP/1.1', '-c', 'http.lowSpeedLimit=1024', '-c', 'http.lowSpeedTime=20')
+      }
+      Write-ManagementLog $LogPath "git fetch attempt=$attempt remote=$Remote"
+      $result = Invoke-GitText $Git $Root @($proxyOptions + $retryOptions + @('fetch', '--prune', '--no-tags', $Remote)) -AllowFailure
+      if (-not [string]::IsNullOrWhiteSpace($result.output)) {
+        Write-ManagementLog $LogPath ("git fetch output: " + $result.output)
+      }
+      if ($result.code -eq 0) {
+        Write-ManagementLog $LogPath "git fetch succeeded attempt=$attempt"
+        return
+      }
+      $lastOutput = $result.output
+      if (-not (Test-TransientGitNetworkFailure $lastOutput)) {
+        throw "Git 获取远端源码失败（退出码 $($result.code)）：$lastOutput"
+      }
     }
-    Write-ManagementLog $LogPath "git fetch attempt=$attempt remote=$Remote"
-    $result = Invoke-GitText $Git $Root @($networkOptions + @('fetch', '--prune', '--no-tags', $Remote)) -AllowFailure
-    if (-not [string]::IsNullOrWhiteSpace($result.output)) {
-      Write-ManagementLog $LogPath ("git fetch output: " + $result.output)
-    }
-    if ($result.code -eq 0) {
-      Write-ManagementLog $LogPath "git fetch succeeded attempt=$attempt"
-      return
-    }
-    $lastOutput = $result.output
-    if (-not (Test-TransientGitNetworkFailure $lastOutput)) {
-      throw "Git 获取远端源码失败（退出码 $($result.code)）：$lastOutput"
+    $compactError = ($lastOutput -replace '[\r\n]+', ' ').Trim()
+    throw ('连接 GitHub 时网络被中断，Launcher 已自动重试 3 次；本地源码、Profile 和 Launcher 均未修改。' +
+      '请检查网络或 Git 代理后重试；若只需应用当前源码，请使用“确认并应用”。' +
+      $(if ([string]::IsNullOrWhiteSpace($compactError)) { '' } else { " Git 原始错误：$compactError" }))
+  } finally {
+    if ($usesTemporaryGitProxy) {
+      Write-ManagementLog $LogPath 'Temporary Git proxy scope ended; no Git proxy setting was persisted'
     }
   }
-  $compactError = ($lastOutput -replace '[\r\n]+', ' ').Trim()
-  throw ('连接 GitHub 时网络被中断，Launcher 已自动重试 3 次；本地源码、Profile 和 Launcher 均未修改。' +
-    '请检查网络或 Git 代理后重试；若只需应用当前源码，请使用“确认并应用”。' +
-    $(if ([string]::IsNullOrWhiteSpace($compactError)) { '' } else { " Git 原始错误：$compactError" }))
 }
 
 function Get-GitUpdateInfo {
@@ -552,7 +575,7 @@ function Get-GitUpdateInfo {
     -not $remote.Equals($boundRemote, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Git remote 已变化；绑定为 '$boundRemote'，当前为 '$remote'。请重新绑定源码。"
   }
-  if ($Fetch) { Invoke-GitFetchWithRetry $git $Root 'origin' $LogPath }
+  if ($Fetch) { Invoke-GitFetchWithRetry $git $Root 'origin' $remote $LogPath }
   $upstream = (Invoke-GitText $git $Root @('rev-parse', '@{u}')).output.ToLowerInvariant()
   $ancestor = Invoke-GitText $git $Root @('merge-base', '--is-ancestor', 'HEAD', '@{u}') -AllowFailure
   $reverse = Invoke-GitText $git $Root @('merge-base', '--is-ancestor', '@{u}', 'HEAD') -AllowFailure

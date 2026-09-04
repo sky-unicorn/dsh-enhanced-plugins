@@ -347,6 +347,8 @@ describe('selective feature packages', () => {
       const managerSource = readFileSync(resolve(root,
         'packages/windows-launcher/src/DSH-Launcher.PluginManager.ps1'), 'utf8')
       writeFileSync(managerScript, `\uFEFF${managerSource}`, 'utf8')
+      cpSync(resolve(root, 'packages/windows-launcher/src/DSH-Launcher.GitProxy.ps1'),
+        resolve(managerDirectory, 'DSH-Launcher.GitProxy.ps1'))
       writeFileSync(resolve(fakeBin, 'git.cmd'), [
         '@echo off',
         'setlocal EnableExtensions EnableDelayedExpansion',
@@ -494,6 +496,7 @@ describe('selective feature packages', () => {
     expect(program).toContain('ModernTextAreaScroll.Attach(taskInputShell, taskInput)')
     expect(program).not.toContain('new RichTextBox()')
     expect(pluginUi).toContain('ModernTextAreaScroll.Attach(logShell, pluginLogOutput)')
+    expect(pluginUi).toContain('File.Copy(GitProxyHelperPath, Path.Combine(requestDirectory, "DSH-Launcher.GitProxy.ps1"), true)')
     expect(program).toContain('runtime.Settings.WindowPlacement')
     expect(program).toContain('ScreenDeviceName = screen.DeviceName')
     expect(program).toContain('Screen.FromRectangle(Bounds).WorkingArea')
@@ -623,6 +626,10 @@ describe('selective feature packages', () => {
     expect(manager).toContain("'Local\\DSH.Enhanced.WindowsLauncher.PluginManagement'")
     expect(manager).toContain('Expand-SafeZip')
     expect(manager).toContain('Invoke-GitFetchWithRetry')
+    expect(manager).toContain('$gitProxy = Resolve-SystemGitProxy $RemoteUrl')
+    expect(manager).toContain('@(\'-c\', "http.proxy=$gitProxy")')
+    expect(manager).toContain('Temporary Git proxy scope ended; no Git proxy setting was persisted')
+    expect(manager).not.toMatch(/git config\s+--(?:global|local)/i)
     expect(manager).toContain("# transient network error can reach the retry policy below.")
     expect(manager).toContain("'http.version=HTTP/1.1'")
     expect(manager).toContain('Launcher 已自动重试 3 次')

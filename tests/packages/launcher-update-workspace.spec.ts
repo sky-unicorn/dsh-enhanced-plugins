@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve, sep } from 'node:path'
 import { expect, it } from 'vitest'
@@ -22,6 +22,8 @@ it.runIf(process.platform === 'win32')('reuses the update workspace without over
     expect(compiled.status, `${compiled.stdout}\n${compiled.stderr}`).toBe(0)
     writeFileSync(resolve(temporary, 'DSH-Launcher.PluginManager.ps1'),
       `\uFEFF${readFileSync(resolve(source, 'DSH-Launcher.PluginManager.ps1'), 'utf8')}`, 'utf8')
+    copyFileSync(resolve(source, 'DSH-Launcher.GitProxy.ps1'),
+      resolve(temporary, 'DSH-Launcher.GitProxy.ps1'))
     const tested = spawnSync(executable, [root], {
       cwd: temporary, encoding: 'utf8', windowsHide: true, timeout: 75_000,
       env: {
