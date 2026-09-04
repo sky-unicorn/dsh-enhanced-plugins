@@ -52,6 +52,10 @@ const FEATURE_TARGETS = [
       'src/edit-last-message/host/rewind.ts',
     ],
     clientEntry: 'src/edit-last-message/client/index.ts',
+    assets: [{
+      source: 'scripts/repair-edit-last-message-session.mjs',
+      destination: 'scripts/repair-edit-last-message-session.mjs',
+    }],
   },
   {
     id: 'mcp-server-manager',

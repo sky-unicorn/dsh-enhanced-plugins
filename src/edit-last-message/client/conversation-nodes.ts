@@ -48,8 +48,8 @@ function editEvent(event: Parameters<ConversationNodeDefinition['match']>[0]): E
   if (source === undefined) return
   return {
     transactionId: String(event.data.id),
-    rootSeq: source.editLastMessage.rootSeq,
-    rootMessageId: source.editLastMessage.rootMessageId,
+    rootSeq: source.rootSeq,
+    rootMessageId: source.rootMessageId,
     messageSeq: event.seq,
     time: event.time,
     content: event.data.content,

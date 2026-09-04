@@ -2,8 +2,15 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSeq, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
-  EDIT_LAST_MESSAGE_PLUGIN, editLastMessageSource,
+  EDIT_LAST_MESSAGE_SOURCE_KIND, editLastMessageSource, type EditLastMessageSource,
 } from '../shared.js'
+
+declare module '@deepseek-ai/dsh-llm/message' {
+  interface MessageSourceMap {
+    /** Replacement input written by the external edit-last-message plugin. */
+    'edit-last-message': EditLastMessageSource
+  }
+}
 
 export interface EditLastMessageHostRequest {
   readonly sessionId: string
@@ -59,8 +66,8 @@ function editableTarget(session: Session, messageSeq: SessionSeq): EditableTarge
   const previous = editLastMessageSource(event.data.source)
   return {
     event,
-    rootSeq: previous?.editLastMessage.rootSeq ?? event.seq,
-    rootMessageId: previous?.editLastMessage.rootMessageId ?? String(event.data.id),
+    rootSeq: previous?.rootSeq ?? event.seq,
+    rootMessageId: previous?.rootMessageId ?? String(event.data.id),
   }
 }
 
@@ -159,13 +166,10 @@ export async function rewriteLastMessage(
   const message = createUserMessage({
     content: [{ type: 'text', text }],
     source: {
-      kind: 'plugin',
-      plugin: EDIT_LAST_MESSAGE_PLUGIN,
-      editLastMessage: {
-        version: 1,
-        rootSeq: target.rootSeq,
-        rootMessageId: target.rootMessageId,
-      },
+      kind: EDIT_LAST_MESSAGE_SOURCE_KIND,
+      version: 1,
+      rootSeq: target.rootSeq,
+      rootMessageId: target.rootMessageId,
     },
   })
   let interception: AppendInterception | undefined

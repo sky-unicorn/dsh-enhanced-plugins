@@ -30,6 +30,7 @@
       "@deepseek-ai/dsh-credentials": ["../deepseek-harness/packages/credentials/credentials/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-host-webserver": ["../deepseek-harness/packages/host/webserver/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-llm": ["../deepseek-harness/packages/llm/llm/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-llm/message": ["../deepseek-harness/packages/llm/llm/lib/types/message.d.ts"],
       "@deepseek-ai/dsh-mcp-client": ["../deepseek-harness/packages/mcp/mcp-client/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-session": ["../deepseek-harness/packages/core/session/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-settings": ["../deepseek-harness/packages/settings/settings/lib/types/index.d.ts"],

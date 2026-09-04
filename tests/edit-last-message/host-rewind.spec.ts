@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { rewriteLastMessage } from '../../src/edit-last-message/host/rewind.ts'
-import { editLastMessageSource } from '../../src/edit-last-message/shared.ts'
+import {
+  EDIT_LAST_MESSAGE_SOURCE_KIND, editLastMessageSource,
+} from '../../src/edit-last-message/shared.ts'
 
 interface FakeEvent {
   type: string
@@ -94,11 +96,18 @@ describe('rewriteLastMessage', () => {
       expect.objectContaining({ message: expect.objectContaining({ id: 'old-answer' }) }),
     ])
     expect(session.surface.nodes).toEqual([5])
+    const expectedSource = {
+      kind: EDIT_LAST_MESSAGE_SOURCE_KIND,
+      version: 1,
+      rootSeq: 0,
+      rootMessageId: 'original-message',
+    }
+    expect(session.events[2]?.data).toMatchObject({ inserted: [{ source: expectedSource }] })
     expect(session.events[5]).toMatchObject({
       type: 'user/message',
       surfaceOp: { op: 'replace', start: 0, end: 1 },
       sourceEventSeqs: [0, 1],
-      data: { content: [{ type: 'text', text: 'revised' }] },
+      data: { content: [{ type: 'text', text: 'revised' }], source: expectedSource },
     })
   })
 
@@ -116,8 +125,26 @@ describe('rewriteLastMessage', () => {
       { messageSeq: firstReplacement, text: 'second revision' },
     )
     const source = editLastMessageSource(session.events[second.replacementSeq]?.data['source'])
-    expect(source?.editLastMessage).toEqual({ version: 1, rootSeq: 0, rootMessageId: 'original-message' })
+    expect(source).toEqual({
+      kind: EDIT_LAST_MESSAGE_SOURCE_KIND,
+      version: 1,
+      rootSeq: 0,
+      rootMessageId: 'original-message',
+    })
     expect(session.surface.nodes).toEqual([second.replacementSeq])
+  })
+
+  it('normalizes a legacy nested marker for already-loaded sessions', () => {
+    expect(editLastMessageSource({
+      kind: 'plugin',
+      plugin: 'edit-last-message',
+      editLastMessage: { version: 1, rootSeq: 7, rootMessageId: 'legacy-message' },
+    })).toEqual({
+      kind: EDIT_LAST_MESSAGE_SOURCE_KIND,
+      version: 1,
+      rootSeq: 7,
+      rootMessageId: 'legacy-message',
+    })
   })
 
   it('keeps context injected for the regenerated turn outside the old tail', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugins",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "Aggregate and selective DeepSeek Harness enhancements, including a standalone Windows launcher companion",
   "type": "module",
   "main": "./lib/index.js",
@@ -78,6 +78,7 @@
     "packages/windows-launcher/lib/",
     "packages/windows-launcher/package.json",
     "scripts/migrate-to-enhanced-plugin.ps1",
+    "scripts/repair-edit-last-message-session.mjs",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
@@ -97,6 +98,7 @@
     "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:model-input-types && npm run test:notification && npm run test:market && npm run test:sub-agent && npm run test:agent-team-monitor && npm run test:packages",
     "check": "npm run typecheck && npm test && npm run build",
     "market:index": "node scripts/update-plugin-index.mjs",
+    "repair:edit-last-message-session": "node scripts/repair-edit-last-message-session.mjs",
     "pack:dry-run": "node scripts/pack-dry-run.mjs",
     "verify:launcher": "node scripts/verify-windows-launcher.mjs",
     "verify:compat": "node scripts/verify-dsh-compatibility.mjs",

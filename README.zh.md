@@ -235,6 +235,15 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 重新发送仍在当前会话内完成：插件从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH Session 日志保持追加式审计记录，已经执行的工具副作用不会回滚。上传的通用文件继续使用 DSH 文件卡呈现；包含任意附件或其他非文本块的消息不会提供编辑入口，以免静默丢失内容。
 
+早期版本把编辑标记附加在内置 `plugin` 消息来源上；DSH 0.1.3-alpha.1 的严格 v0 迁移器会以 `unexpected member "editLastMessage"` 拒绝这类旧会话。当前实现改用公开、可合并扩展的独立消息来源 `kind`。若旧会话已出现该错误，请先停止所有 DSH Host，然后检查并修复指定日志：
+
+```powershell
+node .\scripts\repair-edit-last-message-session.mjs "C:\path\to\session.jsonl.zstd"
+node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.jsonl.zstd"
+```
+
+第一条命令只检查，不写文件；第二条命令仅转换匹配的旧编辑标记，并在同目录创建带时间戳的原始文件备份。截断、损坏、格式不符或检查期间发生变化的日志都会被拒绝，不会静默重写。
+
 ### 7. 产品子智能体
 
 `sub-agent` · **设置 → 子智能体**
@@ -267,7 +276,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `4.1.0` 对应 DSH `0.1.3-alpha.1`，源码基线 commit 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；插件发布 tag 为 `4.1.0/dsh-0.1.3-alpha.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `4.1.0`。
+- **版本对应：** 插件 `4.1.1` 对应 DSH `0.1.3-alpha.1`，源码基线 commit 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；插件发布 tag 为 `4.1.1/dsh-0.1.3-alpha.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `4.1.1`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。

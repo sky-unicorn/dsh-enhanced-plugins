@@ -235,6 +235,15 @@ The card appears only when the official `llm-pi-ai` settings namespace is availa
 
 Resend stays inside the current session: the plugin replaces model context starting at the edited user message, then generates through the same AgentLoop. The DSH Session log remains an append-only audit record, and side effects from tools that already ran are not rolled back. Uploaded generic files render with the DSH file-card presentation, while messages containing any attachment or other non-text block do not expose the editor, preventing silent data loss.
 
+Earlier releases attached the edit marker to the built-in `plugin` message source. The strict DSH 0.1.3-alpha.1 v0 migrator refuses such an old session with `unexpected member "editLastMessage"`. The current implementation uses its own public, merge-extensible message-source `kind`. If an old session already reports this error, stop every DSH Host before inspecting and repairing that log:
+
+```powershell
+node .\scripts\repair-edit-last-message-session.mjs "C:\path\to\session.jsonl.zstd"
+node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.jsonl.zstd"
+```
+
+The first command is read-only. The second converts only matching legacy edit markers and creates a timestamped backup beside the original artifact. A truncated, corrupt, mismatched, or concurrently changed log is refused instead of being silently rewritten.
+
 ### 7. Product subagents
 
 `sub-agent` · **Settings → Subagents**
@@ -267,7 +276,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** plugin `4.1.0` targets DSH `0.1.3-alpha.1`, source commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`; its release tag is `4.1.0/dsh-0.1.3-alpha.1`. The aggregate, all seven standalone bundles, and Windows Launcher use `4.1.0`.
+- **Version pairing:** plugin `4.1.1` targets DSH `0.1.3-alpha.1`, source commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`; its release tag is `4.1.1/dsh-0.1.3-alpha.1`. The aggregate, all seven standalone bundles, and Windows Launcher use `4.1.1`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** the installer and Launcher plugin updater read `dshEnhanced.compatibility` from the root `package.json` before building, stopping services, or changing a profile. A DSH version mismatch, missing declaration, or mixed plugin package versions stops installation. A matching version whose commit is absent from `sourceCommit` and `additionalSourceCommits`, local source changes, or no Git metadata produces an unverified-source warning.
 - **Current interfaces:** Client features use `client-store`, `ui-session`, `ui-chat`, and public Remotes, without the removed `dsh-client-runtime`, `connection.api`, or `hostDescription`. Host settings owners pass validated namespace literals and use `SettingsProvider.installSection()`. Session consumers use `eventAt()` / `snapshotEvents()` and keep `SessionLogOffset` inheritance metadata separate from `SessionHeader`; Team Monitor preserves that exact cut through query observations and projection replay. This project follows the public interfaces of the source commit above.
