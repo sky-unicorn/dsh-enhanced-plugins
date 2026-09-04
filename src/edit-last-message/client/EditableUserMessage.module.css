@@ -17,7 +17,7 @@
   align-items: flex-end;
   gap: 8px;
   min-width: 0;
-  max-width: min(525px, 82%);
+  max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
 }
 
 .bubble {
@@ -25,11 +25,12 @@
   max-width: 100%;
   padding: 10px 16px;
   border-radius: 22px;
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-label-primary);
-  font-size: 16px;
-  line-height: 24px;
-  overflow-wrap: anywhere;
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .bubble[data-editing] {
@@ -191,17 +192,58 @@
   opacity: 0.4;
 }
 
-.refChip {
-  display: inline-block;
-  margin: 0 2px;
-  padding: 0 8px;
-  border-radius: 6px;
-  background: var(--dsw-alias-interactive-bg-hover-accent);
+.attachmentRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
+  gap: 8px;
+}
+
+.fileCard {
+  display: inline-flex;
+  flex: 0 0 240px;
+  align-items: center;
+  gap: 10px;
+  width: 240px;
+  min-height: 64px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-sizing: border-box;
+}
+
+.fileIcon {
+  flex: none;
+  width: 24px;
+  height: 28px;
+}
+
+.fileContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fileName {
+  overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font-size: 0.85em;
-  line-height: 1.6;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: baseline;
+}
+
+.fileMeta {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @keyframes loading-spin {

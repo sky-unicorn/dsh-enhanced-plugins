@@ -1,13 +1,14 @@
 import {
-  useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode,
+  Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode,
 } from 'react'
 import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   Button, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconLoadingOutline16,
-  IconSendOutline16, JsonBlock, MessageText, Tooltip, writeClipboard,
+  IconSendOutline16, JsonBlock, projectUserText, Tooltip, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import * as UiPrimitives from '@deepseek-ai/dsh-client-ui-primitives'
 import type { EditLastMessageRequest } from './edit-session.ts'
 import {
   isLatestRootEdit, latestEditableMessageSeq, type EditedUserChatData,
@@ -15,7 +16,27 @@ import {
 import type { EditLastMessageLocaleKey } from './locales.ts'
 import css from './EditableUserMessage.module.css'
 
+// The target source exports these in DSH 0.1.3-alpha.1. Keep this narrow
+// structural bridge because a sibling checkout can lag in regenerated lib/types;
+// release verification also typechecks against a freshly built target checkout.
+const { DocumentFileIcon, fileSizeText } = UiPrimitives as unknown as {
+  readonly DocumentFileIcon: (props: { readonly className?: string }) => ReactNode
+  readonly fileSizeText: (bytes: number) => string
+}
+const projectUserTextWithSlashNames = projectUserText as (
+  text: string,
+  sessionLabels: readonly string[],
+  slashNames?: readonly string[],
+) => ReactNode
+
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
+interface UserFileAttachment {
+  readonly name: string
+  readonly bytes: number
+}
+type PresentedAttachment =
+  | { readonly type: 'image'; readonly image: { attachment: UserImage['attachment'] } }
+  | { readonly type: 'file'; readonly file: UserFileAttachment }
 
 /** Actions injected by the slot registration for one session. */
 export interface EditableUserMessageInjected {
@@ -42,37 +63,30 @@ export function editableText(content: UserMessageNode['content']): string | unde
   return text.trim().length === 0 ? undefined : text
 }
 
-function contentParts(content: UserMessageNode['content']): {
+function contentParts(content: readonly unknown[]): {
   text: string
-  images: { attachment: UserImage['attachment'] }[]
+  attachments: PresentedAttachment[]
   rest: unknown[]
 } {
   const texts: string[] = []
-  const images: { attachment: UserImage['attachment'] }[] = []
+  const attachments: PresentedAttachment[] = []
   const rest: unknown[] = []
-  for (const block of content) {
-    if (block.type === 'text') texts.push(block.text)
-    else if (block.type === 'image') images.push({ attachment: block.attachment })
-    else rest.push(block)
+  for (const value of content) {
+    const block = value as { readonly type?: string; readonly text?: string; readonly attachment?: unknown }
+    if (block.type === 'text' && typeof block.text === 'string') texts.push(block.text)
+    else if (block.type === 'image' && block.attachment !== undefined) {
+      attachments.push({ type: 'image', image: { attachment: block.attachment as UserImage['attachment'] } })
+    } else if (block.type === 'file' && block.attachment !== undefined) {
+      attachments.push({ type: 'file', file: block.attachment as UserFileAttachment })
+    } else rest.push(value)
   }
-  return { text: texts.join(''), images, rest }
+  return { text: texts.join(''), attachments, rest }
 }
 
-function projectedText(text: string): ReactNode {
-  const pattern = /(^|\s)([/@][\w-]+)(?=\s|$)/g
-  const parts: ReactNode[] = []
-  let cursor = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(text)) !== null) {
-    const tokenStart = match.index + (match[1]?.length ?? 0)
-    const label = match[2] ?? ''
-    if (tokenStart > cursor) parts.push(<MessageText key={cursor} text={text.slice(cursor, tokenStart)} />)
-    parts.push(<span key={tokenStart} className={css.refChip}>{label}</span>)
-    cursor = tokenStart + label.length
-  }
-  if (parts.length === 0) return <MessageText text={text} />
-  if (cursor < text.length) parts.push(<MessageText key={cursor} text={text.slice(cursor)} />)
-  return <>{parts}</>
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf('.')
+  if (dot <= 0 || dot === name.length - 1) return ''
+  return name.slice(dot + 1).toUpperCase().slice(0, 8)
 }
 
 function errorMessage(error: unknown): string {
@@ -82,7 +96,10 @@ function errorMessage(error: unknown): string {
 const EDITOR_MAX_HEIGHT_PX = 192
 
 interface EditableBubbleProps extends EditableUserMessageInjected {
-  readonly data: Pick<UserMessageNode, 'seq' | 'time' | 'content' | 'source'>
+  readonly data: Pick<UserMessageNode, 'seq' | 'time' | 'content' | 'source'> & {
+    readonly referenceLabels?: readonly string[]
+    readonly skillNames?: readonly string[]
+  }
   readonly renderMessageImages: EditableUserMessageProps['renderMessageImages']
   readonly useSession: EditableUserMessageProps['useSession']
   readonly useChat: EditableUserMessageProps['useChat']
@@ -91,7 +108,8 @@ interface EditableBubbleProps extends EditableUserMessageInjected {
 
 /** Shared bubble body for an append-origin or replacement-projected user message. */
 function EditableUserBubble({ data, renderMessageImages, useSession, useChat, editAndResend, t }: EditableBubbleProps) {
-  const { text, images, rest } = contentParts(data.content)
+  const { text, attachments, rest } = contentParts(data.content)
+  const compactImages = attachments.length > 1
   const candidate = editableText(data.content)
   const running = useSession(snapshot => snapshot.running)
   const subagent = useSession(snapshot => snapshot.subagent !== null)
@@ -175,7 +193,32 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, ed
   return (
     <div className={css.userRow} data-time-hover-root>
       <div className={css.userStack}>
-        {renderMessageImages({ images, align: 'end' })}
+        {attachments.length > 0 && (
+          <div className={css.attachmentRow} data-message-attachments>
+            {attachments.map((attachment, index) => attachment.type === 'image'
+              ? (
+                  <Fragment key={`image:${index}`}>
+                    {renderMessageImages({
+                      images: [attachment.image],
+                      align: 'end',
+                      compact: compactImages,
+                    } as Parameters<typeof renderMessageImages>[0])}
+                  </Fragment>
+                )
+              : (
+                  <span key={`file:${index}`} className={css.fileCard} title={attachment.file.name}>
+                    <DocumentFileIcon className={css.fileIcon} />
+                    <span className={css.fileContent}>
+                      <span className={css.fileName}>{attachment.file.name}</span>
+                      <span className={css.fileMeta}>
+                        {[extensionOf(attachment.file.name), fileSizeText(attachment.file.bytes)]
+                          .filter(Boolean).join(' ')}
+                      </span>
+                    </span>
+                  </span>
+                ))}
+          </div>
+        )}
         {(text !== '' || rest.length > 0) && (
           <div className={css.bubble} data-editing={editing || undefined}>
             {editing
@@ -224,7 +267,7 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, ed
                 )
               : (
                   <>
-                    {projectedText(text)}
+                    {projectUserTextWithSlashNames(text, data.referenceLabels ?? [], data.skillNames ?? [])}
                     {rest.map((block, index) => (
                       <JsonBlock
                         key={index}

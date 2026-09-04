@@ -36,8 +36,16 @@ export function Tooltip({ children }: { children: ReactElement }) {
   return children
 }
 
-export function MessageText({ text }: { text: string }) {
+export function projectUserText(text: string) {
   return <>{text}</>
+}
+
+export function DocumentFileIcon(props: SVGProps<SVGSVGElement>) {
+  return <svg aria-hidden {...props} />
+}
+
+export function fileSizeText(bytes: number) {
+  return `${bytes}B`
 }
 
 export function JsonBlock({ label, payload }: { label: string; payload: unknown }) {

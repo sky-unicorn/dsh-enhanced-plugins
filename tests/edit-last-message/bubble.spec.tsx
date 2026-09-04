@@ -97,6 +97,21 @@ describe('EditableUserMessage', () => {
     ] as never)).toBeUndefined()
   })
 
+  it('renders generic files as attachment cards without offering lossy editing', () => {
+    const value = propsOf()
+    value.node.data.content = [
+      { type: 'text', text: 'review this' },
+      {
+        type: 'file',
+        attachment: { attachmentId: 'sha256:file', name: 'report.pdf', bytes: 512 },
+      },
+    ] as never
+    render(<EditableUserMessage {...value} />)
+    expect(screen.getByText('report.pdf')).toBeTruthy()
+    expect(screen.getByText('PDF 512B')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en['action.edit'] })).toBeNull()
+  })
+
   it('hides grouped replay rows and newly mounted content through the durable edit boundary', async () => {
     const editedData = {
       transactionId: 'replacement-id',
