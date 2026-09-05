@@ -34,6 +34,7 @@
 - Node.js 22.19.x，或 Node.js 24 及更高版本。
 - 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
 - 本仓库针对 DSH [`0.1.3-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/d347e703908d0406b7a7ef80e3a0e594d86b2215) 验证，本地 ABI 基准 commit 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`。
+- Windows 从源码安装该版本 DSH 时，需要 Python 和 Visual Studio C++ Build Tools（“使用 C++ 的桌面开发”工作负载，含 MSVC 和 Windows SDK），无需完整 Visual Studio IDE。DSH 的会话持久化包直接依赖 `fs-ext@2.1.1`，其安装脚本运行 `node-gyp configure build`；这是 DSH 依赖安装的要求，Launcher 自身使用系统 .NET Framework 的 `csc.exe`。参见 [node-gyp Windows 环境说明](https://github.com/nodejs/node-gyp#on-windows)。已有可用构建的日常启动不需要重新编译，但重装依赖或切换 Node.js ABI 后可能再次需要工具链；不要用跳过安装脚本来绕过原生依赖构建。
 - Windows Launcher、原生提示音和桌面宠物需要带 Windows PowerShell 5.1 的完整 Windows 桌面版本，即 Windows 10 1607 或更高版本，或 Windows 11。所需系统能力在 Home、Pro、Education / Pro Education 与 Enterprise 上相同；Windows S 模式、IoT / 精简版本以及 Windows 10 1507、1511 不在这一基线内。已经超出微软生命周期的 Windows 功能更新只能尽力兼容，因为所需 Node.js 工具链不保证支持已停止维护的操作系统。安装器不依赖某一个特定的 `tar.exe`；其余功能可跨平台使用。
 
 > [!IMPORTANT]
@@ -213,6 +214,8 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 浏览器读取已有服务器时会掩码环境变量与请求头；未修改的机密不会从脱敏快照重建或覆盖。
 
+草稿绑定开始编辑时的配置版本。其他页面或外部编辑更新配置后，旧草稿保存会被拒绝，不会删除对方新增的服务器；请放弃草稿、查看最新配置后重新编辑。连接中断时会退出保存状态并保留草稿，写入失败后重新读取 Host 配置；较早的读取响应不会覆盖较新的刷新结果。
+
 ### 5. pi-ai 模型请求类型
 
 `model-input-types` · **设置 → 插件 → 插件配置 → pi-ai 模型请求类型**
@@ -276,7 +279,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `4.1.2` 对应 DSH `0.1.3-alpha.1`，源码基线 commit 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；兼容标识为 `4.1.2/dsh-0.1.3-alpha.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `4.1.2`。
+- **版本对应：** 插件 `4.1.3` 对应 DSH `0.1.3-alpha.1`，源码基线 commit 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；兼容标识为 `4.1.3/dsh-0.1.3-alpha.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `4.1.3`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。

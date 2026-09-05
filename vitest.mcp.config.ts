@@ -1,19 +1,19 @@
-import { exactDshAliases } from './tests/dsh-aliases.ts'
+import { dshCheckout, exactDshAliases } from './tests/dsh-aliases.ts'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
-
-const root = import.meta.dirname
 
 export default defineConfig({
   resolve: {
     alias: exactDshAliases({
-      '@deepseek-ai/dsh-settings': resolve(root, 'tests/mcp-server-manager/stubs/dsh-settings.ts'),
-      '@deepseek-ai/dsh-typert-protocol': resolve(root, 'tests/mcp-server-manager/stubs/dsh-typert-protocol.ts'),
-      '@deepseek-ai/dsh-mcp-client': resolve(root, 'tests/mcp-server-manager/stubs/dsh-mcp-client.ts')
+      '@deepseek-ai/cordis': resolve(dshCheckout, 'vendor/cordis/lib/index.js'),
+      '@deepseek-ai/schemastery': resolve(dshCheckout, 'vendor/schemastery/lib/index.mjs'),
+      '@deepseek-ai/dsh-settings': resolve(dshCheckout, 'packages/settings/settings/lib/index.js'),
+      '@deepseek-ai/dsh-typert-protocol': resolve(dshCheckout, 'packages/typert/protocol/lib/index.js'),
+      '@deepseek-ai/dsh-mcp-client': resolve(dshCheckout, 'packages/mcp/mcp-client/lib/index.js'),
     }),
   },
   test: {
     environment: 'node',
     include: ['tests/mcp-server-manager/**/*.spec.ts'],
   },
-    })
+})

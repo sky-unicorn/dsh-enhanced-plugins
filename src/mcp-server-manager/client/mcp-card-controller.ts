@@ -290,6 +290,9 @@ export class McpCardController {
   private readonly store: SnapshotStore<McpCardState>
   /** Detached staged record; null while not dirty. */
   private draft: Record<string, McpServer> | null = null
+  /** The exact read that owns this draft's edits and revision fence. */
+  private draftBase: Record<string, McpServer> = {}
+  private draftRevision: number | undefined
   /** The add form; null while closed. */
   private form: McpDraftForm | null = null
   private saving = false
@@ -435,8 +438,8 @@ export class McpCardController {
     if (this.form === null) return
     const server = parseForm(this.form)
     if (server === undefined || Object.hasOwn(this.current(), this.form.serverName)) return
-    if (this.draft === null) this.draft = { ...this.authoritative() }
-    this.draft[this.form.serverName] = server
+    const draft = this.draft ?? this.beginDraft()
+    draft[this.form.serverName] = server
     this.form = null
     this.failed = false
     this.importResult = null
@@ -444,30 +447,40 @@ export class McpCardController {
   }
 
   private removeServer(serverName: string): void {
-    if (this.draft === null) this.draft = { ...this.authoritative() }
-    this.draft = Object.fromEntries(Object.entries(this.draft).filter(([name]) => name !== serverName))
+    const draft = this.draft ?? this.beginDraft()
+    this.draft = Object.fromEntries(Object.entries(draft).filter(([name]) => name !== serverName))
     this.failed = false
     this.importResult = null
     this.publish()
   }
 
+  private beginDraft(): Record<string, McpServer> {
+    this.draftBase = { ...this.authoritative() }
+    this.draftRevision = this.snapshot().revision
+    this.draft = { ...this.draftBase }
+    return this.draft
+  }
+
   private async save(): Promise<void> {
     const draft = this.draft
-    if (draft === null || this.saving) return
+    if (draft === null || this.saving || !this.snapshot().writable) return
     this.saving = true
     this.failed = false
     this.publish()
-    const ops = planOps(this.authoritative(), draft)
-    const landed = ops.length > 0 ? await this.config.mutate(ops, this.snapshot().revision) : true
-    // The authoritative read-back is masked, so the honest landing check is
-    // the record's keys: every name the draft holds is served, every removed
-    // one is gone. Values are the Host's schema-validated contract.
-    const names = Object.keys(this.authoritative()).sort().join('\u{0}')
-    const staged = Object.keys(draft).sort().join('\u{0}')
-    if (landed && names === staged) this.draft = null
-    this.saving = false
-    this.failed = !(landed && names === staged)
-    this.publish()
+    try {
+      const ops = planOps(this.draftBase, draft)
+      const landed = ops.length > 0 ? await this.config.mutate(ops, this.draftRevision) : true
+      // The authoritative read-back is masked, so compare server names.
+      const names = Object.keys(this.authoritative()).sort().join('\u{0}')
+      const staged = Object.keys(draft).sort().join('\u{0}')
+      if (landed && names === staged) this.draft = null
+      this.failed = !(landed && names === staged)
+    } catch {
+      this.failed = true
+    } finally {
+      this.saving = false
+      this.publish()
+    }
   }
 
   /** Run the combined one-click import without exposing external definitions to the card. */

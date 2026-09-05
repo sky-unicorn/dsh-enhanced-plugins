@@ -34,6 +34,7 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 - Node.js 22.19.x, or Node.js 24 and later.
 - A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
 - This repository is verified against DSH [`0.1.3-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/d347e703908d0406b7a7ef80e3a0e594d86b2215), with local ABI baseline commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`.
+- Installing this DSH version from source on Windows requires Python and Visual Studio C++ Build Tools (the “Desktop development with C++” workload, including MSVC and the Windows SDK); the full Visual Studio IDE is unnecessary. DSH's session persistence package directly depends on `fs-ext@2.1.1`, whose install script runs `node-gyp configure build`. This requirement belongs to DSH dependency installation; the Launcher itself uses the system .NET Framework `csc.exe`. See the [node-gyp Windows setup](https://github.com/nodejs/node-gyp#on-windows). Starting an existing working build does not require recompilation, but reinstalling dependencies or changing the Node.js ABI may require the toolchain again; do not bypass native dependency builds by skipping install scripts.
 - Windows Launcher, native sounds, and the desktop pet require a full Windows desktop edition with Windows PowerShell 5.1: Windows 10 version 1607 or later, or Windows 11. The required OS capabilities are the same on Home, Pro, Education / Pro Education, and Enterprise; Windows in S mode, IoT / reduced-footprint editions, and Windows 10 versions 1507 and 1511 are outside this baseline. Windows feature updates outside Microsoft's lifecycle are best-effort because the required Node.js toolchain does not guarantee end-of-life operating systems. The installer does not depend on a particular `tar.exe`. The remaining features are cross-platform.
 
 > [!IMPORTANT]
@@ -213,6 +214,8 @@ The page displays index generation time. An index older than 24 hours receives a
 
 Environment and header values are masked when existing servers reach the browser. Unchanged secrets are not reconstructed from, or overwritten by, redacted snapshots.
 
+Drafts retain the configuration revision at the start of editing. If another page or external editor changes the configuration, saving an older draft is refused without deleting the other editor's new servers; discard the draft, review the latest configuration, and edit again. Interrupted saves leave the saving state and retain the draft. Failed writes re-read Host configuration, and older read responses cannot overwrite newer refresh results.
+
 ### 5. pi-ai model request types
 
 `model-input-types` · **Settings → Plugins → Plugin configuration → pi-ai model request types**
@@ -276,7 +279,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** plugin `4.1.2` targets DSH `0.1.3-alpha.1`, source commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`; its compatibility label is `4.1.2/dsh-0.1.3-alpha.1`. The aggregate, all seven standalone bundles, and Windows Launcher use `4.1.2`.
+- **Version pairing:** plugin `4.1.3` targets DSH `0.1.3-alpha.1`, source commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`; its compatibility label is `4.1.3/dsh-0.1.3-alpha.1`. The aggregate, all seven standalone bundles, and Windows Launcher use `4.1.3`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** the installer and Launcher plugin updater read `dshEnhanced.compatibility` from the root `package.json` before building, stopping services, or changing a profile. A DSH version mismatch, missing declaration, or mixed plugin package versions stops installation. A matching version whose commit is absent from `sourceCommit` and `additionalSourceCommits`, local source changes, or no Git metadata produces an unverified-source warning.
 - **Current interfaces:** Client features use `client-store`, `ui-session`, `ui-chat`, and public Remotes, without the removed `dsh-client-runtime`, `connection.api`, or `hostDescription`. Host settings owners pass validated namespace literals and use `SettingsProvider.installSection()`. Session consumers use `eventAt()` / `snapshotEvents()` and keep `SessionLogOffset` inheritance metadata separate from `SessionHeader`; Team Monitor preserves that exact cut through query observations and projection replay. This project follows the public interfaces of the source commit above.

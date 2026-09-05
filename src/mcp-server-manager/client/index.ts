@@ -58,6 +58,7 @@ export function apply(ctx: ClientContext): void {
 
   const { rpc } = ctx.get('connection') as ConnectionHandle
   const store = new McpConfigStore(rpc)
+  ctx.effect(() => () => store.dispose(), 'mcp-server-manager: config store')
   const controller = new McpCardController(store)
   void store.refresh()
 

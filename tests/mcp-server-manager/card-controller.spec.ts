@@ -122,6 +122,35 @@ describe('isValidHttpUrl', () => {
 })
 
 describe('McpCardController', () => {
+  it('never turns another editor\'s new server into a deletion from an older draft', async () => {
+    const source = sourceOf({ status: 'ready', writable: true, revision: 1, value: { servers: { demo: serverA } } })
+    const controller = new McpCardController(source)
+    const face = controller.inject()
+    face.removeServer('demo')
+    await source.mutate([{ op: 'set', path: ['servers', 'external'], value: serverB }], 1)
+    const writes: { ops: readonly McpWireOp[]; revision?: number }[] = []
+    const mutate = source.mutate
+    source.mutate = async (ops, revision) => {
+      writes.push({ ops, revision })
+      if (revision !== source.getSnapshot().revision) return false
+      return mutate(ops, revision)
+    }
+    await controller['save']()
+    expect(writes).toEqual([{ ops: [{ op: 'unset', path: ['servers', 'demo'] }], revision: 1 }])
+    expect(source.getSnapshot().value?.servers).toHaveProperty('external')
+    expect(snapshotOf(face)).toMatchObject({ saving: false, failed: true, dirty: true })
+  })
+
+  it('releases saving and retains the draft when transport rejects', async () => {
+    const source = sourceOf({ status: 'ready', writable: true, revision: 1, value: { servers: { demo: serverA } } })
+    source.mutate = async () => { throw new Error('connection reset') }
+    const controller = new McpCardController(source)
+    const face = controller.inject()
+    face.removeServer('demo')
+    await expect(controller['save']()).resolves.toBeUndefined()
+    expect(snapshotOf(face)).toMatchObject({ saving: false, failed: true, dirty: true })
+  })
+
   it('stages add into a detached draft, then clears on save', async () => {
     const controller = new McpCardController(sourceOf({
       status: 'ready',

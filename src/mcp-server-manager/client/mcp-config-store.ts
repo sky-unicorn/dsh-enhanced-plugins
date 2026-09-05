@@ -185,6 +185,8 @@ function assertImportSummary(value: unknown): McpImportSummary | undefined {
 export class McpConfigStore {
   private snapshot: McpConfigSnapshot = { status: 'pending', writable: false }
   private readonly listeners = new Set<() => void>()
+  private generation = 0
+  private disposed = false
 
   /** @param rpc - the connection's generic logical-RPC caller. */
   constructor(private readonly rpc: ClientConnectionRpc) {}
@@ -212,25 +214,34 @@ export class McpConfigStore {
    * @returns settlement after the view is applied.
    */
   async refresh(): Promise<void> {
-    const result = await this.rpc.call('/api', 'mcpConfig/describe', { args: {} })
-    if (!result.ok) {
-      // The manager (or its Remote) is absent from this composition; the card
-      // renders nothing rather than retrying a namespace nobody serves.
-      this.snapshot = { status: 'unsupported', writable: false }
-      this.publish()
-      return
-    }
-    const view = assertView(result.value)
-    this.snapshot = view.registered && view.servers !== undefined
-      ? {
-        status: 'ready',
-        writable: true,
-        value: { servers: view.servers },
-        revision: view.revision ?? 0,
-        format: view.format ?? { valid: true, serverCount: Object.keys(view.servers).length, issues: [] },
+    if (this.disposed) return
+    const generation = ++this.generation
+    try {
+      const result = await this.rpc.call('/api', 'mcpConfig/describe', { args: {} })
+      if (this.disposed || generation !== this.generation) return
+      if (!result.ok) {
+        // The manager (or its Remote) is absent from this composition.
+        this.snapshot = { status: 'unsupported', writable: false }
+        this.publish()
+        return
       }
-      : { status: 'unsupported', writable: false }
-    this.publish()
+      const view = assertView(result.value)
+      this.snapshot = view.registered && view.servers !== undefined
+        ? {
+          status: 'ready',
+          writable: true,
+          value: { servers: view.servers },
+          revision: view.revision ?? 0,
+          format: view.format ?? { valid: true, serverCount: Object.keys(view.servers).length, issues: [] },
+        }
+        : { status: 'unsupported', writable: false }
+      this.publish()
+    } catch {
+      if (this.disposed || generation !== this.generation) return
+      // Preserve visible rows, but do not permit writes using an unverified revision.
+      this.snapshot = { ...this.snapshot, writable: false }
+      this.publish()
+    }
   }
 
   /**
@@ -240,16 +251,18 @@ export class McpConfigStore {
    * @returns whether the batch landed (false on conflict or refusal).
    */
   async mutate(ops: readonly McpWireOp[], expectedRevision: number | undefined): Promise<boolean> {
-    const result = await this.rpc.call('/api', 'mcpConfig/mutate', {
-      args: { request: { ops, expectedRevision } },
-    })
-    if (!result.ok) return false
-    const outcome = result.value
-    if (!isPlainObject(outcome) || (outcome['kind'] !== 'ok' && outcome['kind'] !== 'conflict')) {
-      return false
+    if (this.disposed) return false
+    let landed = false
+    try {
+      const result = await this.rpc.call('/api', 'mcpConfig/mutate', {
+        args: { request: { ops, expectedRevision } },
+      })
+      landed = result.ok && isPlainObject(result.value) && result.value['kind'] === 'ok'
+    } catch {
+      // The connection may fail after the Host commits. Always read back.
     }
     await this.refresh()
-    return outcome['kind'] === 'ok'
+    return landed && !this.disposed && this.snapshot.writable
   }
 
   /**
@@ -263,14 +276,27 @@ export class McpConfigStore {
     sources: readonly McpImportSource[],
     expectedRevision: number | undefined,
   ): Promise<McpImportSummary | undefined> {
-    const result = await this.rpc.call('/api', 'mcpConfig/import', {
-      args: { request: { sources, expectedRevision } },
-    })
-    if (!result.ok || !isPlainObject(result.value)) return undefined
-    const outcome = result.value
-    if (outcome['kind'] !== 'ok' && outcome['kind'] !== 'conflict') return undefined
+    if (this.disposed) return undefined
+    let summary: McpImportSummary | undefined
+    try {
+      const result = await this.rpc.call('/api', 'mcpConfig/import', {
+        args: { request: { sources, expectedRevision } },
+      })
+      if (result.ok && isPlainObject(result.value) && result.value['kind'] === 'ok') {
+        summary = assertImportSummary(result.value['summary'])
+      }
+    } catch {
+      // Re-read after refused or interrupted imports as well as successful ones.
+    }
     await this.refresh()
-    return outcome['kind'] === 'ok' ? assertImportSummary(outcome['summary']) : undefined
+    return this.disposed || !this.snapshot.writable ? undefined : summary
+  }
+
+  /** Stop publishing pending reads when the owning client fiber unloads. */
+  dispose(): void {
+    this.disposed = true
+    this.generation++
+    this.listeners.clear()
   }
 
   private publish(): void {
