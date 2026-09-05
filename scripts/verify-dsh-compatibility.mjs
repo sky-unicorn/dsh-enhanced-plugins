@@ -21,7 +21,7 @@ const packages = readdirSync(resolve(root, 'packages'))
 const allNames = [manifest.name, ...packages.map(value => value.name)]
 const scratch = resolve(root, '.verify-dsh-home')
 mkdirSync(scratch, { recursive: true })
-const home = mkdtempSync(resolve(scratch, 'selection-411-'))
+const home = mkdtempSync(resolve(scratch, 'selection-412-'))
 const env = { ...process.env, DSH_HOME: home,
   DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(home, 'launcher'),
   DSH_TELEMETRY_MODE: 'DISABLED',

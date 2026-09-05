@@ -81,8 +81,34 @@ try {
     if (Test-Path -LiteralPath $stopPath -PathType Leaf) {
       $stopId = ([string](Get-Content -Raw -LiteralPath $stopPath -ErrorAction SilentlyContinue)).Trim()
       if ($stopId -eq $requestId.ToString('D')) {
-        $stopping = $true
-        & taskkill.exe /PID $runner.Id /T /F 2>$null | Out-Null
+        # A busy DSH tree contains short-lived MCP children. taskkill can print
+        # "no running instance" for one child and return 255 even after it has
+        # successfully terminated the runner and every remaining descendant.
+        # Windows PowerShell 5.1 promotes that native stderr to a terminating
+        # error under Stop, which used to kill this supervisor mid-command and
+        # orphan the still-running Web tree. Let taskkill finish, then use the
+        # runner process itself as the authoritative stop result.
+        $taskkillErrorActionPreference = $ErrorActionPreference
+        try {
+          $ErrorActionPreference = 'Continue'
+          $taskkillOutput = @(& taskkill.exe /PID $runner.Id /T /F 2>&1)
+          $taskkillExitCode = $LASTEXITCODE
+        } finally {
+          $ErrorActionPreference = $taskkillErrorActionPreference
+        }
+        $runner.Refresh()
+        if ($runner.HasExited) {
+          $stopping = $true
+        } else {
+          $detail = ($taskkillOutput | Out-String).Trim()
+          try {
+            [System.IO.File]::AppendAllText(
+              [string] $request.logPath,
+              "Launcher could not stop the Web process tree (taskkill exit $taskkillExitCode): $detail`r`n",
+              $Utf8NoBom
+            )
+          } catch { }
+        }
         Remove-Item -LiteralPath $stopPath -Force -ErrorAction SilentlyContinue
       }
     }
