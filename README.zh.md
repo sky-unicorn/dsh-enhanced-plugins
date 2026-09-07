@@ -126,6 +126,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 - **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。即使关闭了启动时自动打开浏览器，“打开页面”也会使用当前 Launcher-owned DSH 进程的认证入口，启动 token 不会写入 Launcher 日志。
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
+- **Web 运行环境：** 概览按“服务状态 → 操作 → 运行环境 → 启动选项”纵向排列，展示 NVM 沙盒/系统模式、Node 与 npm/pnpm/Yarn 的需求及实际版本、检测来源和准备/失败状态。停止时可重新检测，运行中显示本次启动记录，外部服务版本不会被猜测。
+
+  每次启动 Web（含托盘、重启、登录自动启动）都会检测 nvm-windows。已安装时，从绑定的 DSH checkout 或可识别的 npm DSH shim 读取元数据：Node 按 `.nvmrc`、`.node-version`、`volta.node`、`engines.node` 选择，并始终满足 `engines.node`，使用 NVM 已安装的最高匹配版本。包管理器优先读取 `packageManager`/`devEngines.packageManager`，再参考 Volta、engines 和锁文件；锁文件只标识工具种类或 Yarn 主版本系列，不被当作精确版本。缺少的包管理器在首次启动时下载到 Launcher 的 `sandbox` 目录，后续复用；声明冲突会明确报错。
+
+  沙盒直接用所选 Node 调用同一个 DSH CLI，仅隔离该服务的 PATH、全局安装目录及 npm/pnpm/Yarn/Corepack 缓存，不执行 `nvm use`，不修改系统 Node、NVM 链接或 DSH 源码。这是工具链的进程级隔离，不是文件或网络权限沙箱。未检测到 NVM 时保留原启动方式；NVM 中缺少匹配 Node、项目声明无效或下载失败时停止启动并显示原因，Node 需先用 `nvm install` 安装。无法识别的自定义启动器需重新绑定 DSH 源码。Headless、其他 Profile、源码构建沿用原有流程。
 - **源码维护：** “更新源码并构建”对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后依次运行 `pnpm run clean`、`pnpm install --frozen-lockfile`、`pnpm run build`。拉取 HTTP(S) 远端前，Launcher 会按远端 URL 解析当前 Windows 系统代理；若系统为该地址选择了代理，则仅通过 Git 的单次命令配置应用到本次拉取，命令结束（包括失败）后自动失效，不会写入或覆盖仓库、用户或系统级 Git 代理设置。SSH 远端不使用这项 HTTP(S) 代理发现。“仅构建”直接使用当前本地源码，跳过 Git 更新，仍执行这三个 pnpm 步骤；无 Git 时，“更新源码并构建”也可经确认跳过拉取。操作期间两个构建按钮均禁用，避免重复启动。清理前会检查 checkout 是否具备 clean/build 脚本和锁文件，以及 pnpm 是否可用。任一步失败即停止后续步骤，锁文件错误不会降级为非冻结安装。Git 进度和 pnpm 警告不会被误判为失败，操作以真实退出码为准。页面会区分拉取、清理、依赖安装、构建与环境错误，放大的日志文字和“打开日志目录”入口便于排查；完整 UTF-8 输出、命令引擎错误及最终结果保存在 `logs/dsh-build.log`，刷新或重新进入页面不会丢失。运行前请先停止使用此 checkout 的 DSH：清理会删除现有构建产物，后续步骤失败时旧产物不会恢复。本操作不会自动停止或重启 DSH，请在构建成功后手动启动服务。
 
   源码操作进程会临时设置 `pnpm_config_verify_deps_before_run=false`，防止 pnpm 的[脚本前自动安装](https://pnpm.io/settings/build#verifydepsbeforerun)在明确的冻结安装步骤前改写锁文件；不会修改仓库或全局 pnpm 配置。
@@ -279,7 +284,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `4.1.3` 对应 DSH `0.1.3-alpha.1`，源码基线 commit 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；兼容标识为 `4.1.3/dsh-0.1.3-alpha.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `4.1.3`。
+- **版本对应：** 插件 `4.1.4` 对应 DSH `0.1.3-alpha.1`，源码基线 commit 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；兼容标识为 `4.1.4/dsh-0.1.3-alpha.1`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `4.1.4`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。
@@ -370,6 +375,8 @@ Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home �
 需要使用隔离构建时，可将 `DSH_VERIFY_CHECKOUT` 设置为已验证 DSH commit 的构建副本路径，再运行 `npm test` 或 `npm run verify:compat`。默认仍使用 sibling checkout，安装器仍会核对声明的版本。
 
 `npm run verify:launcher` 在临时目录中验证编译后的 Launcher 和 PowerShell 命令引擎，包括清理、安装、构建的顺序、失败即停止，以及真实 pnpm 对过期锁文件的拒绝。需要 Windows，并在 `PATH` 中提供 Git 和 pnpm；不会清理或重建真实 DSH checkout。
+
+`npm run test:launcher-toolchain` 验证版本检测、NVM 回退、声明冲突和环境隔离（先构建 Launcher）。`node scripts/verify-launcher-sandbox.mjs <DSH-checkout>` 在 Windows 上使用临时 DSH Home 验证真实 Web 就绪、所选包管理器、缓存重启和停止，可能下载所需包管理器；只读引用 DSH checkout，截图与结果写入 `.verify-dsh-home/sandbox-artifacts`。
 
 `npm run verify:pack` 会将独立包打成 tarball，在没有 DSH peer 包的隔离目录重新安装构建依赖、执行 `prepare` 并检查再次打包的入口；Windows Companion 的这项验证也需要 Windows。
 

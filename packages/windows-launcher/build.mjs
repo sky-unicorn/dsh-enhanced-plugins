@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { build } from 'esbuild'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 const source = resolve(root, 'src')
@@ -47,6 +48,11 @@ export async function buildWindowsLauncher() {
 
   await rm(output, { recursive: true, force: true })
   await mkdir(output, { recursive: true })
+  await build({
+    entryPoints: [resolve(source, 'toolchain-cli.mjs')],
+    outfile: resolve(output, 'DSH-Launcher.Toolchain.cjs'),
+    bundle: true, platform: 'node', format: 'cjs', target: 'node16',
+  })
   const sourceFiles = (await readdir(source))
     .filter(file => file.endsWith('.cs'))
     .sort()

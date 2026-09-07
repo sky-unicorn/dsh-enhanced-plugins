@@ -515,6 +515,20 @@ namespace DshEnhanced.WindowsLauncher
         private FlowLayoutPanel overviewActions;
         private RoundedPanel settingsCard;
         private RoundedPanel pathCard;
+        private RoundedPanel nodeTile;
+        private RoundedPanel managerTile;
+        private Label runtimeBadge;
+        private Label runtimeContext;
+        private Label runtimeMessage;
+        private Label nodeVersionLabel;
+        private Label nodeRequirementLabel;
+        private Label managerNameLabel;
+        private Label managerVersionLabel;
+        private Label managerRequirementLabel;
+        private ModernButton runtimeRefresh;
+        private ToolchainSnapshot inspectedToolchain;
+        private int inspectRequested = 1;
+        private readonly ToolTip runtimeTips = new ToolTip { AutoPopDelay = 20000 };
         private Label privacyLabel;
         private Label shieldLabel;
         private Label portLabel;
@@ -1028,11 +1042,37 @@ namespace DshEnhanced.WindowsLauncher
             pathCard = new RoundedPanel();
             pathCard.Size = new Size(780, 112);
             overviewPage.Content.Controls.Add(pathCard);
-            AddCardTitle(pathCard, "运行环境", "Launcher 会优先使用 dsh.ps1，避免批处理参数重新解释");
+            AddCardTitle(pathCard, RuntimeText.Title, RuntimeText.Subtitle);
+            runtimeBadge = NewLabel(RuntimeText.Detecting, 9f, FontStyle.Bold, UiTheme.Primary);
+            runtimeContext = NewLabel(RuntimeText.Next, 8f, FontStyle.Regular, UiTheme.Muted);
+            runtimeMessage = NewLabel(RuntimeText.Detecting, 8.5f, FontStyle.Regular, UiTheme.Muted);
+            pathCard.Controls.Add(runtimeBadge);
+            pathCard.Controls.Add(runtimeContext);
+            pathCard.Controls.Add(runtimeMessage);
+            runtimeRefresh = NewButton(RuntimeText.Refresh, ModernButtonKind.Quiet, 100);
+            runtimeRefresh.Click += delegate { Interlocked.Exchange(ref inspectRequested, 1); RefreshNow(); };
+            Disposed += delegate { runtimeTips.Dispose(); };
+            pathCard.Controls.Add(runtimeRefresh);
+            Label nodeNameLabel;
+            nodeTile = NewRuntimeTile(RuntimeText.Node, out nodeVersionLabel, out nodeRequirementLabel, out nodeNameLabel);
+            managerTile = NewRuntimeTile(RuntimeText.Manager, out managerVersionLabel, out managerRequirementLabel, out managerNameLabel);
+            pathCard.Controls.Add(nodeTile);
+            pathCard.Controls.Add(managerTile);
             dshPath.AutoEllipsis = true;
             dshPath.Font = UiTheme.Font(8.5f, FontStyle.Regular);
             dshPath.ForeColor = UiTheme.Muted;
             pathCard.Controls.Add(dshPath);
+        }
+
+        private RoundedPanel NewRuntimeTile(string title, out Label value, out Label detail, out Label name)
+        {
+            RoundedPanel tile = new RoundedPanel();
+            tile.BackColor = UiTheme.SurfaceSoft;
+            name = NewLabel(title, 8.5f, FontStyle.Regular, UiTheme.Muted);
+            value = NewLabel(RuntimeText.Pending, 15f, FontStyle.Bold, UiTheme.Text);
+            detail = NewLabel(RuntimeText.Pending, 8f, FontStyle.Regular, UiTheme.Muted);
+            tile.Controls.Add(name); tile.Controls.Add(value); tile.Controls.Add(detail);
+            return tile;
         }
 
         private void BuildTasksPage()
@@ -1295,14 +1335,16 @@ namespace DshEnhanced.WindowsLauncher
             // Keep primary cards in the same vertical reading order at every window size.
             // A wider viewport may give controls more room inside a card, but must not turn
             // the page itself into a left-to-right dashboard.
-            int pathHeight = Dip(112);
+            bool stackRuntime = width < Dip(520);
+            int pathHeight = Dip(stackRuntime ? 400 : 290);
             int gap = Dip(18);
-            SetBoundsIfChanged(settingsCard, left, cardsTop, width, settingsHeight);
-            SetBoundsIfChanged(pathCard, left, cardsTop + settingsHeight + gap, width, pathHeight);
+            SetBoundsIfChanged(pathCard, left, cardsTop, width, pathHeight);
+            SetBoundsIfChanged(settingsCard, left, cardsTop + pathHeight + gap, width, settingsHeight);
             int bottom = cardsTop + settingsHeight + gap + pathHeight;
 
             LayoutCardHeader(settingsCard);
-            LayoutCardHeader(pathCard);
+            SetBoundsIfChanged(runtimeRefresh, width - Dip(128), Dip(22), Dip(100), Dip(42));
+            LayoutCardHeader(pathCard, runtimeRefresh);
             int available = Math.Max(Dip(120), settingsCard.Width - Dip(56));
             int column = available / settingsColumns;
             Label[] labels = { portLabel, browserLabel, launcherAutoLabel, dshAutoLabel };
@@ -1315,8 +1357,29 @@ namespace DshEnhanced.WindowsLauncher
                     column, Dip(78) + (row * Dip(70)));
             }
 
-            SetBoundsIfChanged(dshPath, Dip(28), Dip(82), Math.Max(Dip(80), pathCard.Width - Dip(56)), Dip(24));
+            int runtimeWidth = width - Dip(56);
+            SetRuntimeLabel(runtimeBadge, Dip(28), Dip(76), runtimeWidth, Dip(24));
+            SetRuntimeLabel(runtimeContext, Dip(28), Dip(100), runtimeWidth, Dip(20));
+            int tileWidth = stackRuntime ? runtimeWidth : (runtimeWidth - Dip(12)) / 2;
+            SetBoundsIfChanged(nodeTile, Dip(28), Dip(128), tileWidth, Dip(100));
+            SetBoundsIfChanged(managerTile, stackRuntime ? Dip(28) : Dip(40) + tileWidth,
+                Dip(stackRuntime ? 238 : 128), tileWidth, Dip(100));
+            foreach (RoundedPanel tile in new[] { nodeTile, managerTile })
+            {
+                SetRuntimeLabel((Label)tile.Controls[0], Dip(16), Dip(10), tileWidth - Dip(32), Dip(20));
+                SetRuntimeLabel((Label)tile.Controls[1], Dip(16), Dip(31), tileWidth - Dip(32), Dip(32));
+                SetRuntimeLabel((Label)tile.Controls[2], Dip(16), Dip(67), tileWidth - Dip(32), Dip(22));
+            }
+            SetRuntimeLabel(runtimeMessage, Dip(28), Dip(stackRuntime ? 348 : 238), runtimeWidth, Dip(22));
+            SetRuntimeLabel(dshPath, Dip(28), Dip(stackRuntime ? 374 : 264), runtimeWidth, Dip(20));
             overviewPage.AutoScrollMinSize = new Size(0, bottom + Dip(8));
+        }
+
+        private static void SetRuntimeLabel(Label label, int left, int top, int width, int height)
+        {
+            label.AutoSize = false;
+            label.AutoEllipsis = true;
+            SetBoundsIfChanged(label, left, top, width, height);
         }
 
         private void LayoutSetting(Label label, Control control, int left, int columnWidth, int top)
@@ -1455,8 +1518,11 @@ namespace DshEnhanced.WindowsLauncher
             return Math.Max(minimumHeight, totalHeight);
         }
 
-        private void LayoutCardHeader(Control card)
+        private void LayoutCardHeader(Control card, Control action = null)
         {
+            // Reserve the action column for both lines: transparent labels still paint over sibling controls.
+            int textWidth = action == null ? Math.Max(Dip(80), card.Width - Dip(56))
+                : Math.Max(1, action.Left - Dip(44));
             foreach (Control control in card.Controls)
             {
                 Label label = control as Label;
@@ -1465,9 +1531,9 @@ namespace DshEnhanced.WindowsLauncher
                 label.AutoSize = false;
                 label.AutoEllipsis = true;
                 if (role == "card-title")
-                    SetBoundsIfChanged(label, Dip(28), Dip(18), Math.Max(Dip(80), card.Width - Dip(56)), Dip(26));
+                    SetBoundsIfChanged(label, Dip(28), Dip(18), textWidth, Dip(26));
                 else if (role == "card-subtitle")
-                    SetBoundsIfChanged(label, Dip(28), Dip(45), Math.Max(Dip(80), card.Width - Dip(56)), Dip(24));
+                    SetBoundsIfChanged(label, Dip(28), Dip(45), textWidth, Dip(24));
             }
         }
 
@@ -1491,12 +1557,21 @@ namespace DshEnhanced.WindowsLauncher
                 WebStatusSnapshot status = null;
                 LoginStartupMode autostartMode = LoginStartupMode.Disabled;
                 string dsh = resolvedDsh;
+                ToolchainSnapshot toolchain = inspectedToolchain;
                 Exception failure = null;
                 try
                 {
                     status = runtime.Snapshot();
                     autostartMode = runtime.GetAutostartMode();
                     if (!dshResolved) dsh = runtime.ResolveDsh();
+                    ToolchainSnapshot launched = JsonFile.Read<ToolchainSnapshot>(ToolchainInspector.StatePath);
+                    LauncherState launchState = JsonFile.Read<LauncherState>(LauncherPaths.State);
+                    if (Interlocked.Exchange(ref inspectRequested, 0) != 0)
+                        inspectedToolchain = toolchain = runtime.InspectToolchain();
+                    if (launched != null && launchState != null && launched.requestId == launchState.requestId
+                        && (status.CanStop || launched.phase == "error")) toolchain = launched;
+                    else if (status.CanStop) toolchain = new ToolchainSnapshot {
+                        mode = "unknown", phase = "preparing", message = RuntimeText.Detecting };
                 }
                 catch (Exception error) { failure = error; }
 
@@ -1515,6 +1590,7 @@ namespace DshEnhanced.WindowsLauncher
                             resolvedDsh = dsh;
                             dshResolved = true;
                             ApplyStatus(status, autostartMode, dsh);
+                            ApplyToolchain(toolchain, status);
                         }
                         else
                         {
@@ -1563,6 +1639,35 @@ namespace DshEnhanced.WindowsLauncher
             loadingSettings = true;
             ApplyStartupModeToControls(autostartMode);
             loadingSettings = false;
+        }
+
+        private void ApplyToolchain(ToolchainSnapshot value, WebStatusSnapshot status)
+        {
+            bool external = status.Ownership == WebOwnership.External;
+            runtimeRefresh.Enabled = !status.CanStop;
+            if (value == null) return;
+            bool sandbox = value.mode == "sandbox";
+            bool error = value.phase == "error";
+            SetLabelText(runtimeBadge, (external ? RuntimeText.Unverified : value.mode == "unknown" ? RuntimeText.Detecting : sandbox ? RuntimeText.Sandbox : RuntimeText.System)
+                + (error ? " · " + RuntimeText.Error : value.phase == "preparing" ? " · " + RuntimeText.Preparing : ""));
+            runtimeBadge.ForeColor = error ? UiTheme.Danger : sandbox ? UiTheme.Primary : UiTheme.Muted;
+            SetLabelText(runtimeContext, external ? RuntimeText.External : status.CanStop ? RuntimeText.Active : RuntimeText.Next);
+            SetLabelText(nodeVersionLabel, external ? RuntimeText.Unverified : String.IsNullOrEmpty(value.nodeVersion)
+                ? sandbox ? RuntimeText.Pending : RuntimeText.Unverified : value.nodeVersion);
+            SetLabelText(nodeRequirementLabel, RuntimeText.Requirement + (String.IsNullOrEmpty(value.nodeRequirement) ? RuntimeText.Unspecified : value.nodeRequirement));
+            SetLabelText(managerNameLabel, String.IsNullOrEmpty(value.manager) ? RuntimeText.Manager : value.manager);
+            SetLabelText(managerVersionLabel, external ? RuntimeText.Unverified : String.IsNullOrEmpty(value.managerVersion)
+                ? sandbox ? RuntimeText.Install : RuntimeText.Unverified : value.managerVersion);
+            SetLabelText(managerRequirementLabel, RuntimeText.Requirement + (String.IsNullOrEmpty(value.managerRequirement)
+                || value.managerRequirement == "*" ? RuntimeText.Unspecified : value.managerRequirement));
+            SetLabelText(runtimeMessage, value.message ?? RuntimeText.Detecting);
+            runtimeMessage.ForeColor = error ? UiTheme.Danger : UiTheme.Muted;
+            SetLabelText(dshPath, sandbox ? RuntimeText.Source + value.nodeSource + " / " + value.managerSource + " · " + value.projectPath
+                : resolvedDsh ?? RuntimeText.Pending);
+            runtimeTips.SetToolTip(runtimeMessage, value.message);
+            runtimeTips.SetToolTip(nodeRequirementLabel, nodeRequirementLabel.Text + " · " + value.nodeSource);
+            runtimeTips.SetToolTip(managerRequirementLabel, managerRequirementLabel.Text + " · " + value.managerSource);
+            runtimeTips.SetToolTip(dshPath, value.projectPath + Environment.NewLine + value.nodePath);
         }
 
         private void ChangeAutostartMode(LoginStartupMode selected, bool enabled)
@@ -1614,10 +1719,19 @@ namespace DshEnhanced.WindowsLauncher
             else if (pluginScrollStress) Size = new Size(1600, 900);
             Show();
             Application.DoEvents();
+            if (String.Equals(layout, "runtime", StringComparison.OrdinalIgnoreCase))
+            {
+                ToolchainSnapshot detected = runtime.InspectToolchain();
+                WebStatusSnapshot status = runtime.Snapshot();
+                ToolchainSnapshot launched = JsonFile.Read<ToolchainSnapshot>(ToolchainInspector.StatePath);
+                if (launched != null && launched.requestId == status.RequestId) detected = launched;
+                ApplyStatus(status, runtime.GetAutostartMode(), runtime.ResolveDsh());
+                ApplyToolchain(detected, status);
+            }
             if (firstShow)
             {
-                if (overviewActions.Top <= hero.Bottom || settingsCard.Top <= overviewActions.Bottom
-                    || pathCard.Top <= settingsCard.Top)
+                if (overviewActions.Top <= hero.Bottom || pathCard.Top <= overviewActions.Bottom
+                    || settingsCard.Top <= pathCard.Top)
                     throw new InvalidOperationException("The overview page did not complete its first-show layout.");
             }
             if (stressResize)
@@ -1749,7 +1863,7 @@ namespace DshEnhanced.WindowsLauncher
                 throw new InvalidOperationException("The themed page scrollbar must be visible for overflowing content.");
             if (activePage == overviewPage)
             {
-                if (pathCard.Top <= settingsCard.Bottom)
+                if (settingsCard.Top <= pathCard.Bottom)
                     throw new InvalidOperationException("Overview cards must remain vertically stacked.");
                 EnsureContained(overviewActions, startButton, "overview start action");
                 EnsureContained(overviewActions, openButton, "overview open action");
@@ -1760,6 +1874,16 @@ namespace DshEnhanced.WindowsLauncher
                 EnsureContained(settingsCard, launcherAutostartToggle, "Launcher startup setting");
                 EnsureContained(settingsCard, dshAutostartToggle, "DSH startup setting");
                 EnsureContained(pathCard, dshPath, "DSH path");
+                EnsureContained(pathCard, nodeTile, "Node runtime");
+                EnsureContained(pathCard, managerTile, "package manager runtime");
+                EnsureContained(pathCard, runtimeRefresh, "runtime refresh");
+                foreach (Control control in pathCard.Controls)
+                {
+                    string role = control.Tag as string;
+                    if ((role == "card-title" || role == "card-subtitle")
+                        && control.Bounds.IntersectsWith(runtimeRefresh.Bounds))
+                        throw new InvalidOperationException("Runtime header text must not cover the refresh button.");
+                }
             }
             else if (activePage == tasksPage)
             {

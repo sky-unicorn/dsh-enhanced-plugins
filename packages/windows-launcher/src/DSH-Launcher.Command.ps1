@@ -309,12 +309,30 @@ try {
       exit $profileResult.code
     }
     'web' {
+      $toolchain = $null
+      $runtimeNodeProperty = $request.PSObject.Properties['runtimeNode']
+      if ($null -ne $runtimeNodeProperty -and -not [string]::IsNullOrWhiteSpace([string] $runtimeNodeProperty.Value)) {
+        $helper = Join-Path $PSScriptRoot 'DSH-Launcher.Toolchain.cjs'
+        if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { throw 'Launcher toolchain component is missing.' }
+        $planJson = & ([string] $runtimeNodeProperty.Value) $helper prepare $RequestPath
+        if ($LASTEXITCODE -ne 0) { throw '运行环境准备失败，请查看概览页的运行环境状态。' }
+        $toolchain = $planJson | ConvertFrom-Json
+        if ($toolchain.summary.mode -eq 'sandbox') {
+          foreach ($entry in $toolchain.environment.PSObject.Properties) {
+            [Environment]::SetEnvironmentVariable($entry.Name, [string] $entry.Value, 'Process')
+          }
+          $dsh = [string] $toolchain.summary.nodePath
+        }
+      }
       $port = 0
       if (-not [int]::TryParse([string] $request.port, [ref] $port) -or $port -lt 0 -or $port -gt 65535) {
         throw 'Web port must be between 0 and 65535.'
       }
       $arguments = @('web', '--port', [string] $port)
       if ([bool] $request.noOpen) { $arguments += '--no-open' }
+      if ($null -ne $toolchain -and $toolchain.summary.mode -eq 'sandbox') {
+        $arguments = @($toolchain.args) + $arguments
+      }
       $logPath = [string] $request.logPath
       $webResult = Invoke-LoggedDsh `
         -Command $dsh `
@@ -328,6 +346,10 @@ try {
     }
   }
 } catch {
+  if ($mode -eq 'web') {
+    [System.IO.File]::AppendAllText([string] $request.logPath,
+      ('Web 启动失败：' + $_.Exception.Message + [Environment]::NewLine), $Utf8NoBom)
+  }
   if ($mode -ne 'build') { throw }
   Write-BuildOutcome $false 1 ($buildStage + '失败：' + $_.Exception.Message)
   exit 1

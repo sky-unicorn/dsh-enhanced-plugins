@@ -66,6 +66,9 @@ namespace DshEnhanced.WindowsLauncher
         public string profile { get; set; }
         public string sourceDirectory { get; set; }
         public bool updateSource { get; set; }
+        public string runtimeNode { get; set; }
+        public string runtimePath { get; set; }
+        public string sandboxHome { get; set; }
     }
 
     internal sealed class LauncherCommandResult
@@ -550,9 +553,15 @@ namespace DshEnhanced.WindowsLauncher
             request.statePath = LauncherPaths.State;
             request.stopPath = LauncherPaths.Stop;
             request.accessPath = LauncherPaths.Access;
+            request.sourceDirectory = settings.DshSourceDirectory;
+            request.runtimeNode = ToolchainInspector.BootstrapNode();
+            if (request.runtimeNode == null && ToolchainInspector.HasNvm()) return OperationResult.Fail(RuntimeText.NoBootstrap);
+            request.runtimePath = ToolchainInspector.StatePath;
+            request.sandboxHome = Path.Combine(LauncherPaths.DataRoot, "sandbox");
             JsonFile.Write(requestPath, request);
             TryDelete(LauncherPaths.Stop);
             TryDelete(LauncherPaths.Access);
+            TryDelete(ToolchainInspector.StatePath);
 
             LauncherState pending = new LauncherState
             {
@@ -586,6 +595,14 @@ namespace DshEnhanced.WindowsLauncher
             LauncherLog.Write("start web request=" + requestId + " port=" + settings.Port.ToString());
             process.Dispose();
             return OperationResult.Ok("Web 启动请求已提交。");
+        }
+
+        internal ToolchainSnapshot InspectToolchain()
+        {
+            LauncherRequest request = BaseRequest("web", ResolveDsh() ?? String.Empty);
+            request.sourceDirectory = settings.DshSourceDirectory;
+            request.sandboxHome = Path.Combine(LauncherPaths.DataRoot, "sandbox");
+            return ToolchainInspector.Inspect(request);
         }
 
         internal OperationResult StopWeb()

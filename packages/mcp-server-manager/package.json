@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-mcp-server-manager",
-  "version": "4.1.3",
+  "version": "4.1.4",
   "description": "Selective DSH bundle for MCP server management",
   "type": "module",
   "main": "./lib/mcp-server-manager/host/index.js",

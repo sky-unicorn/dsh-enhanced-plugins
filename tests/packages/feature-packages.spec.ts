@@ -97,6 +97,7 @@ describe('selective feature packages', () => {
       './lib/DSH-Launcher.exe.config',
       './lib/DSH-Launcher.Supervisor.ps1',
       './lib/DSH-Launcher.Command.ps1',
+      './lib/DSH-Launcher.Toolchain.cjs',
       './lib/DSH-Launcher.GitProxy.ps1',
       './lib/DSH-Launcher.PluginManager.ps1',
     ])
@@ -478,7 +479,6 @@ describe('selective feature packages', () => {
     expect(program).not.toContain('if (overviewPage.Visible) LayoutOverview();')
     expect(program).toContain('The overview page did not complete its first-show layout.')
     expect(program).not.toContain('bool sideBySide = width >=')
-    expect(program).toContain('SetBoundsIfChanged(pathCard, left, cardsTop + settingsHeight + gap, width, pathHeight);')
     expect(program).toContain('SetBoundsIfChanged(profileCard, left, taskHeight + gap, width, profileHeight);')
     expect(program).toContain('Overview cards must remain vertically stacked.')
     expect(program).toContain('Task cards must remain vertically stacked.')

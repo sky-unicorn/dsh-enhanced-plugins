@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-model-input-types",
-  "version": "4.1.3",
+  "version": "4.1.4",
   "description": "Selective DSH bundle for pi-ai model request-type settings",
   "type": "module",
   "main": "./lib/model-input-types/host/index.js",

@@ -69,10 +69,13 @@ const port = await freePort()
 const environment = {
   ...process.env,
   LOCALAPPDATA: localAppData,
+  APPDATA: resolve(temporary, 'AppData'),
+  NVM_HOME: '',
+  NVM_DIR: '',
   USERPROFILE: profileHome,
   DSH_CMD: fixture,
   DEEPSEEK_HARNESS_LAUNCHER_HOME: dataRoot,
-  PATH: `${fakeBin};${process.env.PATH ?? ''}`,
+  PATH: `${fakeBin};${(process.env.PATH ?? '').split(';').filter(dir => !dir.toLowerCase().includes('nvm')).join(';')}`,
 }
 
 let started = false
