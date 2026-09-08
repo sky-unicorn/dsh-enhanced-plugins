@@ -29,9 +29,9 @@
 
 ## 快速开始
 
-### 5.1.0 启动方式与兼容范围
+### 5.1.1 启动方式与兼容范围
 
-- 兼容目标为 DSH `0.1.3-alpha.2`，精确源码为 `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`，发布 tag 为 `5.1.0/dsh-0.1.3-alpha.2(c389f96bf3)`；该 commit 包含 alpha.2 标签之后的 Desktop 与文件侧栏更新。
+- 兼容目标为 DSH `0.1.3-alpha.2`，精确源码为 `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`；该 commit 包含 alpha.2 标签之后的 Desktop 与文件侧栏更新。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
 - 源码桌面复用已绑定的 DSH checkout 和 Launcher 工具链：“启动桌面端”运行 `pnpm run start:desktop`，“构建并启动”运行 `pnpm run dev:desktop`。缺少构建产物时禁用普通启动并提示构建；源码依赖需先通过 `pnpm install --frozen-lockfile` 安装。启动过程、失败原因和退出码进入桌面日志；“停止”只结束 Launcher 拥有的命令进程树。构建并启动仍在运行时，禁止同时启动 Web 读取共享产物。旧的 `DesktopExecutable` 字段不再使用，无需选择 EXE。
 - 官方源码命令每次重建 `apps/desktop/.desktop-build/development/project`，数据默认位于同级 `home`，或使用继承的 `DSH_HOME`；默认关闭 DevTools，显式设置 `DSH_DESKTOP_OPEN_DEVTOOLS=1` 可打开。源码模式禁用官方包管理 UI，目前没有公开参数继承 Web bundles，Launcher 不向生成的 profile 私自复制插件。打包后的 Desktop 应用则独立管理保留的 `desktop` profile，仍不能通过 `dsh plugin --profile desktop` 操作。
@@ -292,7 +292,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `5.1.0` 对应 DSH `0.1.3-alpha.2`，源码基线 commit 为 `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`；兼容标识为 `5.1.0/dsh-0.1.3-alpha.2(c389f96bf3)`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `5.1.0`。
+- **版本对应：** 插件 `5.1.1` 对应 DSH `0.1.3-alpha.2`，源码基线 commit 为 `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `5.1.1`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。

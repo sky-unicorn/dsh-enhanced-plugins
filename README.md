@@ -29,9 +29,9 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 ## Quick start
 
-### 5.1.0 launch modes and compatibility
+### 5.1.1 launch modes and compatibility
 
-Target: DSH `0.1.3-alpha.2` at `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`; release tag: `5.1.0/dsh-0.1.3-alpha.2(c389f96bf3)`. This includes Desktop and file Sidebar updates after the alpha.2 tag.
+Target: DSH `0.1.3-alpha.2` at `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`. This includes Desktop and file Sidebar updates after the alpha.2 tag.
 
 Choose Browser or Source Desktop at the top of Launcher Overview. The saved choice also controls login startup; existing settings default to Browser. Source Desktop reuses the bound DSH checkout and the Launcher toolchain: Start Desktop runs `pnpm run start:desktop`, while Build and Start runs `pnpm run dev:desktop`. Missing build artifacts disable ordinary startup and direct you to Build and Start. Install the checkout dependencies with `pnpm install --frozen-lockfile` first. Desktop output and failures appear in Desktop Logs; Stop terminates only the Launcher-owned invocation. An active build invocation blocks starting Web against the shared artifacts. The old `DesktopExecutable` setting is ignored; no EXE selection is required.
 
@@ -294,7 +294,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** plugin `5.1.0` targets DSH `0.1.3-alpha.2`, source commit `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`; its compatibility label is `5.1.0/dsh-0.1.3-alpha.2(c389f96bf3)`. The aggregate, all seven standalone bundles, and Windows Launcher use `5.1.0`.
+- **Version pairing:** plugin `5.1.1` targets DSH `0.1.3-alpha.2`, source commit `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`. The aggregate, all seven standalone bundles, and Windows Launcher use `5.1.1`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** the installer and Launcher plugin updater read `dshEnhanced.compatibility` from the root `package.json` before building, stopping services, or changing a profile. A DSH version mismatch, missing declaration, or mixed plugin package versions stops installation. A matching version whose commit is absent from `sourceCommit` and `additionalSourceCommits`, local source changes, or no Git metadata produces an unverified-source warning.
 - **Current interfaces:** Client features use `client-store`, `ui-session`, `ui-chat`, and public Remotes, without the removed `dsh-client-runtime`, `connection.api`, or `hostDescription`. Host settings owners pass validated namespace literals and use `SettingsProvider.installSection()`. Session consumers use `eventAt()` / `snapshotEvents()` and keep `SessionLogOffset` inheritance metadata separate from `SessionHeader`; Team Monitor preserves that exact cut through query observations and projection replay. This project follows the public interfaces of the source commit above.

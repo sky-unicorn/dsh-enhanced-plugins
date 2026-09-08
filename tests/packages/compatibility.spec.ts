@@ -44,7 +44,7 @@ afterEach(() => {
   }
 })
 
-describe('5.1.0 release compatibility', () => {
+describe('5.1.1 release compatibility', () => {
   it.runIf(process.platform === 'win32')('rejects the reserved Desktop profile before any installation', () => {
     const source = fixture()
     const result = check(source, ['-Profile', 'Desktop', '-Features', 'all'])
@@ -53,7 +53,7 @@ describe('5.1.0 release compatibility', () => {
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
   })
   it('keeps the aggregate, standalone packages, native version and DSH peers aligned', () => {
-    expect(release.version).toBe('5.1.0')
+    expect(release.version).toBe('5.1.1')
     expect(release.dshEnhanced.compatibility).toEqual({
       dshVersion: '0.1.3-alpha.2', sourceCommit: 'c389f96bf3a9b6807cb71ed6bdad5849be0df6d8',
     })
@@ -80,7 +80,7 @@ describe('5.1.0 release compatibility', () => {
     const source = fixture()
     const result = check(source)
     expect(result.status, result.output).toBe(0)
-    expect(result.output).toContain('Compatibility OK: plugin 5.1.0 -> DSH 0.1.3-alpha.2')
+    expect(result.output).toContain('Compatibility OK: plugin 5.1.1 -> DSH 0.1.3-alpha.2')
     expect(result.output).toContain('source commit cannot be verified')
     expect(readdirSync(source.plugin).sort()).toEqual(['package.json', 'packages'])
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
