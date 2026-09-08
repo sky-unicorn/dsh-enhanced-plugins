@@ -19,6 +19,7 @@ const config: Config = {
 function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   let handler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined
   const ctx = {
+    inject: (_keys: string[], setup: (value: Context) => void) => setup(ctx),
     credentials: { resolve: vi.fn(async () => undefined) },
     webServer: {
       register: vi.fn((entry: { handler: typeof handler }) => {

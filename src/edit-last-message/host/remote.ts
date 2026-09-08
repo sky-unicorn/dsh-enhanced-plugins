@@ -41,11 +41,15 @@ function assertRequest(value: unknown): EditLastMessageHostRequest {
 /** Host capability consumed by the inline Client editor. */
 export class EditLastMessageRemote extends TypertRemoteService {
   static inject = ['agents']
+  private readonly pending = new Set<Promise<EditLastMessageHostResult>>()
 
   constructor(ctx: Context) {
     super(ctx, 'editLastMessage')
     exposeRemote(this, 'rewrite', this.rewrite)
   }
+
+  /** Join accepted edits before the owner removes admission hooks during HMR/dispose. */
+  async settle(): Promise<void> { await Promise.allSettled(this.pending) }
 
   async rewrite(request: unknown, signal: AbortSignal): Promise<EditLastMessageHostResult> {
     const valid = assertRequest(request)
@@ -54,6 +58,8 @@ export class EditLastMessageRemote extends TypertRemoteService {
     if (agent.session.header.origin === 'subagent') {
       throw new Error('editLastMessage/rewrite: subagent conversations cannot be edited')
     }
-    return rewriteLastMessage(agent, valid, signal)
+    const operation = rewriteLastMessage(agent, valid, signal)
+    this.pending.add(operation)
+    try { return await operation } finally { this.pending.delete(operation) }
   }
 }

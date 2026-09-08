@@ -58,6 +58,7 @@ namespace DshEnhanced.WindowsLauncher
                 string operationOutput = String.Empty;
                 WebStatusSnapshot status;
                 if (action == "start") result = runtime.StartWeb();
+                else if (action == "start-desktop") result = runtime.StartDesktop();
                 else if (action == "stop") result = runtime.StopWeb();
                 else if (action == "stop-and-wait") result = runtime.StopWebAndWait();
                 else if (action == "restart") result = runtime.RestartWeb();
@@ -300,8 +301,8 @@ namespace DshEnhanced.WindowsLauncher
             delayedDshTimer.Tick += delegate
             {
                 delayedDshTimer.Stop();
-                LauncherLog.Write("login DSH delay elapsed; submitting Web start");
-                RunTrayOperation(runtime.StartWeb);
+                LauncherLog.Write("login DSH delay elapsed; submitting selected launch mode");
+                RunTrayOperation(runtime.StartPreferred);
             };
             signalTimer = new System.Windows.Forms.Timer();
             signalTimer.Interval = 250;
@@ -315,7 +316,7 @@ namespace DshEnhanced.WindowsLauncher
 
             if (!startHidden) ShowWindow();
             else if (startDshAfterLogin)
-                tray.ShowBalloonTip(2200, "DeepSeek Harness", "Launcher 已就绪，将在 30 秒后启动 DSH Web。", ToolTipIcon.Info);
+                tray.ShowBalloonTip(2200, "DeepSeek Harness", "Launcher 已就绪，将在 30 秒后按所选方式启动 DSH。", ToolTipIcon.Info);
             if (startDshAfterLogin) ScheduleDelayedDsh();
             if (!String.IsNullOrWhiteSpace(readyFile))
             {
@@ -329,6 +330,7 @@ namespace DshEnhanced.WindowsLauncher
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Font = UiTheme.Font(9.5f, FontStyle.Regular);
             menu.Items.Add("打开控制中心", null, delegate { ShowWindow(); });
+            menu.Items.Add(DesktopText.Desktop, null, delegate { RunTrayOperation(runtime.StartDesktop); });
             menu.Items.Add(new ToolStripSeparator());
             ToolStripItem startWeb = menu.Items.Add("启动 Web", null, delegate { RunTrayOperation(runtime.StartWeb); });
             ToolStripItem openWeb = menu.Items.Add("打开 Web 页面", null, delegate { RunTrayOperation(runtime.OpenWeb); });
@@ -673,7 +675,7 @@ namespace DshEnhanced.WindowsLauncher
             BuildSourcePage();
             BuildPluginManagerPage();
 
-            startButton.Click += delegate { RunOperation(runtime.StartWeb); };
+            startButton.Click += delegate { RunOperation(runtime.StartPreferred); };
             openButton.Click += delegate { RunOperation(runtime.OpenWeb); };
             restartButton.Click += delegate { RunOperation(runtime.RestartWeb); };
             stopButton.Click += delegate { RunOperation(runtime.StopWeb); };
@@ -708,6 +710,7 @@ namespace DshEnhanced.WindowsLauncher
             ApplyStartupModeToControls(runtime.GetAutostartMode());
             loadingSettings = false;
 
+            ApplyLaunchModeStatus();
             refreshTimer = new System.Windows.Forms.Timer();
             refreshTimer.Interval = 2000;
             refreshTimer.Tick += delegate
@@ -974,6 +977,7 @@ namespace DshEnhanced.WindowsLauncher
 
         private void BuildOverviewPage()
         {
+            BuildLaunchModeCard();
             hero = new HeroPanel();
             hero.Size = new Size(780, 154);
             overviewPage.Content.Controls.Add(hero);
@@ -1017,7 +1021,7 @@ namespace DshEnhanced.WindowsLauncher
             settingsCard = new RoundedPanel();
             settingsCard.Size = new Size(780, 168);
             overviewPage.Content.Controls.Add(settingsCard);
-            AddCardTitle(settingsCard, "启动选项", "两种登录启动模式互斥；自动 DSH 会在 Launcher 就绪 30 秒后启动 Web");
+            AddCardTitle(settingsCard, "启动选项", "登录自动启动会在 Launcher 就绪 30 秒后按所选方式打开 DSH");
 
             portLabel = NewLabel("服务端口", 9f, FontStyle.Regular, UiTheme.Muted);
             settingsCard.Controls.Add(portLabel);
@@ -1307,7 +1311,8 @@ namespace DshEnhanced.WindowsLauncher
             if (width < 1) return;
 
             int heroHeight = Dip(154);
-            SetBoundsIfChanged(hero, left, 0, width, heroHeight);
+            int modeHeight = LayoutLaunchModeCard(left, width);
+            SetBoundsIfChanged(hero, left, modeHeight, width, heroHeight);
             bool compactHero = width < Dip(560);
             privacyLabel.Visible = !compactHero;
             shieldLabel.Visible = !compactHero;
@@ -1323,20 +1328,22 @@ namespace DshEnhanced.WindowsLauncher
             }
 
             overviewActions.WrapContents = true;
-            int actionsTop = heroHeight + Dip(16);
+            int actionsTop = modeHeight + heroHeight + Dip(16);
             int actionsHeight = FlowLayoutHeight(overviewActions, width, Dip(48));
             SetBoundsIfChanged(overviewActions, left, actionsTop, width, actionsHeight);
             int cardsTop = actionsTop + actionsHeight + Dip(12);
 
             int availableForSettings = Math.Max(Dip(120), width - Dip(56));
-            int settingsColumns = Math.Max(1, Math.Min(4, availableForSettings / Dip(165)));
-            int settingsRows = (4 + settingsColumns - 1) / settingsColumns;
+            bool desktopMode = runtime.Settings.LaunchMode == "desktop";
+            int settingsCount = desktopMode ? 2 : 4;
+            int settingsColumns = Math.Max(1, Math.Min(settingsCount, availableForSettings / Dip(165)));
+            int settingsRows = (settingsCount + settingsColumns - 1) / settingsColumns;
             int settingsHeight = Dip(92) + (settingsRows * Dip(70)) + Dip(10);
             // Keep primary cards in the same vertical reading order at every window size.
             // A wider viewport may give controls more room inside a card, but must not turn
             // the page itself into a left-to-right dashboard.
             bool stackRuntime = width < Dip(520);
-            int pathHeight = Dip(stackRuntime ? 400 : 290);
+            int pathHeight = runtime.Settings.LaunchMode == "desktop" ? 0 : Dip(stackRuntime ? 400 : 290);
             int gap = Dip(18);
             SetBoundsIfChanged(pathCard, left, cardsTop, width, pathHeight);
             SetBoundsIfChanged(settingsCard, left, cardsTop + pathHeight + gap, width, settingsHeight);
@@ -1347,8 +1354,10 @@ namespace DshEnhanced.WindowsLauncher
             LayoutCardHeader(pathCard, runtimeRefresh);
             int available = Math.Max(Dip(120), settingsCard.Width - Dip(56));
             int column = available / settingsColumns;
-            Label[] labels = { portLabel, browserLabel, launcherAutoLabel, dshAutoLabel };
-            Control[] controls = { portInput, noOpenToggle, launcherAutostartToggle, dshAutostartToggle };
+            Label[] labels = desktopMode ? new[] { launcherAutoLabel, dshAutoLabel }
+                : new[] { portLabel, browserLabel, launcherAutoLabel, dshAutoLabel };
+            Control[] controls = desktopMode ? new Control[] { launcherAutostartToggle, dshAutostartToggle }
+                : new Control[] { portInput, noOpenToggle, launcherAutostartToggle, dshAutostartToggle };
             for (int index = 0; index < labels.Length; index++)
             {
                 int row = index / settingsColumns;
@@ -1635,6 +1644,7 @@ namespace DshEnhanced.WindowsLauncher
             stopButton.Enabled = status.CanStop;
             portInput.Enabled = status.Ownership == WebOwnership.Stopped;
             SetLabelText(dshPath, dsh ?? "未找到 dsh；请先安装 DeepSeek Harness");
+            ApplyLaunchModeStatus();
             UpdateSourcePath();
             loadingSettings = true;
             ApplyStartupModeToControls(autostartMode);

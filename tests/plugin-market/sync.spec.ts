@@ -46,6 +46,7 @@ function channel() {
 function createHandler(onDispose?: (dispose: () => Promise<void>) => void): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   let handler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined
   const ctx = {
+    inject: (_keys: string[], setup: (value: Context) => void) => setup(ctx),
     credentials: { resolve: vi.fn(async () => undefined) },
     subprocess: {},
     webServer: {

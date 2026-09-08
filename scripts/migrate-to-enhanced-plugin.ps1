@@ -6,6 +6,7 @@
 [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
 param(
   [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]*$')]
+  [ValidateScript({ if ($_ -ieq 'desktop') { throw 'Desktop profile is managed by the official desktop application. Use its plugin manager.' }; $true })]
   [string] $Profile = 'web',
 
   [ValidateNotNullOrEmpty()]

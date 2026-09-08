@@ -16,7 +16,7 @@ import {
 import type { EditLastMessageLocaleKey } from './locales.ts'
 import css from './EditableUserMessage.module.css'
 
-// The target source exports these in DSH 0.1.3-alpha.1. Keep this narrow
+// The target source exports these in DSH 0.1.3-alpha.2. Keep this narrow
 // structural bridge because a sibling checkout can lag in regenerated lib/types;
 // release verification also typechecks against a freshly built target checkout.
 const { DocumentFileIcon, fileSizeText } = UiPrimitives as unknown as {

@@ -9,6 +9,7 @@ param(
   [string] $RepositoryRoot = '',
 
   [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]*$')]
+  [ValidateScript({ if ($_ -ieq 'desktop') { throw 'Desktop profile is managed by the official desktop application. Use its plugin manager.' }; $true })]
   [string] $Profile = 'web',
 
   [string] $RequestPath = '',
@@ -321,7 +322,7 @@ function Get-Profiles {
   $names = @('web')
   if (Test-Path -LiteralPath $profilesRoot -PathType Container) {
     $names += @(Get-ChildItem -LiteralPath $profilesRoot -Directory | Where-Object {
-      $_.Name -match '^[A-Za-z0-9][A-Za-z0-9._-]*$' -and $_.Name -ne 'node_modules'
+      $_.Name -match '^[A-Za-z0-9][A-Za-z0-9._-]*$' -and $_.Name -notin @('node_modules', 'desktop')
     } | ForEach-Object { $_.Name })
   }
   @($names | Select-Object -Unique | Sort-Object)

@@ -57,7 +57,7 @@ export const Config: Schema<Config> = Schema.object({
 })
 
 export const name = 'plugin-market'
-export const inject = ['webServer', 'credentials', 'subprocess']
+export const inject = ['credentials', 'subprocess']
 
 interface GitHubRepository {
   readonly name: string
@@ -821,6 +821,13 @@ async function runDsh(ctx: Context, config: Config, args: readonly string[], sig
 
 /** Register the marketplace API used by this package's browser half. */
 export function apply(ctx: Context, config: Config): void {
+  // Desktop owns plugin transactions and deliberately has no HTTP server.
+  // Wait for the optional Web carrier so HMR/dependency replacement remains reversible.
+  ctx.inject(['webServer'], web => applyWeb(web, config))
+}
+
+function applyWeb(ctx: Context, config: Config): void {
+  if (config.profile.toLowerCase() === 'desktop') throw new Error('Desktop profile is managed by the official desktop application')
   let channelSnapshot: Promise<ChannelDocument> | undefined
   let syncStatus: MarketSyncStatus = { state: 'idle' }
   let syncController: AbortController | undefined

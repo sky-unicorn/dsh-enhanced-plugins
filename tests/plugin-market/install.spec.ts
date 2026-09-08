@@ -151,6 +151,7 @@ function createHandler(
   let handler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined
   const subprocess = createSubprocess(testHome, options)
   const ctx = {
+    inject: (_keys: string[], setup: (value: Context) => void) => setup(ctx),
     credentials: {
       resolve: vi.fn(async () => undefined),
       describe: vi.fn(async () => ({ configured: false, writable: true })),

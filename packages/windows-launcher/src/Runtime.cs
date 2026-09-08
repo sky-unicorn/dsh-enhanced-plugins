@@ -18,6 +18,8 @@ namespace DshEnhanced.WindowsLauncher
         public string DshCommand { get; set; }
         public string DshSourceDirectory { get; set; }
         public string WorkingDirectory { get; set; }
+        public string LaunchMode { get; set; }
+        public string DesktopExecutable { get; set; }
         public LauncherWindowPlacement WindowPlacement { get; set; }
 
         internal static LauncherSettings Defaults()
@@ -26,6 +28,8 @@ namespace DshEnhanced.WindowsLauncher
             {
                 Port = 3080,
                 NoOpen = false,
+                LaunchMode = "web",
+                DesktopExecutable = String.Empty,
                 DshCommand = String.Empty,
                 DshSourceDirectory = String.Empty,
                 WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -281,6 +285,8 @@ namespace DshEnhanced.WindowsLauncher
             }
             if (settings.DshCommand == null) settings.DshCommand = String.Empty;
             if (settings.DshSourceDirectory == null) settings.DshSourceDirectory = String.Empty;
+            if (settings.LaunchMode != "desktop") settings.LaunchMode = "web";
+            if (settings.DesktopExecutable == null) settings.DesktopExecutable = String.Empty;
             LauncherWindowPlacement placement = settings.WindowPlacement;
             if (placement != null && (placement.Width < 240 || placement.Height < 180
                 || placement.Width > 32768 || placement.Height > 32768
@@ -453,6 +459,31 @@ namespace DshEnhanced.WindowsLauncher
         internal void SaveSettings()
         {
             settingsStore.Save(settings);
+        }
+
+        internal OperationResult StartPreferred()
+        {
+            return settings.LaunchMode == "desktop" ? StartDesktop() : StartWeb();
+        }
+
+        // Desktop owns its single-instance lock, runtime and profile. Pass no CLI/profile arguments.
+        internal OperationResult StartDesktop()
+        {
+            string executable = settings.DesktopExecutable;
+            if (!DesktopLaunch.IsExecutable(executable)) return OperationResult.Fail(DesktopText.SelectFirst);
+            try
+            {
+                using (Process process = Process.Start(new ProcessStartInfo {
+                    FileName = Path.GetFullPath(executable), UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(executable)),
+                    WindowStyle = ProcessWindowStyle.Normal,
+                }))
+                {
+                    if (process == null) return OperationResult.Fail(DesktopText.Failed);
+                }
+                return OperationResult.Ok(DesktopText.Launched);
+            }
+            catch (Exception error) { return OperationResult.Fail(DesktopText.Failed + " " + error.Message); }
         }
 
         internal string ResolveDsh()

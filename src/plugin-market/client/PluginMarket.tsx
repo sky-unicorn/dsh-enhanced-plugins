@@ -70,6 +70,15 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Searchable community catalog with explicit install and uninstall actions. */
 export function PluginMarket({ t }: PluginMarketProps): ReactNode {
+  if (typeof location !== 'undefined' && location.protocol === 'dsh-app:') {
+    return <section className={css.market}><header className={css.header}>
+      <div className={css.headerIntro}><h3>{t('title')}</h3><p>{t('desktopManaged')}</p></div>
+    </header></section>
+  }
+  return <WebPluginMarket t={t} />
+}
+
+function WebPluginMarket({ t }: Pick<PluginMarketProps, 't'>): ReactNode {
   const tabsId = useId()
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const [request, setRequest] = useState(0)

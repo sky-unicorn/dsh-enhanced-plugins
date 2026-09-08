@@ -44,11 +44,18 @@ afterEach(() => {
   }
 })
 
-describe('4.1.4 release compatibility', () => {
+describe('5.1.0 release compatibility', () => {
+  it.runIf(process.platform === 'win32')('rejects the reserved Desktop profile before any installation', () => {
+    const source = fixture()
+    const result = check(source, ['-Profile', 'Desktop', '-Features', 'all'])
+    expect(result.status).not.toBe(0)
+    expect(result.output).toContain('Desktop profile is managed by the official desktop application')
+    expect(readdirSync(source.dsh)).toEqual(['package.json'])
+  })
   it('keeps the aggregate, standalone packages, native version and DSH peers aligned', () => {
-    expect(release.version).toBe('4.1.4')
+    expect(release.version).toBe('5.1.0')
     expect(release.dshEnhanced.compatibility).toEqual({
-      dshVersion: '0.1.3-alpha.1', sourceCommit: 'd347e703908d0406b7a7ef80e3a0e594d86b2215',
+      dshVersion: '0.1.3-alpha.2', sourceCommit: 'c389f96bf3a9b6807cb71ed6bdad5849be0df6d8',
     })
     for (const manifest of [release, ...packages.map(name => JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf8')))]) {
       expect(manifest.version, manifest.name).toBe(release.version)
@@ -73,7 +80,7 @@ describe('4.1.4 release compatibility', () => {
     const source = fixture()
     const result = check(source)
     expect(result.status, result.output).toBe(0)
-    expect(result.output).toContain('Compatibility OK: plugin 4.1.4 -> DSH 0.1.3-alpha.1')
+    expect(result.output).toContain('Compatibility OK: plugin 5.1.0 -> DSH 0.1.3-alpha.2')
     expect(result.output).toContain('source commit cannot be verified')
     expect(readdirSync(source.plugin).sort()).toEqual(['package.json', 'packages'])
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
@@ -88,6 +95,7 @@ describe('4.1.4 release compatibility', () => {
     '0.1.2-alpha.5',
     '0.1.2-rc.1',
     '0.1.2',
+    '0.1.3-alpha.1',
   ])('rejects DSH %s before build or installation', (version) => {
     const source = fixture(version)
     const result = check(source, ['-Features', 'notification', '-SkipBuild'])
@@ -117,7 +125,7 @@ describe('4.1.4 release compatibility', () => {
     writeFileSync(path, JSON.stringify(manifest))
     expect(check(source).output).toContain('has no dshEnhanced.compatibility')
     copyFileSync(resolve(root, 'package.json'), path)
-    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.3-alpha.1' }))
+    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.3-alpha.2' }))
     expect(check(source).output).toContain('Cannot identify the DSH source version')
   })
 

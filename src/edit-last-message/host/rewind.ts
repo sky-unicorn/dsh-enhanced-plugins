@@ -94,6 +94,45 @@ function replacementPlan(session: Session, targetSeq: SessionSeq): ReplacementPl
   return { start: targetSeq, end, sourceEventSeqs }
 }
 
+/** Restore edit intent at admission, including input recovered from the durable inbox.
+ * The returned disposer belongs to the plugin and must run after its pending work stops.
+ */
+export function installEditAdmission(session: Session): () => void {
+  const own = Object.getOwnPropertyDescriptor(session, 'append')
+  const previous = session.append
+  const wrapped = function (this: Session, type: string, data: unknown, ...options: unknown[]): unknown {
+    const message = data as { source?: unknown } | null
+    const source = type === 'user/message' ? editLastMessageSource(message?.source) : undefined
+    const supplied = options[0] as { surfaceOp?: unknown } | undefined
+    if (source === undefined || (supplied?.surfaceOp !== undefined && supplied.surfaceOp !== 'append')) {
+      return Reflect.apply(previous, this, [type, data, ...options])
+    }
+    const root = session.eventAt(SessionSeq(source.rootSeq))
+    if (root?.type !== 'user/message' || String(root.data.id) !== source.rootMessageId) {
+      throw new Error('recovered edit refers to an unavailable original message')
+    }
+    const targetSeq = [...session.surface.nodes].reverse().find(seq => {
+      const event = session.eventAt(seq)
+      if (event?.type !== 'user/message') return false
+      const marker = editLastMessageSource(event.data.source)
+      return seq === source.rootSeq || (marker?.rootSeq === source.rootSeq && marker.rootMessageId === source.rootMessageId)
+    })
+    if (targetSeq === undefined) throw new Error('recovered edit target is no longer in the model context')
+    editableTarget(session, targetSeq)
+    const plan = replacementPlan(session, targetSeq)
+    return Reflect.apply(previous, this, [type, data, {
+      surfaceOp: { op: 'replace', start: plan.start, end: plan.end },
+      sourceEventSeqs: plan.sourceEventSeqs,
+    }])
+  } as AppendMethod
+  Object.defineProperty(session, 'append', { configurable: true, writable: true, value: wrapped })
+  return () => {
+    if (session.append !== wrapped) return
+    if (own === undefined) delete (session as { append?: AppendMethod }).append
+    else Object.defineProperty(session, 'append', own)
+  }
+}
+
 /**
  * Replace exactly one future append of `message` with a surface rewrite. The
  * raw Session log stays append-only; only the current model-visible surface is

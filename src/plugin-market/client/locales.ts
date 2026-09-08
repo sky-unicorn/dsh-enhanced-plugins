@@ -1,4 +1,5 @@
 export const zh = {
+  desktopManaged: '官方桌面端独立管理插件。请从桌面应用菜单打开插件管理；此处的 Web 插件安装器不操作 Desktop profile。',
   nav: '插件社区',
   title: '插件社区',
   subtitle: '来自经过校验的 DSH 插件渠道；安装前会先检查每个插件支持的安装方式。',
@@ -72,6 +73,7 @@ export const zh = {
 export type LocaleKey = keyof typeof zh
 
 export const en = {
+  desktopManaged: 'The desktop app manages its own plugins. Open plugin management from the desktop app menu; the Web installer does not modify the Desktop profile.',
   nav: 'Plugin Community',
   title: 'Plugin Community',
   subtitle: 'From a validated DSH plugin channel. Each plugin is checked for a supported install method first.',
