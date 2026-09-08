@@ -105,7 +105,9 @@
     "verify:compat": "node scripts/verify-dsh-compatibility.mjs",
     "verify:pack": "node scripts/verify-packed-features.mjs",
     "prepare": "npm run build",
-    "verify:desktop-host": "node scripts/verify-desktop-host.mjs"
+    "verify:desktop-host": "node scripts/verify-desktop-host.mjs",
+    "verify:desktop-launcher": "node scripts/verify-desktop-launcher.mjs",
+    "verify:desktop-source": "node scripts/verify-desktop-source.mjs"
   },
   "keywords": [
     "dsh",

@@ -35,6 +35,13 @@ export function resolveProject(request) {
     const root = path.resolve(request.sourceDirectory)
     const manifest = json(path.join(root, 'package.json'))
     if (manifest.name !== '@deepseek-ai/dsh-root') throw new Error('记录的源码目录不是 DSH checkout。')
+    if (request.mode === 'desktop') {
+      if (!exists(path.join(root, 'node_modules/tsx/dist/esm/index.mjs'))
+          || !exists(path.join(root, 'apps/desktop/scripts/dev.ts'))) {
+        throw new Error('DSH 桌面源码或依赖不完整，请先安装源码依赖。')
+      }
+      return { root, manifest, args: [], env: { TSX_TSCONFIG_PATH: path.join(root, 'tsconfig.json') } }
+    }
     const loader = path.join(root, 'node_modules/tsx/dist/esm/index.mjs')
     const entry = path.join(root, 'apps/cli/src/bin.ts')
     if (!exists(loader) || !exists(entry)) throw new Error('DSH 源码缺少 tsx 或 CLI 入口，请先安装依赖。')
@@ -141,6 +148,24 @@ export function inspectToolchain(request, env = process.env) {
     nodeVersion: '', nodeRequirement: '', nodeSource: '', manager: '', managerVersion: '', managerRequirement: '',
     managerSource: '', projectPath: '', nodePath: '', message: '', nvmRoot: nvm?.root || '' }
   if (!nvm) {
+    if (request.mode === 'desktop') {
+      try {
+        const project = resolveProject(request)
+        const required = requirements(project)
+        if (!matchesNode(process.versions.node, required.node) || !semver.satisfies(process.versions.node, required.nodeEngine)) {
+          throw new Error(`当前 Node ${process.versions.node} 不满足 DSH ${required.node} / ${required.nodeEngine}。`)
+        }
+        Object.assign(summary, { projectPath: project.root, nodeVersion: process.versions.node,
+          nodePath: process.execPath, nodeRequirement: required.node, nodeSource: '系统 Node',
+          manager: required.manager, managerRequirement: required.managerRange, managerSource: required.managerSource,
+          message: '使用系统 Node；启动前验证 DSH 声明的 pnpm 版本。' })
+        return { summary, args: [], environment: { ...project.env,
+          PATH: [path.dirname(process.execPath), env.PATH ?? env.Path ?? ''].join(path.delimiter) } }
+      } catch (error) {
+        summary.phase = 'error'; summary.message = error.message
+        return { summary, environment: {}, args: [] }
+      }
+    }
     summary.message = '未检测到 NVM，继续使用原有启动方式。'
     try {
       const project = resolveProject(request)

@@ -32,9 +32,9 @@
 ### 5.1.0 启动方式与兼容范围
 
 - 兼容目标为 DSH `0.1.3-alpha.2`，精确源码为 `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`，发布 tag 为 `5.1.0/dsh-0.1.3-alpha.2(c389f96bf3)`；该 commit 包含 alpha.2 标签之后的 Desktop 与文件侧栏更新。
-- Launcher 概览顶部可选择“浏览器”或“桌面端”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
-- 桌面端选择已安装的官方 DSH `.exe`，然后点击“启动桌面端”。Launcher 不下载或打包官方桌面应用；未选择有效应用时按钮不可用。重复打开由官方应用的单实例机制处理，Launcher 只报告已发送启动请求，不把进程创建误报为后端就绪。
-- 官方 Desktop 自己管理运行时、插件和保留的 `desktop` profile；Web 中安装的增强插件不会自动出现在 Desktop。本项目安装器和插件管理继续用于 Web/profile，不能通过 `dsh plugin --profile desktop` 安装。Desktop 中的插件社区会引导使用官方应用菜单的插件管理，不发起 Web HTTP 安装请求。
+- Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
+- 源码桌面复用已绑定的 DSH checkout 和 Launcher 工具链：“启动桌面端”运行 `pnpm run start:desktop`，“构建并启动”运行 `pnpm run dev:desktop`。缺少构建产物时禁用普通启动并提示构建；源码依赖需先通过 `pnpm install --frozen-lockfile` 安装。启动过程、失败原因和退出码进入桌面日志；“停止”只结束 Launcher 拥有的命令进程树。构建并启动仍在运行时，禁止同时启动 Web 读取共享产物。旧的 `DesktopExecutable` 字段不再使用，无需选择 EXE。
+- 官方源码命令每次重建 `apps/desktop/.desktop-build/development/project`，数据默认位于同级 `home`，或使用继承的 `DSH_HOME`；默认关闭 DevTools，显式设置 `DSH_DESKTOP_OPEN_DEVTOOLS=1` 可打开。源码模式禁用官方包管理 UI，目前没有公开参数继承 Web bundles，Launcher 不向生成的 profile 私自复制插件。打包后的 Desktop 应用则独立管理保留的 `desktop` profile，仍不能通过 `dsh plugin --profile desktop` 操作。
 - 编辑消息在持久化 inbox 恢复后仍按替换处理；目标已离开上下文或身份不匹配时明确失败，不把编辑悄悄改为普通追加。
 
 ### 前置条件
@@ -381,6 +381,8 @@ git diff --check
 Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home 中逐个安装 7 项功能，检查全量、多功能重选、清理和聚合包的真实 Host 启动及 Client 资源；不会修改长期 profile。该命令需要先完成 DSH 与插件构建，验证记录保存在被 Git 忽略的 `.verify-dsh-home/`。页面交互和 light/dark 视觉验证仍需在真实 Web 页面完成。
 
 需要使用隔离构建时，可将 `DSH_VERIFY_CHECKOUT` 设置为已验证 DSH commit 的构建副本路径，再运行 `npm test` 或 `npm run verify:compat`。默认仍使用 sibling checkout，安装器仍会核对声明的版本。
+
+`npm run verify:desktop-launcher` 用编译后的 Launcher 验证源码命令选择、构建前置条件、重复启动抑制、pnpm 版本失败和进程树清理。`npm run verify:desktop-source` 通过 Launcher 在临时源码视图执行未经修改的官方 `start:desktop` 脚本，等待真实 Electron 页面后停止进程树；不会修改 sibling checkout。
 
 `npm run verify:desktop-host` 在隔离目录中加载官方 Desktop Host 与固定插件发布快照，并验证实际 Client 首页响应；它不构建或修改 DSH checkout。
 

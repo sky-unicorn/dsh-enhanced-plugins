@@ -38,7 +38,7 @@ if (-not (Test-Path -LiteralPath $RequestPath -PathType Leaf)) {
   throw "Launcher request does not exist: $RequestPath"
 }
 $request = Get-Content -Raw -LiteralPath $RequestPath -Encoding UTF8 | ConvertFrom-Json
-if ([string] $request.mode -ne 'web') { throw 'The supervisor accepts only Web requests.' }
+if ([string] $request.mode -notin @('web', 'desktop')) { throw 'The supervisor accepts only managed Web/Desktop requests.' }
 $requestId = [Guid]::Empty
 if (-not [Guid]::TryParse([string] $request.requestId, [ref] $requestId)) { throw 'Request id is invalid.' }
 $statePath = [string] $request.statePath
@@ -62,12 +62,13 @@ $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $runner = New-Object System.Diagnostics.Process
 $runner.StartInfo = $startInfo
-if (-not $runner.Start()) { throw 'Unable to start the DSH Web runner.' }
+if (-not $runner.Start()) { throw 'Unable to start the DSH runner.' }
 
 $startedAt = [DateTime]::UtcNow.ToString('o')
 Write-JsonAtomically -Path $statePath -Value ([ordered]@{
   requestId = $requestId.ToString('D')
   status = 'starting'
+  desktopBuild = ([string]$request.mode -eq 'desktop' -and [bool]$request.desktopBuild)
   supervisorPid = $PID
   runnerPid = $runner.Id
   startedAtUtc = $startedAt
@@ -104,7 +105,7 @@ try {
           try {
             [System.IO.File]::AppendAllText(
               [string] $request.logPath,
-              "Launcher could not stop the Web process tree (taskkill exit $taskkillExitCode): $detail`r`n",
+              "Launcher could not stop the DSH process tree (taskkill exit $taskkillExitCode): $detail`r`n",
               $Utf8NoBom
             )
           } catch { }
@@ -119,6 +120,7 @@ try {
   Write-JsonAtomically -Path $statePath -Value ([ordered]@{
     requestId = $requestId.ToString('D')
     status = 'stopped'
+    desktopBuild = ([string]$request.mode -eq 'desktop' -and [bool]$request.desktopBuild)
     supervisorPid = $PID
     runnerPid = $runner.Id
     startedAtUtc = $startedAt
@@ -131,6 +133,8 @@ try {
 } finally {
   $runner.Dispose()
   Remove-Item -LiteralPath $stopPath -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $accessPath -Force -ErrorAction SilentlyContinue
+  if (-not [string]::IsNullOrWhiteSpace($accessPath)) {
+    Remove-Item -LiteralPath $accessPath -Force -ErrorAction SilentlyContinue
+  }
   Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
 }

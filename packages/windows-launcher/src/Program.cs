@@ -59,6 +59,8 @@ namespace DshEnhanced.WindowsLauncher
                 WebStatusSnapshot status;
                 if (action == "start") result = runtime.StartWeb();
                 else if (action == "start-desktop") result = runtime.StartDesktop();
+                else if (action == "build-desktop") result = runtime.BuildAndStartDesktop();
+                else if (action == "stop-desktop") result = runtime.StopDesktop();
                 else if (action == "stop") result = runtime.StopWeb();
                 else if (action == "stop-and-wait") result = runtime.StopWebAndWait();
                 else if (action == "restart") result = runtime.RestartWeb();
@@ -75,6 +77,8 @@ namespace DshEnhanced.WindowsLauncher
                     { "port", status.Port },
                     { "canStop", status.CanStop },
                     { "output", operationOutput },
+                    { "desktopRunning", runtime.DesktopRunning() },
+                    { "desktopState", runtime.DesktopLastState() },
                 });
                 return result.Success ? 0 : 1;
             }
@@ -444,7 +448,7 @@ namespace DshEnhanced.WindowsLauncher
             ThreadPool.QueueUserWorkItem(delegate
             {
                 OperationResult result;
-                try { result = runtime.StopWebAndWait(); }
+                try { result = runtime.StopAllAndWait(); }
                 catch (Exception error) { result = OperationResult.Fail("停止 DSH 失败：" + error.Message); }
                 if (exiting || form.IsDisposed || !form.IsHandleCreated) return;
                 try
@@ -676,9 +680,15 @@ namespace DshEnhanced.WindowsLauncher
             BuildPluginManagerPage();
 
             startButton.Click += delegate { RunOperation(runtime.StartPreferred); };
-            openButton.Click += delegate { RunOperation(runtime.OpenWeb); };
+            openButton.Click += delegate {
+                if (runtime.Settings.LaunchMode == "desktop") ShowPage(diagnosticsPage, diagnosticsNav, "日志与诊断");
+                else RunOperation(runtime.OpenWeb);
+            };
             restartButton.Click += delegate { RunOperation(runtime.RestartWeb); };
-            stopButton.Click += delegate { RunOperation(runtime.StopWeb); };
+            stopButton.Click += delegate {
+                if (runtime.Settings.LaunchMode == "desktop") RunOperation(runtime.StopDesktop);
+                else RunOperation(runtime.StopWeb);
+            };
             taskRunButton.Click += delegate { RunHeadless(); };
             portInput.ValueChanged += delegate
             {
@@ -1013,6 +1023,7 @@ namespace DshEnhanced.WindowsLauncher
             overviewActions.BackColor = UiTheme.Background;
             overviewActions.WrapContents = false;
             overviewActions.Controls.Add(startButton);
+            overviewActions.Controls.Add(desktopBuildButton);
             overviewActions.Controls.Add(openButton);
             overviewActions.Controls.Add(restartButton);
             overviewActions.Controls.Add(stopButton);
@@ -1343,7 +1354,7 @@ namespace DshEnhanced.WindowsLauncher
             // A wider viewport may give controls more room inside a card, but must not turn
             // the page itself into a left-to-right dashboard.
             bool stackRuntime = width < Dip(520);
-            int pathHeight = runtime.Settings.LaunchMode == "desktop" ? 0 : Dip(stackRuntime ? 400 : 290);
+            int pathHeight = Dip(stackRuntime ? 400 : 290);
             int gap = Dip(18);
             SetBoundsIfChanged(pathCard, left, cardsTop, width, pathHeight);
             SetBoundsIfChanged(settingsCard, left, cardsTop + pathHeight + gap, width, settingsHeight);
@@ -1573,13 +1584,16 @@ namespace DshEnhanced.WindowsLauncher
                     status = runtime.Snapshot();
                     autostartMode = runtime.GetAutostartMode();
                     if (!dshResolved) dsh = runtime.ResolveDsh();
-                    ToolchainSnapshot launched = JsonFile.Read<ToolchainSnapshot>(ToolchainInspector.StatePath);
-                    LauncherState launchState = JsonFile.Read<LauncherState>(LauncherPaths.State);
+                    bool desktopMode = runtime.Settings.LaunchMode == "desktop";
+                    bool owned = desktopMode ? runtime.DesktopRunning() : status.CanStop;
+                    ToolchainSnapshot launched = JsonFile.Read<ToolchainSnapshot>(desktopMode
+                        ? System.IO.Path.Combine(LauncherPaths.Run, "desktop-toolchain.json") : ToolchainInspector.StatePath);
+                    LauncherState launchState = desktopMode ? runtime.DesktopLastState() : JsonFile.Read<LauncherState>(LauncherPaths.State);
                     if (Interlocked.Exchange(ref inspectRequested, 0) != 0)
                         inspectedToolchain = toolchain = runtime.InspectToolchain();
                     if (launched != null && launchState != null && launched.requestId == launchState.requestId
-                        && (status.CanStop || launched.phase == "error")) toolchain = launched;
-                    else if (status.CanStop) toolchain = new ToolchainSnapshot {
+                        && (owned || launched.phase == "error")) toolchain = launched;
+                    else if (owned) toolchain = new ToolchainSnapshot {
                         mode = "unknown", phase = "preparing", message = RuntimeText.Detecting };
                 }
                 catch (Exception error) { failure = error; }
@@ -1653,15 +1667,17 @@ namespace DshEnhanced.WindowsLauncher
 
         private void ApplyToolchain(ToolchainSnapshot value, WebStatusSnapshot status)
         {
-            bool external = status.Ownership == WebOwnership.External;
-            runtimeRefresh.Enabled = !status.CanStop;
+            bool desktopMode = runtime.Settings.LaunchMode == "desktop";
+            bool external = !desktopMode && status.Ownership == WebOwnership.External;
+            bool active = desktopMode ? runtime.DesktopRunning() : status.CanStop;
+            runtimeRefresh.Enabled = !active;
             if (value == null) return;
             bool sandbox = value.mode == "sandbox";
             bool error = value.phase == "error";
             SetLabelText(runtimeBadge, (external ? RuntimeText.Unverified : value.mode == "unknown" ? RuntimeText.Detecting : sandbox ? RuntimeText.Sandbox : RuntimeText.System)
                 + (error ? " · " + RuntimeText.Error : value.phase == "preparing" ? " · " + RuntimeText.Preparing : ""));
             runtimeBadge.ForeColor = error ? UiTheme.Danger : sandbox ? UiTheme.Primary : UiTheme.Muted;
-            SetLabelText(runtimeContext, external ? RuntimeText.External : status.CanStop ? RuntimeText.Active : RuntimeText.Next);
+            SetLabelText(runtimeContext, external ? RuntimeText.External : active ? RuntimeText.Active : RuntimeText.Next);
             SetLabelText(nodeVersionLabel, external ? RuntimeText.Unverified : String.IsNullOrEmpty(value.nodeVersion)
                 ? sandbox ? RuntimeText.Pending : RuntimeText.Unverified : value.nodeVersion);
             SetLabelText(nodeRequirementLabel, RuntimeText.Requirement + (String.IsNullOrEmpty(value.nodeRequirement) ? RuntimeText.Unspecified : value.nodeRequirement));
@@ -1673,7 +1689,7 @@ namespace DshEnhanced.WindowsLauncher
             SetLabelText(runtimeMessage, value.message ?? RuntimeText.Detecting);
             runtimeMessage.ForeColor = error ? UiTheme.Danger : UiTheme.Muted;
             SetLabelText(dshPath, sandbox ? RuntimeText.Source + value.nodeSource + " / " + value.managerSource + " · " + value.projectPath
-                : resolvedDsh ?? RuntimeText.Pending);
+                : desktopMode ? value.projectPath ?? RuntimeText.Pending : resolvedDsh ?? RuntimeText.Pending);
             runtimeTips.SetToolTip(runtimeMessage, value.message);
             runtimeTips.SetToolTip(nodeRequirementLabel, nodeRequirementLabel.Text + " · " + value.nodeSource);
             runtimeTips.SetToolTip(managerRequirementLabel, managerRequirementLabel.Text + " · " + value.managerSource);
@@ -2104,6 +2120,7 @@ namespace DshEnhanced.WindowsLauncher
                 openButton.Enabled = false;
                 restartButton.Enabled = false;
                 stopButton.Enabled = false;
+                desktopBuildButton.Enabled = false;
             }
             else RefreshNow();
         }

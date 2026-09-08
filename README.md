@@ -33,9 +33,9 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 Target: DSH `0.1.3-alpha.2` at `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`; release tag: `5.1.0/dsh-0.1.3-alpha.2(c389f96bf3)`. This includes Desktop and file Sidebar updates after the alpha.2 tag.
 
-Choose Browser or Desktop at the top of Launcher Overview. The saved choice also controls login startup; existing settings default to Browser. For Desktop, select an installed official DSH `.exe`, then launch it. Launcher does not download or bundle the official app. Launch stays disabled until a valid executable is selected. The official app owns single-instance activation; Launcher reports request dispatch, not backend readiness.
+Choose Browser or Source Desktop at the top of Launcher Overview. The saved choice also controls login startup; existing settings default to Browser. Source Desktop reuses the bound DSH checkout and the Launcher toolchain: Start Desktop runs `pnpm run start:desktop`, while Build and Start runs `pnpm run dev:desktop`. Missing build artifacts disable ordinary startup and direct you to Build and Start. Install the checkout dependencies with `pnpm install --frozen-lockfile` first. Desktop output and failures appear in Desktop Logs; Stop terminates only the Launcher-owned invocation. An active build invocation blocks starting Web against the shared artifacts. The old `DesktopExecutable` setting is ignored; no EXE selection is required.
 
-Desktop owns its runtime, plugins and reserved `desktop` profile. Web plugins do not automatically appear in Desktop. This project's installer and plugin manager manage Web/CLI profiles; `dsh plugin --profile desktop` is unsupported. Inside Desktop, Plugin Community directs users to the official app menu instead of issuing Web HTTP installation requests.
+The official source command regenerates `apps/desktop/.desktop-build/development/project` on each launch. Its data defaults to the sibling `home` directory there, or the inherited `DSH_HOME`; DevTools stay closed unless explicitly enabled with `DSH_DESKTOP_OPEN_DEVTOOLS=1`. This source mode disables the official package-management UI and has no public argument to inherit Web bundles. Launcher therefore does not copy Web plugins into its generated profile. The packaged Desktop application owns its separate `desktop` profile; `dsh plugin --profile desktop` remains unsupported.
 
 Recovered inbox edits retain replacement semantics. Missing or stale edit targets fail explicitly instead of silently appending ordinary input.
 
@@ -383,6 +383,8 @@ git diff --check
 On Windows, `npm run verify:compat` additionally installs all seven features individually into an isolated DSH home, then checks all-features, reselection, cleanup, and aggregate profiles against the real Host and Client artifacts. It requires built DSH and plugin artifacts and leaves the normal profiles untouched. Reports stay under the Git-ignored `.verify-dsh-home/`. Interactive behavior and light/dark appearance still require the real Web page.
 
 Set `DSH_VERIFY_CHECKOUT` to a prepared copy of the verified DSH source commit when running `npm test` or `npm run verify:compat` against an isolated build. The default remains the sibling checkout, and the installer still checks the declared version.
+
+`npm run verify:desktop-launcher` verifies source command selection, build prerequisites, duplicate suppression, pnpm version failures and process-tree cleanup with the compiled Launcher. `npm run verify:desktop-source` executes the unchanged official `start:desktop` script through Launcher in a temporary source view, waits for the actual Electron page, and stops the owned process tree. It leaves the sibling checkout unchanged.
 
 `npm run verify:desktop-host` loads the official Desktop Host with a fixed plugin snapshot in an isolated directory and verifies the actual Client index response. It does not build or modify the DSH checkout.
 

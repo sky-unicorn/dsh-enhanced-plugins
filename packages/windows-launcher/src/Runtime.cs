@@ -19,7 +19,6 @@ namespace DshEnhanced.WindowsLauncher
         public string DshSourceDirectory { get; set; }
         public string WorkingDirectory { get; set; }
         public string LaunchMode { get; set; }
-        public string DesktopExecutable { get; set; }
         public LauncherWindowPlacement WindowPlacement { get; set; }
 
         internal static LauncherSettings Defaults()
@@ -29,7 +28,6 @@ namespace DshEnhanced.WindowsLauncher
                 Port = 3080,
                 NoOpen = false,
                 LaunchMode = "web",
-                DesktopExecutable = String.Empty,
                 DshCommand = String.Empty,
                 DshSourceDirectory = String.Empty,
                 WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -70,6 +68,7 @@ namespace DshEnhanced.WindowsLauncher
         public string profile { get; set; }
         public string sourceDirectory { get; set; }
         public bool updateSource { get; set; }
+        public bool desktopBuild { get; set; }
         public string runtimeNode { get; set; }
         public string runtimePath { get; set; }
         public string sandboxHome { get; set; }
@@ -85,6 +84,7 @@ namespace DshEnhanced.WindowsLauncher
 
     internal sealed class LauncherState
     {
+        public bool desktopBuild { get; set; }
         public string requestId { get; set; }
         public string status { get; set; }
         public int supervisorPid { get; set; }
@@ -211,6 +211,9 @@ namespace DshEnhanced.WindowsLauncher
         internal static readonly string Access = Path.Combine(Run, "web-access.json");
         internal static readonly string ServerLog = Path.Combine(Logs, "dsh-web.log");
         internal static readonly string BuildLog = Path.Combine(Logs, "dsh-build.log");
+        internal static readonly string DesktopLog = Path.Combine(Logs, "dsh-desktop.log");
+        internal static readonly string DesktopState = Path.Combine(Run, "desktop-state.json");
+        internal static readonly string DesktopStop = Path.Combine(Run, "desktop-stop.txt");
         internal static readonly string LauncherLog = Path.Combine(Logs, "launcher.log");
 
         internal static string ProfileLog(string profile)
@@ -286,7 +289,6 @@ namespace DshEnhanced.WindowsLauncher
             if (settings.DshCommand == null) settings.DshCommand = String.Empty;
             if (settings.DshSourceDirectory == null) settings.DshSourceDirectory = String.Empty;
             if (settings.LaunchMode != "desktop") settings.LaunchMode = "web";
-            if (settings.DesktopExecutable == null) settings.DesktopExecutable = String.Empty;
             LauncherWindowPlacement placement = settings.WindowPlacement;
             if (placement != null && (placement.Width < 240 || placement.Height < 180
                 || placement.Width > 32768 || placement.Height > 32768
@@ -410,7 +412,7 @@ namespace DshEnhanced.WindowsLauncher
         }
     }
 
-    internal sealed class LauncherRuntime
+    internal sealed partial class LauncherRuntime
     {
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string RunName = "DeepSeekHarnessLauncher";
@@ -464,26 +466,6 @@ namespace DshEnhanced.WindowsLauncher
         internal OperationResult StartPreferred()
         {
             return settings.LaunchMode == "desktop" ? StartDesktop() : StartWeb();
-        }
-
-        // Desktop owns its single-instance lock, runtime and profile. Pass no CLI/profile arguments.
-        internal OperationResult StartDesktop()
-        {
-            string executable = settings.DesktopExecutable;
-            if (!DesktopLaunch.IsExecutable(executable)) return OperationResult.Fail(DesktopText.SelectFirst);
-            try
-            {
-                using (Process process = Process.Start(new ProcessStartInfo {
-                    FileName = Path.GetFullPath(executable), UseShellExecute = true,
-                    WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(executable)),
-                    WindowStyle = ProcessWindowStyle.Normal,
-                }))
-                {
-                    if (process == null) return OperationResult.Fail(DesktopText.Failed);
-                }
-                return OperationResult.Ok(DesktopText.Launched);
-            }
-            catch (Exception error) { return OperationResult.Fail(DesktopText.Failed + " " + error.Message); }
         }
 
         internal string ResolveDsh()
@@ -559,6 +541,7 @@ namespace DshEnhanced.WindowsLauncher
 
         internal OperationResult StartWeb()
         {
+            if (DesktopBuildRunning()) return OperationResult.Fail("构建并启动桌面的命令仍在运行，请先结束该桌面命令再启动 Web。");
             if (PluginManagementBusy()) return PluginManagementConflict();
             if (settings.Port < 1 || settings.Port > 65535) return OperationResult.Fail("端口必须在 1 到 65535 之间。");
             WebStatusSnapshot current = Snapshot();
@@ -630,7 +613,7 @@ namespace DshEnhanced.WindowsLauncher
 
         internal ToolchainSnapshot InspectToolchain()
         {
-            LauncherRequest request = BaseRequest("web", ResolveDsh() ?? String.Empty);
+            LauncherRequest request = BaseRequest(settings.LaunchMode == "desktop" ? "desktop" : "web", ResolveDsh() ?? String.Empty);
             request.sourceDirectory = settings.DshSourceDirectory;
             request.sandboxHome = Path.Combine(LauncherPaths.DataRoot, "sandbox");
             return ToolchainInspector.Inspect(request);
@@ -832,6 +815,7 @@ namespace DshEnhanced.WindowsLauncher
         internal OperationResult BuildDshSource(bool updateSource, out string output)
         {
             output = String.Empty;
+            if (DesktopRunning()) return OperationResult.Fail(DesktopText.StopBeforeBuild);
             if (PluginManagementBusy()) return PluginManagementConflict();
             string source = ResolveDshSource();
             if (source == null)
@@ -889,6 +873,7 @@ namespace DshEnhanced.WindowsLauncher
 
         internal OperationResult RunProfile(string profile)
         {
+            if (String.Equals(profile, "desktop", StringComparison.OrdinalIgnoreCase)) return OperationResult.Fail("请从概览页的源码桌面入口启动。");
             if (PluginManagementBusy()) return PluginManagementConflict();
             if (String.IsNullOrWhiteSpace(profile) || !System.Text.RegularExpressions.Regex.IsMatch(profile, "^[A-Za-z0-9][A-Za-z0-9._-]*$"))
                 return OperationResult.Fail("Profile 名称无效。");
@@ -918,7 +903,8 @@ namespace DshEnhanced.WindowsLauncher
             foreach (string directory in Directory.GetDirectories(profiles))
             {
                 string name = Path.GetFileName(directory);
-                if (!String.Equals(name, "node_modules", StringComparison.OrdinalIgnoreCase)) names.Add(name);
+                if (!String.Equals(name, "node_modules", StringComparison.OrdinalIgnoreCase)
+                    && !String.Equals(name, "desktop", StringComparison.OrdinalIgnoreCase)) names.Add(name);
             }
             if (!names.Contains("web")) names.Add("web");
             names.Sort(StringComparer.OrdinalIgnoreCase);
@@ -955,7 +941,7 @@ namespace DshEnhanced.WindowsLauncher
                 if (mode == LoginStartupMode.LauncherOnly)
                     return OperationResult.Ok("登录后将仅启动 Launcher。");
                 if (mode == LoginStartupMode.LauncherAndDsh)
-                    return OperationResult.Ok("登录后 Launcher 将在 30 秒后自动启动 DSH Web。");
+                    return OperationResult.Ok("登录后 Launcher 将在 30 秒后按所选方式启动 DSH。");
                 return OperationResult.Ok("已关闭登录启动。");
             }
             catch (Exception error)
@@ -967,6 +953,9 @@ namespace DshEnhanced.WindowsLauncher
         internal string RecentLogs()
         {
             StringBuilder output = new StringBuilder();
+            output.AppendLine("DSH 桌面日志");
+            output.AppendLine(ReadTail(LauncherPaths.DesktopLog, 120));
+            output.AppendLine();
             output.AppendLine("Launcher 日志");
             output.AppendLine("────────────────────────────────────────");
             output.AppendLine(ReadTail(LauncherPaths.LauncherLog, 80));

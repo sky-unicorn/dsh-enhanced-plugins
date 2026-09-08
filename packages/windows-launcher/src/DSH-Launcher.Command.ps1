@@ -175,11 +175,11 @@ if (-not (Test-Path -LiteralPath $RequestPath -PathType Leaf)) {
 
 $request = Get-Content -Raw -LiteralPath $RequestPath -Encoding UTF8 | ConvertFrom-Json
 $mode = [string] $request.mode
-if ($mode -notin @('build', 'doctor', 'headless', 'profile', 'web')) {
+if ($mode -notin @('build', 'doctor', 'headless', 'profile', 'web', 'desktop')) {
   throw "Unsupported launcher request mode '$mode'."
 }
 $dsh = $null
-$workingDirectory = if ($mode -eq 'build') {
+$workingDirectory = if ($mode -in @('build', 'desktop')) {
   [string] $request.sourceDirectory
 } else {
   $dsh = Resolve-SafeDshCommand -Path ([string] $request.dshCommand) -Mode $mode
@@ -195,6 +195,52 @@ $buildStage = '环境检查'
 try {
   Set-Location -LiteralPath $workingDirectory
   switch ($mode) {
+    'desktop' {
+      $manifest = Get-Content -Raw -LiteralPath (Join-Path $workingDirectory 'package.json') -Encoding UTF8 | ConvertFrom-Json
+      if ($manifest.name -ne '@deepseek-ai/dsh-root' -or [string]$manifest.packageManager -notmatch '^pnpm@([^+]+)') {
+        throw 'Desktop source launch requires the DSH checkout and its declared pnpm version.'
+      }
+      $expectedPnpm = $Matches[1]
+      $desktopScript = if ([bool]$request.desktopBuild) { 'dev:desktop' } else { 'start:desktop' }
+      $scriptProperty = $manifest.scripts.PSObject.Properties[$desktopScript]
+      if ($null -eq $scriptProperty -or [string]::IsNullOrWhiteSpace([string]$scriptProperty.Value)) {
+        throw "DSH does not provide $desktopScript. Update the configured source checkout."
+      }
+      if (-not [bool]$request.desktopBuild) {
+        foreach ($artifact in @('apps/desktop/lib/main.js', 'apps/desktop-host/lib/index.js', 'apps/web/dist/index.html')) {
+          if (-not (Test-Path -LiteralPath (Join-Path $workingDirectory $artifact) -PathType Leaf)) {
+            throw "Desktop build is incomplete ($artifact). Choose Build and start desktop."
+          }
+        }
+      }
+      $helper = Join-Path $PSScriptRoot 'DSH-Launcher.Toolchain.cjs'
+      $planJson = & ([string]$request.runtimeNode) $helper prepare $RequestPath
+      if ($LASTEXITCODE -ne 0) { throw '桌面运行环境准备失败。请查看运行环境和桌面日志。' }
+      $toolchain = $planJson | ConvertFrom-Json
+      if ($toolchain.summary.manager -ne 'pnpm') { throw 'DSH desktop requires pnpm.' }
+      foreach ($entry in $toolchain.environment.PSObject.Properties) {
+        [Environment]::SetEnvironmentVariable($entry.Name, [string]$entry.Value, 'Process')
+      }
+      $pnpm = Get-Command pnpm -CommandType Application -ErrorAction Stop | Select-Object -First 1
+      $actualPnpm = (& $pnpm.Source --version | Out-String).Trim()
+      if ($LASTEXITCODE -ne 0 -or $actualPnpm -cne $expectedPnpm) {
+        throw "DSH requires pnpm $expectedPnpm; resolved $actualPnpm. Install the declared version or use the Launcher NVM toolchain."
+      }
+      $toolchain.summary.managerVersion = $actualPnpm
+      $toolchain.summary.phase = 'ready'
+      $toolchain.summary.message = '桌面工具链已就绪。'
+      $runtimeTemporary = ([string]$request.runtimePath) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+      [System.IO.File]::WriteAllText($runtimeTemporary, ($toolchain.summary | ConvertTo-Json -Depth 6), $Utf8NoBom)
+      Move-Item -LiteralPath $runtimeTemporary -Destination ([string]$request.runtimePath) -Force
+      [Environment]::SetEnvironmentVariable('pnpm_config_verify_deps_before_run', 'false', 'Process')
+      if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('DSH_DESKTOP_OPEN_DEVTOOLS', 'Process'))) {
+        [Environment]::SetEnvironmentVariable('DSH_DESKTOP_OPEN_DEVTOOLS', '0', 'Process')
+      }
+      $desktopResult = Invoke-LoggedDsh -Command $pnpm.Source -Arguments @('run', $desktopScript) `
+        -LogPath ([string]$request.logPath) `
+        -Header "===== pnpm run $desktopScript ($workingDirectory) ====="
+      exit $desktopResult.code
+    }
     'build' {
       $manifestPath = Join-Path $workingDirectory 'package.json'
       if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
@@ -346,6 +392,11 @@ try {
     }
   }
 } catch {
+  if ($mode -eq 'desktop') {
+    [System.IO.File]::AppendAllText([string]$request.logPath,
+      ('桌面启动失败：' + $_.Exception.Message + [Environment]::NewLine), $Utf8NoBom)
+    exit 1
+  }
   if ($mode -eq 'web') {
     [System.IO.File]::AppendAllText([string] $request.logPath,
       ('Web 启动失败：' + $_.Exception.Message + [Environment]::NewLine), $Utf8NoBom)
@@ -354,7 +405,7 @@ try {
   Write-BuildOutcome $false 1 ($buildStage + '失败：' + $_.Exception.Message)
   exit 1
 } finally {
-  if ($mode -eq 'build') {
+  if ($mode -in @('build', 'desktop')) {
     [Environment]::SetEnvironmentVariable('pnpm_config_verify_deps_before_run', $originalPnpmVerifyDeps, 'Process')
   }
   Set-Location -LiteralPath $originalDirectory
