@@ -42,13 +42,36 @@ interface EditEventState {
   readonly location: ChatConversationViewNode['location']
 }
 
+interface RootIdentity { readonly rootSeq: number; readonly rootMessageId: string }
+
+/** Track the latest human root in current coordinates, including after V2-to-V3 migration. */
+export const editRootDefinition: ConversationNodeDefinition<RootIdentity> = {
+  kind: 'edit-last-message-root',
+  match: event => event.type === 'user/message'
+    && (event.data.source.kind === 'user' || editLastMessageSource(event.data.source) !== undefined)
+    ? { id: String(event.data.id), role: 'start' } : null,
+  start: (_context, match, reader) => {
+    const event = match.event
+    if (event.type !== 'user/message') throw new Error('edit root requires a user message')
+    const marker = editLastMessageSource(event.data.source)
+    const previous = reader.previous<RootIdentity>('edit-last-message-root')?.state
+    if (marker !== undefined && previous?.rootMessageId === marker.rootMessageId) return previous
+    return {
+      rootMessageId: marker?.rootMessageId ?? String(event.data.id),
+      rootSeq: marker === undefined ? event.seq
+        : event.surfaceOp !== undefined && event.surfaceOp !== 'append' ? event.surfaceOp.startSeq : event.seq,
+    }
+  },
+  update: context => context.state,
+}
+
 function editEvent(event: Parameters<ConversationNodeDefinition['match']>[0]): EditEventState | undefined {
   if (event.type !== 'user/message' || event.surfaceOp === undefined || event.surfaceOp === 'append') return
   const source = editLastMessageSource(event.data.source)
   if (source === undefined) return
   return {
     transactionId: String(event.data.id),
-    rootSeq: source.rootSeq,
+    rootSeq: event.surfaceOp.startSeq,
     rootMessageId: source.rootMessageId,
     messageSeq: event.seq,
     time: event.time,
@@ -58,10 +81,14 @@ function editEvent(event: Parameters<ConversationNodeDefinition['match']>[0]): E
   }
 }
 
-function stateFromMatch(match: Parameters<ConversationNodeDefinition<EditEventState>['start']>[1]): EditEventState {
+function stateFromMatch(
+  match: Parameters<ConversationNodeDefinition<EditEventState>['start']>[1],
+  reader: Parameters<ConversationNodeDefinition<EditEventState>['start']>[2],
+): EditEventState {
   const state = editEvent(match.event)
   if (state === undefined) throw new Error('edit-last-message node requires a replacement user event')
-  return { ...state, location: match.location }
+  const root = reader.previous<RootIdentity>('edit-last-message-root')?.state
+  return { ...state, rootSeq: root?.rootMessageId === state.rootMessageId ? root.rootSeq : state.rootSeq, location: match.location }
 }
 
 function chatNode<Kind extends keyof ChatNodeDataMap & string>(
@@ -90,7 +117,7 @@ export const editedUserDefinition: ConversationNodeDefinition<EditEventState> = 
     const state = editEvent(event)
     return state === undefined ? null : { id: state.transactionId, role: 'start' }
   },
-  start: (_context, match) => stateFromMatch(match),
+  start: (_context, match, reader) => stateFromMatch(match, reader),
   update: context => context.state,
   buildViewNode: (context) => {
     const state = context.state
@@ -115,7 +142,7 @@ export const editCutEndDefinition: ConversationNodeDefinition<EditEventState> = 
     const state = editEvent(event)
     return state === undefined ? null : { id: state.transactionId, role: 'start' }
   },
-  start: (_context, match) => stateFromMatch(match),
+  start: (_context, match, reader) => stateFromMatch(match, reader),
   update: context => context.state,
   buildViewNode: (context) => {
     const state = context.state

@@ -98,7 +98,7 @@ function Assert-DshCompatibility {
     throw "Cannot identify the DSH source version at '$Checkout'; expected @deepseek-ai/dsh-root."
   }
   if ($version.Value -cne $expectedVersion) {
-    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $expectedVersion, but '$Checkout' is $($version.Value). Use the matching DSH release or plugin tag '$($PluginManifest.version)/$expectedVersion'. Nothing was installed or removed."
+    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $expectedVersion, but '$Checkout' is $($version.Value). Use the matching DSH release or plugin tag '$($PluginManifest.version)/dsh-$expectedVersion'. Nothing was installed or removed."
   }
   Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $expectedVersion."
 

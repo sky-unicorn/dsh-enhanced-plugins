@@ -2,15 +2,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSeq, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
-  EDIT_LAST_MESSAGE_SOURCE_KIND, editLastMessageSource, type EditLastMessageSource,
+  createEditSource, editLastMessageSource,
 } from '../shared.js'
-
-declare module '@deepseek-ai/dsh-llm/message' {
-  interface MessageSourceMap {
-    /** Replacement input written by the external edit-last-message plugin. */
-    'edit-last-message': EditLastMessageSource
-  }
-}
 
 export interface EditLastMessageHostRequest {
   readonly sessionId: string
@@ -25,7 +18,6 @@ export interface EditLastMessageHostResult {
 
 interface EditableTarget {
   readonly event: SessionEvent<'user/message'>
-  readonly rootSeq: number
   readonly rootMessageId: string
 }
 
@@ -66,7 +58,6 @@ function editableTarget(session: Session, messageSeq: SessionSeq): EditableTarge
   const previous = editLastMessageSource(event.data.source)
   return {
     event,
-    rootSeq: previous?.rootSeq ?? event.seq,
     rootMessageId: previous?.rootMessageId ?? String(event.data.id),
   }
 }
@@ -107,7 +98,7 @@ export function installEditAdmission(session: Session): () => void {
     if (source === undefined || (supplied?.surfaceOp !== undefined && supplied.surfaceOp !== 'append')) {
       return Reflect.apply(previous, this, [type, data, ...options])
     }
-    const root = session.eventAt(SessionSeq(source.rootSeq))
+    const root = session.snapshotEvents().find(event => event.type === 'user/message' && String(event.data.id) === source.rootMessageId)
     if (root?.type !== 'user/message' || String(root.data.id) !== source.rootMessageId) {
       throw new Error('recovered edit refers to an unavailable original message')
     }
@@ -115,13 +106,13 @@ export function installEditAdmission(session: Session): () => void {
       const event = session.eventAt(seq)
       if (event?.type !== 'user/message') return false
       const marker = editLastMessageSource(event.data.source)
-      return seq === source.rootSeq || (marker?.rootSeq === source.rootSeq && marker.rootMessageId === source.rootMessageId)
+      return seq === root.seq || marker?.rootMessageId === source.rootMessageId
     })
     if (targetSeq === undefined) throw new Error('recovered edit target is no longer in the model context')
     editableTarget(session, targetSeq)
     const plan = replacementPlan(session, targetSeq)
     return Reflect.apply(previous, this, [type, data, {
-      surfaceOp: { op: 'replace', start: plan.start, end: plan.end },
+      surfaceOp: { op: 'replace', startSeq: plan.start, endSeq: plan.end },
       sourceEventSeqs: plan.sourceEventSeqs,
     }])
   } as AppendMethod
@@ -167,7 +158,7 @@ function interceptReplacementAppend(
     try {
       restore()
       const logged = Reflect.apply(previous, this, [type, data, {
-        surfaceOp: { op: 'replace', start: plan.start, end: plan.end },
+        surfaceOp: { op: 'replace', startSeq: plan.start, endSeq: plan.end },
         sourceEventSeqs: plan.sourceEventSeqs,
       }]) as SessionEvent<'user/message'>
       result.resolve(logged.seq)
@@ -204,12 +195,7 @@ export async function rewriteLastMessage(
   const target = editableTarget(agent.session, targetSeq)
   const message = createUserMessage({
     content: [{ type: 'text', text }],
-    source: {
-      kind: EDIT_LAST_MESSAGE_SOURCE_KIND,
-      version: 1,
-      rootSeq: target.rootSeq,
-      rootMessageId: target.rootMessageId,
-    },
+    source: createEditSource(target.rootMessageId),
   })
   let interception: AppendInterception | undefined
   try {

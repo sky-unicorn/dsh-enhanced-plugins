@@ -44,7 +44,7 @@ afterEach(() => {
   }
 })
 
-describe('5.1.1 release compatibility', () => {
+describe('6.1.0 release compatibility', () => {
   it.runIf(process.platform === 'win32')('rejects the reserved Desktop profile before any installation', () => {
     const source = fixture()
     const result = check(source, ['-Profile', 'Desktop', '-Features', 'all'])
@@ -53,9 +53,9 @@ describe('5.1.1 release compatibility', () => {
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
   })
   it('keeps the aggregate, standalone packages, native version and DSH peers aligned', () => {
-    expect(release.version).toBe('5.1.1')
+    expect(release.version).toBe('6.1.0')
     expect(release.dshEnhanced.compatibility).toEqual({
-      dshVersion: '0.1.3-alpha.2', sourceCommit: 'c389f96bf3a9b6807cb71ed6bdad5849be0df6d8',
+      dshVersion: '0.1.5-alpha.2', sourceCommit: 'b2e3b2a0125854567a4a5fcba75782e42fe84901',
     })
     for (const manifest of [release, ...packages.map(name => JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf8')))]) {
       expect(manifest.version, manifest.name).toBe(release.version)
@@ -80,7 +80,7 @@ describe('5.1.1 release compatibility', () => {
     const source = fixture()
     const result = check(source)
     expect(result.status, result.output).toBe(0)
-    expect(result.output).toContain('Compatibility OK: plugin 5.1.1 -> DSH 0.1.3-alpha.2')
+    expect(result.output).toContain('Compatibility OK: plugin 6.1.0 -> DSH 0.1.5-alpha.2')
     expect(result.output).toContain('source commit cannot be verified')
     expect(readdirSync(source.plugin).sort()).toEqual(['package.json', 'packages'])
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
@@ -96,6 +96,8 @@ describe('5.1.1 release compatibility', () => {
     '0.1.2-rc.1',
     '0.1.2',
     '0.1.3-alpha.1',
+    '0.1.3-alpha.2',
+    '0.1.5-alpha.1',
   ])('rejects DSH %s before build or installation', (version) => {
     const source = fixture(version)
     const result = check(source, ['-Features', 'notification', '-SkipBuild'])
@@ -125,7 +127,7 @@ describe('5.1.1 release compatibility', () => {
     writeFileSync(path, JSON.stringify(manifest))
     expect(check(source).output).toContain('has no dshEnhanced.compatibility')
     copyFileSync(resolve(root, 'package.json'), path)
-    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.3-alpha.2' }))
+    writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: 'unrelated', version: '0.1.5-alpha.2' }))
     expect(check(source).output).toContain('Cannot identify the DSH source version')
   })
 

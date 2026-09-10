@@ -1,4 +1,4 @@
-/** Repair the pre-4.1 edit marker in a DSH JSONL session artifact. */
+/** Prepare historical edit attribution for DSH format migration, preserving message identities and surface operations. */
 import {
   constants, zstdCompressSync, zstdDecompressSync,
 } from 'node:zlib'
@@ -20,11 +20,11 @@ function isRecord(value) {
 }
 
 function legacyMarker(source, label) {
-  if (!isRecord(source)
-    || source.kind !== 'plugin'
-    || source.plugin !== 'edit-last-message'
-    || !Object.hasOwn(source, 'editLastMessage')) return undefined
-  const marker = source.editLastMessage
+  if (!isRecord(source)) return undefined
+  const marker = source.kind === 'edit-last-message' ? source
+    : source.kind === 'plugin' && source.plugin === 'edit-last-message' && Object.hasOwn(source, 'editLastMessage')
+      ? source.editLastMessage : undefined
+  if (marker === undefined) return undefined
   if (!isRecord(marker)
     || marker.version !== 1
     || !Number.isSafeInteger(marker.rootSeq)
@@ -40,13 +40,11 @@ function repairMessage(message, label) {
   if (!isRecord(message)) return false
   const marker = legacyMarker(message.source, `${label} source`)
   if (marker === undefined) return false
-  const { kind: _kind, plugin: _plugin, editLastMessage: _marker, ...preserved } = message.source
+  // Same wire convention as createEditSource(). The offline repair stays
+  // standalone so it can run before DSH is able to open the old artifact.
   message.source = {
-    ...preserved,
-    kind: 'edit-last-message',
-    version: 1,
-    rootSeq: marker.rootSeq,
-    rootMessageId: marker.rootMessageId,
+    kind: 'plugin',
+    plugin: 'dsh-enhanced/edit-last-message/v2/' + encodeURIComponent(marker.rootMessageId),
   }
   return true
 }

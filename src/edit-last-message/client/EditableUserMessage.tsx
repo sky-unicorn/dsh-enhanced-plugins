@@ -1,33 +1,19 @@
 import {
-  Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode,
+  Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent,
 } from 'react'
 import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   Button, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconLoadingOutline16,
-  IconSendOutline16, JsonBlock, projectUserText, Tooltip, writeClipboard,
+  IconSendOutline16, JsonBlock, projectUserText, Tooltip, writeClipboard, FileTypeIcon, fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import * as UiPrimitives from '@deepseek-ai/dsh-client-ui-primitives'
 import type { EditLastMessageRequest } from './edit-session.ts'
 import {
   isLatestRootEdit, latestEditableMessageSeq, type EditedUserChatData,
 } from './conversation-nodes.ts'
 import type { EditLastMessageLocaleKey } from './locales.ts'
 import css from './EditableUserMessage.module.css'
-
-// The target source exports these in DSH 0.1.3-alpha.2. Keep this narrow
-// structural bridge because a sibling checkout can lag in regenerated lib/types;
-// release verification also typechecks against a freshly built target checkout.
-const { DocumentFileIcon, fileSizeText } = UiPrimitives as unknown as {
-  readonly DocumentFileIcon: (props: { readonly className?: string }) => ReactNode
-  readonly fileSizeText: (bytes: number) => string
-}
-const projectUserTextWithSlashNames = projectUserText as (
-  text: string,
-  sessionLabels: readonly string[],
-  slashNames?: readonly string[],
-) => ReactNode
 
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
 interface UserFileAttachment {
@@ -207,7 +193,7 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, ed
                 )
               : (
                   <span key={`file:${index}`} className={css.fileCard} title={attachment.file.name}>
-                    <DocumentFileIcon className={css.fileIcon} />
+                    <FileTypeIcon path={attachment.file.name} className={css.fileIcon} />
                     <span className={css.fileContent}>
                       <span className={css.fileName}>{attachment.file.name}</span>
                       <span className={css.fileMeta}>
@@ -267,7 +253,7 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, ed
                 )
               : (
                   <>
-                    {projectUserTextWithSlashNames(text, data.referenceLabels ?? [], data.skillNames ?? [])}
+                    {projectUserText(text, data.referenceLabels ?? [], data.skillNames ?? [])}
                     {rest.map((block, index) => (
                       <JsonBlock
                         key={index}

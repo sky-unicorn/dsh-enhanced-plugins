@@ -133,7 +133,7 @@ it('edits with the real loop and preserves replacement intent after a durable in
     await restored.whenIdle()
     const edits = restored.session.snapshotEvents().filter(event => event.type === 'user/message' && editLastMessageSource(event.data.source) !== undefined)
     expect(edits).toHaveLength(2)
-    expect(edits[1]?.surfaceOp).toMatchObject({ op: 'replace', start: first.replacementSeq })
+    expect(edits[1]?.surfaceOp).toMatchObject({ op: 'replace', startSeq: first.replacementSeq })
     expect(restored.session.surface.nodes).not.toContain(first.replacementSeq)
     expect(restored.inbox.nextTurn).toHaveLength(0)
   } finally {

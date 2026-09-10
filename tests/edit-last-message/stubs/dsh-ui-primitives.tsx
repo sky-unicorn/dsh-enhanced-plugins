@@ -40,7 +40,7 @@ export function projectUserText(text: string) {
   return <>{text}</>
 }
 
-export function DocumentFileIcon(props: SVGProps<SVGSVGElement>) {
+export function FileTypeIcon({ path: _path, ...props }: SVGProps<SVGSVGElement> & { path: string }) {
   return <svg aria-hidden {...props} />
 }
 

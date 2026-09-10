@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { assertReleasedPayloadSemantics } from '@dsh-test/session-format-v0-to-v1-validation'
+import { createEditSource } from '../../src/edit-last-message/shared.ts'
 import {
   repairSessionArtifact, scanZstdFrames,
 } from '../../scripts/repair-edit-last-message-session.mjs'
@@ -49,7 +50,7 @@ async function decodedRows(path: string): Promise<Record<string, unknown>[]> {
 }
 
 describe('edit-last-message session repair', () => {
-  it('backs up and converts both durable copies to a merge-extensible source kind', async () => {
+  it('backs up and converts both durable copies to migration-safe plugin attribution', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-edit-session-repair-'))
     roots.push(root)
     const path = join(root, 'session.jsonl.zstd')
@@ -81,9 +82,7 @@ describe('edit-last-message session repair', () => {
     expect(await readFile(repaired.backupPath!)).toEqual(original)
 
     const rows = await decodedRows(path)
-    const expectedSource = {
-      kind: 'edit-last-message', version: 1, rootSeq: 7, rootMessageId: 'original-message',
-    }
+    const expectedSource = createEditSource('original-message')
     expect(rows[1]).toMatchObject({ data: { inserted: [{ source: expectedSource }] } })
     expect(rows[2]).toMatchObject({ data: { source: expectedSource } })
     expect(() => assertReleasedPayloadSemantics(rows[1] as never, 0)).not.toThrow()

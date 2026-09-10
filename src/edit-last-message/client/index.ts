@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import {
   EditCutEnd, EditableUserMessage, EditedUserMessage,
 } from './EditableUserMessage.tsx'
-import { editCutEndDefinition, editedUserDefinition } from './conversation-nodes.ts'
+import { editCutEndDefinition, editedUserDefinition, editRootDefinition } from './conversation-nodes.ts'
 import { EditLastMessageClient } from './edit-session.ts'
 import { en, zh } from './locales.ts'
 
@@ -40,6 +40,7 @@ export function apply(ctx: ClientContext): void {
     editAndResend: (request: Parameters<typeof remote.rewrite>[1]) => remote.rewrite(sessionId, request).then(() => {}),
   })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'edit-last-message: dictionaries')
+  ctx.uiConversation.events.register(editRootDefinition)
   ctx.uiConversation.events.register(editedUserDefinition)
   ctx.uiConversation.events.register(editCutEndDefinition)
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({

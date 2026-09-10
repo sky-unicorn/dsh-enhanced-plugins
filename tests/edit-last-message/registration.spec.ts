@@ -19,7 +19,7 @@ describe('edit-last-message client registration', () => {
 
     expect(localeRegister).toHaveBeenCalledWith(NS, expect.objectContaining({ zh: expect.any(Object), en: expect.any(Object) }))
     expect(slotInject).toHaveBeenCalledWith('conversation.chat.node', expect.any(Function))
-    expect(definitionRegister).toHaveBeenCalledTimes(2)
+    expect(definitionRegister).toHaveBeenCalledTimes(3)
     expect(slotRegister).toHaveBeenCalledTimes(3)
     expect(slotRegister.mock.calls[0]?.[0]).toEqual({
       name: 'conversation.chat.node',

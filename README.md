@@ -29,9 +29,9 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 ## Quick start
 
-### 5.1.1 launch modes and compatibility
+### 6.1.0 launch modes and compatibility
 
-Target: DSH `0.1.3-alpha.2` at `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`. This includes Desktop and file Sidebar updates after the alpha.2 tag.
+Target: DSH `0.1.5-alpha.2` at `b2e3b2a0125854567a4a5fcba75782e42fe84901`. Release tag: `6.1.0/dsh-0.1.5-alpha.2`.
 
 Choose Browser or Source Desktop at the top of Launcher Overview. The saved choice also controls login startup; existing settings default to Browser. Source Desktop reuses the bound DSH checkout and the Launcher toolchain: Start Desktop runs `pnpm run start:desktop`, while Build and Start runs `pnpm run dev:desktop`. Missing build artifacts disable ordinary startup and direct you to Build and Start. Install the checkout dependencies with `pnpm install --frozen-lockfile` first. Desktop output and failures appear in Desktop Logs; Stop terminates only the Launcher-owned invocation. An active build invocation blocks starting Web against the shared artifacts. The old `DesktopExecutable` setting is ignored; no EXE selection is required.
 
@@ -43,8 +43,8 @@ Recovered inbox edits retain replacement semantics. Missing or stale edit target
 
 - Node.js 22.19.x, or Node.js 24 and later.
 - A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
-- This repository is verified against DSH [`0.1.3-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/c389f96bf3a9b6807cb71ed6bdad5849be0df6d8), with local ABI baseline commit `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`.
-- Installing this DSH version from source on Windows requires Python and Visual Studio C++ Build Tools (the “Desktop development with C++” workload, including MSVC and the Windows SDK); the full Visual Studio IDE is unnecessary. DSH's session persistence package directly depends on `fs-ext@2.1.1`, whose install script runs `node-gyp configure build`. This requirement belongs to DSH dependency installation; the Launcher itself uses the system .NET Framework `csc.exe`. See the [node-gyp Windows setup](https://github.com/nodejs/node-gyp#on-windows). Starting an existing working build does not require recompilation, but reinstalling dependencies or changing the Node.js ABI may require the toolchain again; do not bypass native dependency builds by skipping install scripts.
+- This repository is verified against DSH [`0.1.5-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b2e3b2a0125854567a4a5fcba75782e42fe84901), with local ABI baseline commit `b2e3b2a0125854567a4a5fcba75782e42fe84901`.
+- This DSH version no longer requires `fs-ext` for Session locking. Follow the target checkout’s native build requirements; Launcher uses the system .NET Framework `csc.exe`. Do not skip dependency install scripts.
 - Windows Launcher, native sounds, and the desktop pet require a full Windows desktop edition with Windows PowerShell 5.1: Windows 10 version 1607 or later, or Windows 11. The required OS capabilities are the same on Home, Pro, Education / Pro Education, and Enterprise; Windows in S mode, IoT / reduced-footprint editions, and Windows 10 versions 1507 and 1511 are outside this baseline. Windows feature updates outside Microsoft's lifecycle are best-effort because the required Node.js toolchain does not guarantee end-of-life operating systems. The installer does not depend on a particular `tar.exe`. The remaining features are cross-platform.
 
 > [!IMPORTANT]
@@ -210,7 +210,7 @@ Both the resident pet and short-lived sound processes are owned by the DSH subpr
 
 The [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) workflow publishes the `market-index` branch. It enumerates the complete topic, revalidates only new or changed repositories, and refuses to overwrite the last result after an abnormal shrink or failed build. This project is also a built-in verified channel contribution, so it remains discoverable before the remote mirror catches up and is not duplicated afterward.
 
-Neither the bundled snapshot nor automated index sync requires a GitHub token. Host downloads use the global transport installed by DSH 0.1.3-alpha.2, including its proxy validation, direct routes, and `NO_PROXY` rules. Set `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` in the launching environment or `$DSH_HOME/.env`; the market does not install or close its own proxy dispatcher. If install preflight hits GitHub API limits, Settings can store a read-only, short-lived fine-grained token. It is sent only to the local DSH Host and stored through the credentials service.
+Neither the bundled snapshot nor automated index sync requires a GitHub token. Host downloads use the global transport installed by DSH 0.1.5-alpha.2, including its proxy validation, direct routes, and `NO_PROXY` rules. Set `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` in the launching environment or `$DSH_HOME/.env`; the market does not install or close its own proxy dispatcher. If install preflight hits GitHub API limits, Settings can store a read-only, short-lived fine-grained token. It is sent only to the local DSH Host and stored through the credentials service.
 
 The page displays index generation time. An index older than 24 hours receives an explicit warning while the last usable snapshot remains available.
 
@@ -253,14 +253,14 @@ The card appears only when the official `llm-pi-ai` settings namespace is availa
 
 Resend stays inside the current session: the plugin replaces model context starting at the edited user message, then generates through the same AgentLoop. The DSH Session log remains an append-only audit record, and side effects from tools that already ran are not rolled back. Uploaded generic files render with the DSH file-card presentation, while messages containing any attachment or other non-text block do not expose the editor, preventing silent data loss.
 
-Earlier releases attached the edit marker to the built-in `plugin` message source. The strict DSH 0.1.3-alpha.2 v0 migrator refuses such an old session with `unexpected member "editLastMessage"`. The current implementation uses its own public, merge-extensible message-source `kind`. If an old session already reports this error, stop every DSH Host before inspecting and repairing that log:
+Release 6.1.0 writes V3 replacement operations and uses standard plugin attribution containing the original message ID, without embedding event sequence numbers. DSH migration can renumber events without losing the edit's identity. Older nested markers and the 5.x `edit-last-message` source kind are not accepted by the V2-to-V3 migrator. Before opening such sessions in the new DSH, stop every DSH Host and run the offline repair on each affected log:
 
 ```powershell
 node .\scripts\repair-edit-last-message-session.mjs "C:\path\to\session.jsonl.zstd"
 node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.jsonl.zstd"
 ```
 
-The first command is read-only. The second converts only matching legacy edit markers and creates a timestamped backup beside the original artifact. A truncated, corrupt, mismatched, or concurrently changed log is refused instead of being silently rewritten.
+The first command is read-only. The second converts both historical marker formats to standard plugin attribution and creates a timestamped backup beside the original artifact. A truncated, corrupt, mismatched, or concurrently changed log is refused instead of being silently rewritten.
 
 ### 7. Product subagents
 
@@ -285,8 +285,8 @@ Both toggles default to off. Writes use path-addressed operations and settings r
 - The Agent Teams view follows the selected Lead or roster-member session. It shows member status, task dependencies/owners/readiness, advisory write-scope overlaps, and queued mailbox counts. Select a task for details; select a member to open its official subagent transcript.
 - The Host reads the official `ctx.agentTeams` service. For cold history, the official Agent Teams runtime owns and registers the `agentTeam` projection, which the monitor replays through public `ctx.sessionProjections.restore()`. Logs come from read-only `sessionQuery.observeSession()` observations; no Agent is activated and no second team state is created.
 - Only the current conversation is polled (1.5 seconds open / 5 seconds collapsed); hidden pages and disconnected Hosts pause polling. New members and state changes refresh automatically without opening the panel. Click the icon, outside the panel, or press Escape to close. Failed/old replies cannot appear as live state after a session switch or reconnect.
-- The monitor **does not enable Agent Teams or workflow**, register model tools, create/wake/interrupt members, edit tasks, or schedule work. Standard workflow monitoring needs no experimental Team package. To inspect live or historical Agent Teams state, enable that runtime separately following its [Team documentation](https://github.com/deepseek-ai/deepseek-harness/tree/c389f96bf3a9b6807cb71ed6bdad5849be0df6d8/packages/experimental/agent-team), so it owns and registers the projection.
-- Requires the verified DSH `0.1.3-alpha.2` source ABI. This plugin neither bundles the private experimental package nor fetches it from npm; Agent Teams history replay requires the official runtime and its projection to be mounted in the active profile. Runtime status and task completion are independent: `inactive` does not mean `completed`, and tasks depend on model-reported updates. Mail bodies and raw provider errors are never sent by the monitor. Views cap at 256 members / 1,000 tasks with explicit truncation and complete totals.
+- The monitor **does not enable Agent Teams or workflow**, register model tools, create/wake/interrupt members, edit tasks, or schedule work. Standard workflow monitoring needs no experimental Team package. To inspect live or historical Agent Teams state, enable that runtime separately following its [Team documentation](https://github.com/deepseek-ai/deepseek-harness/tree/b2e3b2a0125854567a4a5fcba75782e42fe84901/packages/experimental/agent-team), so it owns and registers the projection.
+- Requires the verified DSH `0.1.5-alpha.2` source ABI. This plugin neither bundles the experimental package nor fetches it from npm; Agent Teams history replay requires the official runtime and its projection to be mounted in the active profile. Runtime status and task completion are independent: `inactive` does not mean `completed`, and tasks depend on model-reported updates. Mail bodies and raw provider errors are never sent by the monitor. Views cap at 256 members / 1,000 tasks with explicit truncation and complete totals.
 - Workflow views cap at 100 runs / 256 total member rows with complete totals. Unfinished cold records are never presented as live work; a closed enclosing step/turn marks an unfinished run interrupted. The monitor reads public records, never reads/executes workflow scripts, and never presents ordinary subagents as an experimental Team.
 - Native discovery uses public `subagents.listDescendants`; read-only `sessionQuery.observeSession()` supplies own titles and turn outcomes. Exact Agent running/idle state takes precedence; residency alone is not execution. History means currently non-running, not necessarily successful. At most 256 child rows are inspected/displayed, prioritizing executing Agents; truncation shows displayed/total counts and filters count displayed rows only. Catalog failures do not hide existing Team/workflow data.
 
@@ -294,7 +294,8 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** plugin `5.1.1` targets DSH `0.1.3-alpha.2`, source commit `c389f96bf3a9b6807cb71ed6bdad5849be0df6d8`. The aggregate, all seven standalone bundles, and Windows Launcher use `5.1.1`.
+- **Version pairing:** plugin `6.1.0` targets DSH `0.1.5-alpha.2`, source commit `b2e3b2a0125854567a4a5fcba75782e42fe84901`. The aggregate, all seven standalone bundles, and Windows Launcher use `6.1.0`.
+- **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** the installer and Launcher plugin updater read `dshEnhanced.compatibility` from the root `package.json` before building, stopping services, or changing a profile. A DSH version mismatch, missing declaration, or mixed plugin package versions stops installation. A matching version whose commit is absent from `sourceCommit` and `additionalSourceCommits`, local source changes, or no Git metadata produces an unverified-source warning.
 - **Current interfaces:** Client features use `client-store`, `ui-session`, `ui-chat`, and public Remotes, without the removed `dsh-client-runtime`, `connection.api`, or `hostDescription`. Host settings owners pass validated namespace literals and use `SettingsProvider.installSection()`. Session consumers use `eventAt()` / `snapshotEvents()` and keep `SessionLogOffset` inheritance metadata separate from `SessionHeader`; Team Monitor preserves that exact cut through query observations and projection replay. This project follows the public interfaces of the source commit above.
@@ -395,6 +396,8 @@ Set `DSH_VERIFY_CHECKOUT` to a prepared copy of the verified DSH source commit w
 `npm run verify:pack` packs each standalone distribution, installs only its build dependencies in an isolated directory without DSH peers, runs `prepare`, and checks its repacked entries. The Windows Companion part requires Windows as well.
 
 Browser bundles use CSS Modules and consume only DSH `--dsw-alias-*` semantic theme tokens, so they follow light, dark, and system appearance automatically. See the [DSH plugin development guide](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) and [architecture reference](https://deepseek-harness.github.io/deepseek-harness/reference/) for public extension points.
+
+`npm run verify:edit-web` installs the editor in an isolated profile and drives Chromium against the real Web composition with a local SSE model fixture. It checks repeated edits, request-history replacement, reload, and light/dark screenshots without a real model key. It uses Playwright from the built DSH checkout and requires its Chromium browser. `typecheck` now rejects stale V2 declarations when the checkout source is V3.
 
 ## License
 

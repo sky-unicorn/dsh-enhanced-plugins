@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rewriteLastMessage } from '../../src/edit-last-message/host/rewind.ts'
 import {
-  EDIT_LAST_MESSAGE_SOURCE_KIND, editLastMessageSource,
+  EDIT_LAST_MESSAGE_SOURCE_KIND, createEditSource, editLastMessageSource,
 } from '../../src/edit-last-message/shared.ts'
 
 interface FakeEvent {
@@ -23,7 +23,7 @@ class FakeSession {
   }
 
   append(type: string, data: Record<string, unknown>, options?: {
-    surfaceOp: 'append' | { op: 'replace'; start: number; end: number }
+    surfaceOp: 'append' | { op: 'replace'; startSeq: number; endSeq: number }
     sourceEventSeqs?: number[]
   }): FakeEvent {
     const event: FakeEvent = {
@@ -39,8 +39,8 @@ class FakeSession {
     this.events.push(event)
     if (options?.surfaceOp === 'append') this.surface.nodes.push(event.seq)
     else if (options?.surfaceOp !== undefined) {
-      const start = this.surface.nodes.indexOf(options.surfaceOp.start)
-      const end = this.surface.nodes.indexOf(options.surfaceOp.end)
+      const start = this.surface.nodes.indexOf(options.surfaceOp.startSeq)
+      const end = this.surface.nodes.indexOf(options.surfaceOp.endSeq)
       this.surface.nodes.splice(start, end - start + 1, event.seq)
     }
     return event
@@ -96,16 +96,11 @@ describe('rewriteLastMessage', () => {
       expect.objectContaining({ message: expect.objectContaining({ id: 'old-answer' }) }),
     ])
     expect(session.surface.nodes).toEqual([5])
-    const expectedSource = {
-      kind: EDIT_LAST_MESSAGE_SOURCE_KIND,
-      version: 1,
-      rootSeq: 0,
-      rootMessageId: 'original-message',
-    }
+    const expectedSource = createEditSource('original-message')
     expect(session.events[2]?.data).toMatchObject({ inserted: [{ source: expectedSource }] })
     expect(session.events[5]).toMatchObject({
       type: 'user/message',
-      surfaceOp: { op: 'replace', start: 0, end: 1 },
+      surfaceOp: { op: 'replace', startSeq: 0, endSeq: 1 },
       sourceEventSeqs: [0, 1],
       data: { content: [{ type: 'text', text: 'revised' }], source: expectedSource },
     })
@@ -128,7 +123,6 @@ describe('rewriteLastMessage', () => {
     expect(source).toEqual({
       kind: EDIT_LAST_MESSAGE_SOURCE_KIND,
       version: 1,
-      rootSeq: 0,
       rootMessageId: 'original-message',
     })
     expect(session.surface.nodes).toEqual([second.replacementSeq])
@@ -162,7 +156,7 @@ describe('rewriteLastMessage', () => {
 
     expect(session.surface.nodes).toEqual([result.replacementSeq, 5])
     expect(session.events[result.replacementSeq]).toMatchObject({
-      surfaceOp: { op: 'replace', start: 0, end: 1 },
+      surfaceOp: { op: 'replace', startSeq: 0, endSeq: 1 },
       sourceEventSeqs: [0, 1],
     })
     expect(session.events[5]?.data).toMatchObject({ id: 'fresh-context' })

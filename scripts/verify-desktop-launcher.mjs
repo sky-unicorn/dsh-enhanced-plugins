@@ -30,7 +30,7 @@ const port = reservation.address().port
 await new Promise(done => reservation.close(done))
 const settings = { Port: port, LaunchMode: 'desktop', DshSourceDirectory: source, DesktopExecutable: 'C:\\retired\\ignored.exe' }
 write(join(home, 'settings.json'), JSON.stringify(settings))
-write(join(source, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-root', version: '0.1.3-alpha.2',
+write(join(source, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-root', version: '0.1.5-alpha.2',
   packageManager: 'pnpm@11.7.0', engines: { node: '>=22.19.0' },
   scripts: { build: 'fixture', 'dev:desktop': 'fixture', 'start:desktop': 'fixture' } }))
 write(join(source, 'tsconfig.json'), '{}')
