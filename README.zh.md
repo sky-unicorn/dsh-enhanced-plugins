@@ -31,7 +31,7 @@
 
 ### 6.1.0 启动方式与兼容范围
 
-- 兼容目标为 DSH `0.1.5-alpha.2`，精确源码为 `b2e3b2a0125854567a4a5fcba75782e42fe84901`；发布标签为 `6.1.0/dsh-0.1.5-alpha.2`。
+- 插件保持 `6.1.0`，仅支持 DSH `0.1.5-alpha.2` 和 `0.1.5-rc.1`，源码基线分别为 `b2e3b2a0125854567a4a5fcba75782e42fe84901` 和 `2377c272a8e839e0a84c9f0e623b867a1dce2014`。现有发布标签为 `6.1.0/dsh-0.1.5-alpha.2`；双版本兼容请使用更新后的源码。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
 - 源码桌面复用已绑定的 DSH checkout 和 Launcher 工具链：“启动桌面端”运行 `pnpm run start:desktop`，“构建并启动”运行 `pnpm run dev:desktop`。缺少构建产物时禁用普通启动并提示构建；源码依赖需先通过 `pnpm install --frozen-lockfile` 安装。启动过程、失败原因和退出码进入桌面日志；“停止”只结束 Launcher 拥有的命令进程树。构建并启动仍在运行时，禁止同时启动 Web 读取共享产物。旧的 `DesktopExecutable` 字段不再使用，无需选择 EXE。
 - 官方源码命令每次重建 `apps/desktop/.desktop-build/development/project`，数据默认位于同级 `home`，或使用继承的 `DSH_HOME`；默认关闭 DevTools，显式设置 `DSH_DESKTOP_OPEN_DEVTOOLS=1` 可打开。源码模式禁用官方包管理 UI，目前没有公开参数继承 Web bundles，Launcher 不向生成的 profile 私自复制插件。打包后的 Desktop 应用则独立管理保留的 `desktop` profile，仍不能通过 `dsh plugin --profile desktop` 操作。
@@ -41,7 +41,7 @@
 
 - Node.js 22.19.x，或 Node.js 24 及更高版本。
 - 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
-- 本仓库针对 DSH [`0.1.5-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b2e3b2a0125854567a4a5fcba75782e42fe84901) 验证，本地 ABI 基准 commit 为 `b2e3b2a0125854567a4a5fcba75782e42fe84901`。
+- 支持的 DSH 源码基线为 [`0.1.5-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/b2e3b2a0125854567a4a5fcba75782e42fe84901) 和 [`0.1.5-rc.1`](https://github.com/deepseek-ai/deepseek-harness/tree/2377c272a8e839e0a84c9f0e623b867a1dce2014)，兼容声明不包含其他版本。
 - 此版本 DSH 的 Session 文件锁已不再依赖 `fs-ext`。原生构建要求以目标 checkout 为准；Launcher 自身使用系统 .NET Framework 的 `csc.exe`。不要跳过依赖安装脚本。
 - Windows Launcher、原生提示音和桌面宠物需要带 Windows PowerShell 5.1 的完整 Windows 桌面版本，即 Windows 10 1607 或更高版本，或 Windows 11。所需系统能力在 Home、Pro、Education / Pro Education 与 Enterprise 上相同；Windows S 模式、IoT / 精简版本以及 Windows 10 1507、1511 不在这一基线内。已经超出微软生命周期的 Windows 功能更新只能尽力兼容，因为所需 Node.js 工具链不保证支持已停止维护的操作系统。安装器不依赖某一个特定的 `tar.exe`；其余功能可跨平台使用。
 
@@ -208,7 +208,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 索引由 [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) 生成到 `market-index` 分支：完整枚举 topic，只重新验证新增或变化的仓库；异常缩水或生成失败不会覆盖上次结果。插件市场自身是内置的已验证渠道贡献，即使远程镜像尚未收录也会出现，后续不会重复。
 
-内置快照和自动索引同步都不需要 GitHub Token。Host 下载使用 DSH 0.1.5-alpha.2 安装的全局传输，遵循其代理校验、直连和 `NO_PROXY` 规则。`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 与 `NO_PROXY` 可在启动环境或 `$DSH_HOME/.env` 中设置；插件市场不再自行创建或关闭代理 dispatcher。安装预检若遇到 GitHub API 限流，可在“配置”中保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并由 credentials 服务保存。
+内置快照和自动索引同步都不需要 GitHub Token。Host 下载使用 这两个受支持 DSH 版本安装的全局传输，遵循其代理校验、直连和 `NO_PROXY` 规则。`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 与 `NO_PROXY` 可在启动环境或 `$DSH_HOME/.env` 中设置；插件市场不再自行创建或关闭代理 dispatcher。安装预检若遇到 GitHub API 限流，可在“配置”中保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并由 credentials 服务保存。
 
 页面会显示索引生成时间；超过 24 小时未更新时明确提示，同时继续保留上次可用快照。
 
@@ -284,7 +284,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 - Host 读取官方 `ctx.agentTeams`；冷历史由官方 Agent Teams 运行时注册的 `agentTeam` 投影和公开 `ctx.sessionProjections.restore()` 回放。日志通过不提交恢复的 `sessionQuery.observeSession()` 读取，不激活 Agent，也不创建第二份团队状态。
 - 只轮询当前会话（展开时 1.5 秒、收起时 5 秒）；隐藏页面或断线后暂停。后续启动的成员和状态变化会自动刷新，但不会自动打开面板。点击图标、外部区域或 Escape 可收起。切换会话、重连和请求失败不会把旧数据显示为实时状态。
 - 监控插件**不会启用 Agent Teams 或 workflow**，不注册模型工具，不创建/唤醒/中断成员，不编辑任务或调度工作。查看标准工作流无需实验性 Team 包；要查看 Agent Teams 的实时或历史状态，请按[官方 Team 文档](https://github.com/deepseek-ai/deepseek-harness/tree/b2e3b2a0125854567a4a5fcba75782e42fe84901/packages/experimental/agent-team)单独启用实验性运行时，使其拥有并注册投影。
-- 基于 DSH `0.1.5-alpha.2` 源码 ABI 验证。实验包不由本插件打包或从 npm 获取；Agent Teams 历史回放依赖运行 profile 中已挂载的官方运行时及其投影。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
+- 支持 DSH `0.1.5-alpha.2` 和 `0.1.5-rc.1` 的源码 ABI。实验包不由本插件打包或从 npm 获取；Agent Teams 历史回放依赖运行 profile 中已挂载的官方运行时及其投影。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
 - 工作流最多显示 100 次运行、合计 256 条成员记录，汇总保持完整。未记录结束的冷历史不会冒充实时运行；原步骤或轮次已关闭时标记中断。监控只读取公开记录，不读取／执行工作流脚本，普通子代理不会被伪装成实验性 Team。
 - 原生子会话目录来自公开的 `subagents.listDescendants`，通过非写入的 `sessionPersistence.inspect()` 获取自身标题与轮次结果。实际 Agent 的运行／空闲状态优先，不能用“仍驻留”冒充“正在执行”。历史筛选包含当前未运行的会话，不表示全部成功。目录最多展示 256 条、优先运行中的 Agent；超限时显示已展示／总数，筛选计数只针对已展示条目。目录不可用不会影响已有 Team／工作流记录的查看。
 
@@ -292,10 +292,10 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `6.1.0` 对应 DSH `0.1.5-alpha.2`，源码基线 commit 为 `b2e3b2a0125854567a4a5fcba75782e42fe84901`。聚合包、7 个独立功能包和 Windows Launcher 均使用 `6.1.0`。
+- **版本对应：** 插件 `6.1.0` 同时支持 DSH `0.1.5-alpha.2` 和 `0.1.5-rc.1`，源码基线见上文。聚合包、7 个独立功能包和 Windows Launcher 均使用 `6.1.0`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
-- **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。版本不匹配、声明缺失或插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
+- **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。允许的精确版本由 `dshVersion` 加可选的 `additionalDshVersions` 声明，peerDependencies 使用相同的双版本并集。版本不受支持、声明缺失或格式错误、插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。
 - **提供方来源：** `subagent-codex`、`subagent-claude-code` 的 Loader ID 不变，改由本包的 `sub-agent/codex`、`sub-agent/claude-code` 入口转出官方提供方；独立包对应 `./codex`、`./claude-code`。这样新版 DeepSeek 请求的活动插件清单能解析其包来源，无需关闭该功能或修改 DSH。
 - **独立构建：** 各功能发布物携带自身源码和构建脚本，可在没有 sibling DSH checkout 的目录执行 `npm install --legacy-peer-deps`、`npm run prepare` 和 `npm pack`；运行时仍由匹配版本的 DSH 提供公开 peer 服务。Windows Launcher 原生重建需要 Windows 与 .NET Framework 4.x 编译器。

@@ -8,6 +8,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const dsh = resolve(root, '../deepseek-harness')
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+const dshVersion = JSON.parse(readFileSync(join(dsh, 'package.json'), 'utf8')).version
+const compatibility = manifest.dshEnhanced.compatibility
+assert.ok([compatibility.dshVersion, ...(compatibility.additionalDshVersions ?? [])].includes(dshVersion), 'Unsupported DSH checkout')
 assert.ok(existsSync(join(dsh, 'apps/desktop-host/lib/index.js')), 'Build the required DSH checkout first')
 
 if (process.argv[2] !== '--child') {
@@ -32,7 +35,7 @@ if (process.argv[2] !== '--child') {
   const project = prepareDevelopmentProject({
     projectDir: join(directory, 'project'), cliDir: join(dsh, 'apps/cli'),
     hostDir: join(dsh, 'apps/desktop-host'), dependencyDir: join(dsh, 'node_modules/.pnpm/node_modules'),
-    release: { schemaVersion: 1, version: manifest.dshEnhanced.compatibility.dshVersion,
+    release: { schemaVersion: 1, version: dshVersion,
       hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION, nodeVersion: process.versions.node,
       pnpmVersion: JSON.parse(readFileSync(join(dsh, 'apps/desktop/node_modules/pnpm/package.json'), 'utf8')).version },
   })
@@ -55,7 +58,7 @@ if (process.argv[2] !== '--child') {
   const chunks = []
   const host = await runDesktopHost(project, async bytes => { chunks.push(Buffer.from(bytes)) }, { allowLinkedPackages: true })
   try {
-    assert.equal(host.dshVersion, manifest.dshEnhanced.compatibility.dshVersion)
+    assert.equal(host.dshVersion, dshVersion)
     await host.fetch({ streamId: 1, request: { url: 'dsh-app://app/', method: 'GET', headers: [] } }, null)
     const response = Buffer.concat(chunks).toString('utf8')
     assert.ok(response.includes('"status":200'), 'Desktop index did not return 200')

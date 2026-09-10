@@ -67,6 +67,20 @@ function Assert-DshCompatibility {
     throw 'Plugin release has an invalid DSH compatibility declaration.'
   }
   $expectedVersion = [string] $versionProperty.Value
+  $supportedVersions = @($expectedVersion)
+  $additionalVersions = $compatibility.Value.PSObject.Properties['additionalDshVersions']
+  if ($null -ne $additionalVersions) {
+    if ($additionalVersions.Value -isnot [array]) {
+      throw 'Plugin release has an invalid additionalDshVersions declaration.'
+    }
+    foreach ($candidate in $additionalVersions.Value) {
+      if ($candidate -isnot [string] -or $candidate -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' -or
+          $supportedVersions -ccontains $candidate) {
+        throw 'Plugin release has an invalid additionalDshVersions declaration.'
+      }
+      $supportedVersions += $candidate
+    }
+  }
   $expectedCommit = [string] $commitProperty.Value
   $verifiedCommits = @($expectedCommit)
   $additionalCommits = $compatibility.Value.PSObject.Properties['additionalSourceCommits']
@@ -97,10 +111,10 @@ function Assert-DshCompatibility {
       $null -eq $version -or $version.Value -isnot [string]) {
     throw "Cannot identify the DSH source version at '$Checkout'; expected @deepseek-ai/dsh-root."
   }
-  if ($version.Value -cne $expectedVersion) {
-    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $expectedVersion, but '$Checkout' is $($version.Value). Use the matching DSH release or plugin tag '$($PluginManifest.version)/dsh-$expectedVersion'. Nothing was installed or removed."
+  if ($supportedVersions -cnotcontains $version.Value) {
+    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $($supportedVersions -join ' or '), but '$Checkout' is $($version.Value). Use a supported DSH release or a matching plugin release. Nothing was installed or removed."
   }
-  Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $expectedVersion."
+  Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $($version.Value)."
 
   $git = Get-Command -Name 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($null -eq $git -or -not (Test-Path -LiteralPath (Join-Path $Checkout '.git'))) {
