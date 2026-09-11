@@ -8,6 +8,7 @@ const dsh = dshCheckout
 export default defineConfig({
   resolve: {
     alias: exactDshAliases({
+      '@dsh-test/user-text': resolve(dsh, 'packages/client/ui-primitives/src/user-text.tsx'),
       '@dsh-test/session-format-v0-to-v1-validation': resolve(
         dsh,
         'packages/session/session-format-v0-to-v1/src/payload-validation.ts',

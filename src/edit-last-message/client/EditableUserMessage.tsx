@@ -10,7 +10,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { EditLastMessageRequest } from './edit-session.ts'
 import {
-  isLatestRootEdit, latestEditableMessageSeq, type EditedUserChatData,
+  isLatestRootEdit, latestEditableMessageSeq, loadedEditSkills, type EditedUserChatData,
 } from './conversation-nodes.ts'
 import type { EditLastMessageLocaleKey } from './locales.ts'
 import css from './EditableUserMessage.module.css'
@@ -89,11 +89,13 @@ interface EditableBubbleProps extends EditableUserMessageInjected {
   readonly renderMessageImages: EditableUserMessageProps['renderMessageImages']
   readonly useSession: EditableUserMessageProps['useSession']
   readonly useChat: EditableUserMessageProps['useChat']
+  readonly openFile: EditableUserMessageProps['openFile']
+  readonly openSkill: EditableUserMessageProps['openSkill']
   readonly t: EditableUserMessageProps['t']
 }
 
 /** Shared bubble body for an append-origin or replacement-projected user message. */
-function EditableUserBubble({ data, renderMessageImages, useSession, useChat, editAndResend, t }: EditableBubbleProps) {
+function EditableUserBubble({ data, renderMessageImages, useSession, useChat, openFile, openSkill, editAndResend, t }: EditableBubbleProps) {
   const { text, attachments, rest } = contentParts(data.content)
   const compactImages = attachments.length > 1
   const candidate = editableText(data.content)
@@ -253,7 +255,7 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, ed
                 )
               : (
                   <>
-                    {projectUserText(text, data.referenceLabels ?? [], data.skillNames ?? [])}
+                    {projectUserText(text, data.referenceLabels ?? [], data.skillNames ?? [], 'skill', { openFile, openSkill })}
                     {rest.map((block, index) => (
                       <JsonBlock
                         key={index}
@@ -290,7 +292,7 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, ed
 
 /** User bubble with inline edit-and-resend support on the stopped transcript tail. */
 export function EditableUserMessage({
-  node, renderMessageImages, useSession, useChat, editAndResend, t,
+  node, renderMessageImages, useSession, useChat, openFile, openSkill, editAndResend, t,
 }: EditableUserMessageProps) {
   return (
     <EditableUserBubble
@@ -298,6 +300,8 @@ export function EditableUserMessage({
       renderMessageImages={renderMessageImages}
       useSession={useSession}
       useChat={useChat}
+      openFile={openFile}
+      openSkill={openSkill}
       editAndResend={editAndResend}
       t={t}
     />
@@ -373,10 +377,11 @@ function useDiscardedRange(
 
 /** Edited bubble projected at the first version's position in this same session. */
 export function EditedUserMessage({
-  node, renderMessageImages, useSession, useChat, editAndResend, t,
+  node, renderMessageImages, useSession, useChat, openFile, openSkill, editAndResend, t,
 }: EditedUserMessageProps) {
   const data = node.data
   const latest = useChat(snapshot => isLatestRootEdit(snapshot, data))
+  const skillNames = useChat(snapshot => loadedEditSkills(snapshot, node.location, data.messageSeq))
   const flowRevision = useChat(snapshot => {
     const order = snapshot.order
     return `${order.length}:${order[0] ?? ''}:${order.at(-1) ?? ''}`
@@ -392,10 +397,13 @@ export function EditedUserMessage({
           time: data.time,
           content: data.content,
           source: data.source,
+          skillNames,
         }}
         renderMessageImages={renderMessageImages}
         useSession={useSession}
         useChat={useChat}
+        openFile={openFile}
+        openSkill={openSkill}
         editAndResend={editAndResend}
         t={t}
       />

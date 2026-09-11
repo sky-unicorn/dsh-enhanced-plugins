@@ -11,6 +11,8 @@ const formatVersion = path => readFileSync(path, 'utf8').match(/SESSION_FORMAT_V
 const source = formatVersion(resolve(dsh, 'packages/core/session/src/types.ts'))
 const built = formatVersion(resolve(dsh, 'packages/core/session/lib/types/types.d.ts'))
 if (source !== '3' || source !== built) throw new Error(`DSH Session declarations are stale or incompatible (source=${source}, built=${built}); build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.`)
+const chatOwner = readFileSync(resolve(dsh, 'packages/client/ui-chat/lib/types/client/contract/slots.d.ts'), 'utf8')
+if (!chatOwner.includes('openSkill:')) throw new Error('DSH Chat declarations predate rc.2 reference previews; build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.')
 const scratch = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-typecheck-'))
 try {
   for (const name of ['tsconfig.json', 'tsconfig.client.json']) {

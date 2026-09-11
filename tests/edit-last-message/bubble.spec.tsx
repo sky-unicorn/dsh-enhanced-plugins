@@ -30,6 +30,8 @@ function propsOf(options: {
   return {
     node: { key: `user:${seq}`, kind: 'user', data },
     renderMessageImages: vi.fn(() => null),
+    openFile: vi.fn(),
+    openSkill: vi.fn(),
     useSession: (selector: (value: typeof snapshot) => unknown) => selector(snapshot),
     useChat: (selector: (value: unknown) => unknown) => selector({ ...snapshot.chat, legacy: { nodes: snapshot.nodes } }),
     editAndResend: options.editAndResend ?? vi.fn().mockResolvedValue(undefined),
@@ -133,6 +135,8 @@ describe('EditableUserMessage', () => {
     }
     const shared = {
       renderMessageImages: vi.fn(() => null),
+      openFile: vi.fn(),
+      openSkill: vi.fn(),
       useSession: (selector: (value: typeof snapshot) => unknown) => selector(snapshot),
       useChat: (selector: (value: unknown) => unknown) => selector({ ...snapshot.chat, legacy: { nodes: snapshot.nodes } }),
       editAndResend: vi.fn().mockResolvedValue(undefined),
@@ -143,7 +147,7 @@ describe('EditableUserMessage', () => {
       <div>
         <section><div data-chat-flow-key="13:input-messageoriginal-id" data-testid="original">old</div></section>
         <div data-chat-flow-key="25:edit-last-messagereplacement-id">
-          <EditedUserMessage {...shared as never} node={{ kind: 'edited-user', data: editedData } as never} />
+          <EditedUserMessage {...shared as never} node={{ kind: 'edited-user', data: editedData, location: { kind: 'unresolved' } } as never} />
         </div>
         <section><div data-chat-flow-key="13:context" data-testid="discarded-context">old context</div></section>
         <div data-chat-flow-key="21:edit-last-message-endreplacement-id">

@@ -36,9 +36,8 @@ export function Tooltip({ children }: { children: ReactElement }) {
   return children
 }
 
-export function projectUserText(text: string) {
-  return <>{text}</>
-}
+// Exercise the real target-version reference projection while keeping unrelated controls lightweight.
+export { projectUserText } from '@dsh-test/user-text'
 
 export function FileTypeIcon({ path: _path, ...props }: SVGProps<SVGSVGElement> & { path: string }) {
   return <svg aria-hidden {...props} />

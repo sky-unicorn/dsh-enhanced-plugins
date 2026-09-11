@@ -4,9 +4,10 @@ import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { prepareDesktopDependencyView } from './desktop-fixture-dependencies.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const dsh = resolve(root, '../deepseek-harness')
+const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepseek-harness'))
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const dshVersion = JSON.parse(readFileSync(join(dsh, 'package.json'), 'utf8')).version
 const compatibility = manifest.dshEnhanced.compatibility
@@ -34,7 +35,7 @@ if (process.argv[2] !== '--child') {
   const { DESKTOP_HOST_PROTOCOL_VERSION } = await import(pathToFileURL(join(dsh, 'apps/desktop/src/host-protocol.ts')).href)
   const project = prepareDevelopmentProject({
     projectDir: join(directory, 'project'), cliDir: join(dsh, 'apps/cli'),
-    hostDir: join(dsh, 'apps/desktop-host'), dependencyDir: join(dsh, 'node_modules/.pnpm/node_modules'),
+    hostDir: join(dsh, 'apps/desktop-host'), dependencyDir: prepareDesktopDependencyView(dsh, join(directory, 'dependency-view')),
     release: { schemaVersion: 1, version: dshVersion,
       hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION, nodeVersion: process.versions.node,
       pnpmVersion: JSON.parse(readFileSync(join(dsh, 'apps/desktop/node_modules/pnpm/package.json'), 'utf8')).version },
@@ -56,7 +57,7 @@ if (process.argv[2] !== '--child') {
   metadata.dsh.profile.bundles.push(manifest.name)
   writeFileSync(metadataPath, JSON.stringify(metadata, null, 2))
   const chunks = []
-  const host = await runDesktopHost(project, async bytes => { chunks.push(Buffer.from(bytes)) }, { allowLinkedPackages: true })
+  const host = await runDesktopHost(project, project, async bytes => { chunks.push(Buffer.from(bytes)) }, { allowLinkedPackages: true })
   try {
     assert.equal(host.dshVersion, dshVersion)
     await host.fetch({ streamId: 1, request: { url: 'dsh-app://app/', method: 'GET', headers: [] } }, null)

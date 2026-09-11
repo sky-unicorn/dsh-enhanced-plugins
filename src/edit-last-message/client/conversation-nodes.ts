@@ -1,7 +1,7 @@
 import type {
   ChatConversationViewNode, ChatNodeDataMap, ChatSnapshot, UserMessageNode,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
-import type { ConversationNodeDefinition } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ContextMessageNode, ConversationLocation, ConversationNodeDefinition } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { editLastMessageSource } from '../shared.ts'
 
 /** Payload rendered at the original user-message position after a semantic rewind. */
@@ -184,4 +184,28 @@ export function isLatestRootEdit(snapshot: Pick<ChatSnapshot, 'nodes'>, data: Ed
     if (candidate.rootMessageId === data.rootMessageId && candidate.messageSeq > data.messageSeq) return false
   }
   return true
+}
+
+/**
+ * Read Skill invocation evidence following this edit in its own step.
+ * @param snapshot - current public Chat projection, including loaded context nodes.
+ * @param location - the edited message's new step, not its visual position at the original bubble.
+ * @param messageSeq - sequence of the admitted replacement message.
+ * @returns distinct loaded names; discarded turns and other steps cannot contribute.
+ */
+export function loadedEditSkills(
+  snapshot: Pick<ChatSnapshot, 'nodes'>,
+  location: ConversationLocation,
+  messageSeq: number,
+): readonly string[] {
+  if (location.kind !== 'step') return []
+  const names = new Set<string>()
+  for (const node of snapshot.nodes.values()) {
+    if (node.kind !== 'context' || node.anchorSeq <= messageSeq || node.location.kind !== 'step'
+      || node.location.turn.turn !== location.turn.turn || node.location.step.step !== location.step.step) continue
+    const { source } = node.data as ContextMessageNode
+    if (source !== null && typeof source === 'object' && 'kind' in source
+      && source.kind === 'skill-invocation' && 'name' in source && typeof source.name === 'string') names.add(source.name)
+  }
+  return [...names].sort()
 }

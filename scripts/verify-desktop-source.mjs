@@ -5,10 +5,11 @@ import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { prepareDesktopDependencyView } from './desktop-fixture-dependencies.mjs'
 
 if (process.platform !== 'win32') throw new Error('Desktop source verification requires Windows')
 const root = fileURLToPath(new URL('..', import.meta.url))
-const dsh = resolve(root, '../deepseek-harness')
+const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepseek-harness'))
 assert.ok(existsSync(join(dsh, 'apps/desktop/lib/main.js')), 'Build the required DSH checkout first')
 const scratch = join(root, '.verify-dsh-home')
 mkdirSync(scratch, { recursive: true })
@@ -20,7 +21,7 @@ for (const name of ['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'ts
   cpSync(join(dsh, name), join(source, name))
 }
 const link = (from, to) => symlinkSync(from, to, 'junction')
-link(join(dsh, 'node_modules'), join(source, 'node_modules'))
+prepareDesktopDependencyView(dsh, join(source, 'node_modules'))
 // Only the Desktop application writes its development tree; copy it instead of linking it.
 mkdirSync(join(source, 'apps/desktop'))
 for (const name of ['package.json', 'lib', 'src', 'scripts', 'renderer']) {

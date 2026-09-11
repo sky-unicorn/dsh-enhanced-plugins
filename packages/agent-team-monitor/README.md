@@ -1,6 +1,6 @@
 # Official Agent Teams monitor / 官方团队监控
 
-Read-only Host adapter and Web panel for DSH `0.1.5-alpha.2` (ABI `b2e3b2a012`).
+Read-only Host adapter and Web panel for DSH `0.1.5-rc.2` (ABI `c291e7961a`).
 The session-owned icon appears in the composer's model/context group when workflow, Agent Teams or native child-session records exist. Click to open; switching sessions closes and clears it.
 Standard workflow monitoring needs no experimental Team runtime. Agent Teams itself must be enabled separately in the DSH source profile.
 Historical reads require the public `sessionQuery` service supplied by the standard Web profile. Its public `observeSession()` API preserves fork boundaries and balances interrupted logs in memory. The monitor releases every observation and waits for cancelled reads on unload. Team history rejected by the official projection is shown as incompatible; the monitor does not migrate it.
