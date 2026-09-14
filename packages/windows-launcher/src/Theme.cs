@@ -678,37 +678,20 @@ namespace DshEnhanced.WindowsLauncher
 
     internal sealed class HeroPanel : RoundedPanel
     {
-        internal HeroPanel() { BorderColor = Color.FromArgb(48, 67, 111); }
+        internal HeroPanel() { BackColor = UiTheme.Surface; BorderColor = UiTheme.Border; }
 
         protected override void OnPaintBackground(PaintEventArgs e)
         {
+            base.OnPaintBackground(e);
+            if (Width < UiTheme.Dip(this, 560)) return;
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.Clear(Parent == null ? UiTheme.Background : Parent.BackColor);
-            int edge = UiTheme.Dip(this, 1);
-            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - edge), Math.Max(1, Height - edge));
-            using (GraphicsPath path = UiTheme.RoundedRectangle(bounds, UiTheme.Dip(this, Radius)))
-            using (LinearGradientBrush brush = new LinearGradientBrush(bounds,
-                Color.FromArgb(13, 28, 58), Color.FromArgb(30, 47, 91), 15f))
-            {
-                e.Graphics.FillPath(brush, path);
-                e.Graphics.SetClip(path);
-                using (SolidBrush glow = new SolidBrush(Color.FromArgb(28, 100, 131, 255)))
-                {
-                    e.Graphics.FillEllipse(glow, Width - UiTheme.Dip(this, 245), -UiTheme.Dip(this, 115),
-                        UiTheme.Dip(this, 310), UiTheme.Dip(this, 310));
-                    e.Graphics.FillEllipse(glow, Width - UiTheme.Dip(this, 430), UiTheme.Dip(this, 70),
-                        UiTheme.Dip(this, 260), UiTheme.Dip(this, 260));
-                }
-                WhaleGlyph.Draw(e.Graphics, new RectangleF(Width - UiTheme.Dip(this, 210), UiTheme.Dip(this, 4),
-                    UiTheme.Dip(this, 170), UiTheme.Dip(this, 170)),
-                    Color.FromArgb(24, 255, 255, 255), UiTheme.Dip(this, 18f));
-                e.Graphics.ResetClip();
-            }
+            WhaleGlyph.Draw(e.Graphics, new RectangleF(Width - UiTheme.Dip(this, 176), UiTheme.Dip(this, 8),
+                UiTheme.Dip(this, 136), UiTheme.Dip(this, 120)), UiTheme.PrimarySoft, UiTheme.Dip(this, 14f));
         }
 
     }
 
-    internal enum ModernButtonKind { Primary, Secondary, Danger, Quiet }
+    internal enum ModernButtonKind { Primary, Secondary, Danger, Quiet, Segment, SegmentSelected }
 
     internal sealed class ModernButton : Control
     {
@@ -716,8 +699,30 @@ namespace DshEnhanced.WindowsLauncher
         private bool hovering;
         private bool pressed;
 
-        internal ModernButtonKind Kind { get { return kind; } set { kind = value; Invalidate(); } }
+        internal ModernButtonKind Kind
+        {
+            get { return kind; }
+            set
+            {
+                if (kind == value) return;
+                kind = value;
+                Invalidate();
+                if (IsHandleCreated) AccessibilityNotifyClients(AccessibleEvents.StateChange, -1);
+            }
+        }
         internal int LogicalWidth { get; set; }
+
+        protected override AccessibleObject CreateAccessibilityInstance() { return new ButtonAccessibility(this); }
+
+        private sealed class ButtonAccessibility : ControlAccessibleObject
+        {
+            private readonly ModernButton owner;
+            internal ButtonAccessibility(ModernButton owner) : base(owner) { this.owner = owner; }
+            public override AccessibleStates State
+            {
+                get { return base.State | (owner.Kind == ModernButtonKind.SegmentSelected ? AccessibleStates.Checked : AccessibleStates.None); }
+            }
+        }
 
         internal ModernButton()
         {
@@ -764,6 +769,13 @@ namespace DshEnhanced.WindowsLauncher
             if (!Enabled)
             {
                 fill = Color.FromArgb(239, 242, 247); border = Color.FromArgb(231, 235, 242); text = Color.FromArgb(158, 169, 187);
+            }
+            else if (kind == ModernButtonKind.Segment || kind == ModernButtonKind.SegmentSelected)
+            {
+                bool selected = kind == ModernButtonKind.SegmentSelected;
+                fill = selected ? UiTheme.Surface : hovering ? UiTheme.PrimarySoft : UiTheme.SurfaceSoft;
+                border = selected ? UiTheme.Border : fill;
+                text = selected ? UiTheme.Primary : UiTheme.Muted;
             }
             else if (kind == ModernButtonKind.Primary)
             {
@@ -950,6 +962,12 @@ namespace DshEnhanced.WindowsLauncher
         }
 
         internal int ItemCount { get { return choices.Items.Count; } }
+        internal event EventHandler SelectionChangeCommitted;
+        internal bool SelectionOnly
+        {
+            get { return editor.ReadOnly; }
+            set { editor.ReadOnly = value; editor.Cursor = value ? Cursors.Hand : Cursors.IBeam; }
+        }
 
         public override string Text
         {
@@ -988,6 +1006,7 @@ namespace DshEnhanced.WindowsLauncher
                 if (!String.Equals(base.Text, editor.Text, StringComparison.Ordinal)) base.Text = editor.Text;
             };
             editor.KeyDown += EditorKeyDown;
+            editor.Click += delegate { if (SelectionOnly) TogglePopup(); };
             Controls.Add(editor);
 
             choices = new ListBox();
@@ -1181,6 +1200,7 @@ namespace DshEnhanced.WindowsLauncher
             Text = Convert.ToString(choices.Items[index], CultureInfo.CurrentCulture);
             popup.Close();
             editor.SelectionStart = editor.TextLength;
+            if (SelectionChangeCommitted != null) SelectionChangeCommitted(this, EventArgs.Empty);
         }
 
         private void DrawChoice(object sender, DrawItemEventArgs e)

@@ -35,6 +35,8 @@ export function resolveProject(request) {
     const root = path.resolve(request.sourceDirectory)
     const manifest = json(path.join(root, 'package.json'))
     if (manifest.name !== '@deepseek-ai/dsh-root') throw new Error('记录的源码目录不是 DSH checkout。')
+    // Source maintenance must work before dependencies and build artifacts exist.
+    if (request.mode === 'build') return { root, manifest, args: [], env: {} }
     if (request.mode === 'desktop') {
       if (!exists(path.join(root, 'node_modules/tsx/dist/esm/index.mjs'))
           || !exists(path.join(root, 'apps/desktop/scripts/dev.ts'))) {
@@ -146,7 +148,14 @@ export function inspectToolchain(request, env = process.env) {
   const nvm = discoverNvm(env)
   const summary = { requestId: request.requestId, mode: nvm ? 'sandbox' : 'system', phase: 'detected',
     nodeVersion: '', nodeRequirement: '', nodeSource: '', manager: '', managerVersion: '', managerRequirement: '',
-    managerSource: '', projectPath: '', nodePath: '', message: '', nvmRoot: nvm?.root || '' }
+    managerSource: '', projectPath: '', nodePath: '', message: '', nvmRoot: nvm?.root || '',
+    requestedNodeVersion: request.nodeVersion || '', installedNodeVersions: nvm?.versions.map(item => item.version) || [] }
+  if (request.nodeVersion && (!semver.valid(request.nodeVersion) || !nvm)) {
+    summary.phase = 'error'
+    summary.message = !nvm ? '已手动指定 Node 版本，但未检测到 NVM；请恢复 NVM 或切回自动选择。'
+      : '手动 Node 版本必须是完整的版本号。'
+    return { summary, environment: {}, args: [] }
+  }
   if (!nvm) {
     if (request.mode === 'desktop') {
       try {
@@ -187,13 +196,35 @@ export function inspectToolchain(request, env = process.env) {
       nodeSource: required.nodeSource, manager: required.manager, managerRequirement: required.managerRange,
       managerSource: required.managerSource })
     if (!semver.validRange(required.nodeEngine)) throw new Error('engines.node 声明无效。')
-    const selected = nvm.versions.find(item => matchesNode(item.version, required.node) && semver.satisfies(item.version, required.nodeEngine))
+    const compatible = item => matchesNode(item.version, required.node) && semver.satisfies(item.version, required.nodeEngine)
+    const selected = request.nodeVersion
+      ? nvm.versions.find(item => item.version === semver.valid(request.nodeVersion))
+      : nvm.versions.find(compatible)
+    if (request.nodeVersion) {
+      summary.nodeSource = `手动选择 / ${required.nodeSource}`
+      if (!selected) throw new Error(`手动选择的 Node ${request.nodeVersion} 未安装；请通过 nvm install 安装或重新选择。`)
+      if (!compatible(selected)) throw new Error(`手动选择的 Node ${selected.version} 不满足 DSH ${required.node}（engines: ${required.nodeEngine}）；请重新选择。`)
+    }
     if (!selected) throw new Error(`NVM 未安装匹配 Node ${required.node}（engines: ${required.nodeEngine}）的版本；请先通过 nvm install 安装。`)
     const actualNode = run(selected.node, ['--version']).replace(/^v/, '')
     if (actualNode !== selected.version) throw new Error('NVM 目录与 Node 实际版本不一致。')
     Object.assign(summary, { nodePath: selected.node, nodeVersion: actualNode })
     const bundledNpm = path.join(path.dirname(selected.node), 'node_modules/npm')
     if (!exists(path.join(bundledNpm, 'bin/npm-cli.js'))) throw new Error('所选 Node 缺少内置 npm，无法准备工具链。')
+    if (request.pluginSourceDirectory) {
+      const root = path.resolve(request.pluginSourceDirectory)
+      const manifest = json(path.join(root, 'package.json'))
+      if (manifest.name !== 'dsh-enhanced-plugins') throw new Error('记录的插件源码目录不是 dsh-enhanced-plugins。')
+      const plugin = requirements({ root, manifest })
+      if (!matchesNode(actualNode, plugin.node) || !semver.satisfies(actualNode, plugin.nodeEngine)) {
+        throw new Error(`概览选择的 Node ${actualNode} 不满足插件源码 ${plugin.node} / ${plugin.nodeEngine}；请统一 DSH 与插件的版本要求。`)
+      }
+      if (plugin.manager !== 'npm') throw new Error('插件源码构建需要 npm。')
+      const npmVersion = versionOf(path.join(bundledNpm, 'package.json'))
+      if (!semver.valid(npmVersion) || !semver.satisfies(npmVersion, plugin.managerRange)) {
+        throw new Error(`所选 Node 内置的 npm ${npmVersion} 不满足插件源码 ${plugin.managerRange}。`)
+      }
+    }
     const key = crypto.createHash('sha256').update(project.root.toLowerCase()).digest('hex').slice(0, 16)
     const home = path.join(request.sandboxHome, key, `node-${actualNode}`)
     const cleanPath = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean).filter(dir => {
@@ -203,11 +234,18 @@ export function inspectToolchain(request, env = process.env) {
     })
     const environment = { ...project.env, NVM_SANDBOX: '1', NVM_SANDBOX_NODE: actualNode,
       NPM_CONFIG_PREFIX: path.join(home, 'global'), NPM_CONFIG_CACHE: path.join(home, 'cache/npm'),
-      NPM_CONFIG_STORE_DIR: path.join(home, 'cache/pnpm'),
       COREPACK_HOME: path.join(home, 'corepack'), COREPACK_ENABLE_PROJECT_SPEC: '0',
-      PNPM_HOME: path.join(home, 'global'), YARN_CACHE_FOLDER: path.join(home, 'cache/yarn'),
+      YARN_CACHE_FOLDER: path.join(home, 'cache/yarn'),
       YARN_GLOBAL_FOLDER: path.join(home, 'yarn'),
       PATH: [path.join(home, 'bin'), path.dirname(selected.node), path.join(home, 'global'), ...cleanPath].join(path.delimiter) }
+    // pnpm records its store in node_modules. Redirecting PNPM_HOME also moves
+    // that store and breaks later add/install operations on existing profiles.
+    // Preserve user settings; clear only overrides inherited from older Launcher children.
+    const sandboxPrefix = path.resolve(request.sandboxHome).toLowerCase() + path.sep
+    for (const [key, value] of Object.entries(env)) {
+      if (['pnpm_home', 'npm_config_store_dir', 'pnpm_config_store_dir'].includes(key.toLowerCase())
+          && value && path.resolve(value).toLowerCase().startsWith(sandboxPrefix)) environment[key] = ''
+    }
     let managerRoot = '', version = ''
     const candidates = [path.join(path.dirname(selected.node), 'node_modules', required.manager)]
     const cache = path.join(home, 'managers')

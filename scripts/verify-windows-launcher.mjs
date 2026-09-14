@@ -368,7 +368,8 @@ try {
   git(['-C', seed, 'commit', '-am', 'fixture update'])
   git(['-C', seed, 'push'])
   const savedSettings = await readFile(settingsPath, 'utf8')
-  const realGitEnvironment = { ...environment, PATH: `${buildOnlyBin};${dirname(realGit)};${process.env.PATH ?? ''}` }
+  // Keep this system-toolchain fixture free of NVM even when testing real Git.
+  const realGitEnvironment = { ...environment, PATH: `${buildOnlyBin};${dirname(realGit)};${environment.PATH}` }
   try {
     await writeFile(settingsPath, JSON.stringify({ ...JSON.parse(savedSettings), DshSourceDirectory: checkout }))
     const actualBuildPath = resolve(temporary, 'real-git-build.json')
@@ -558,6 +559,18 @@ try {
   }
 
   const wideScreenshot = resolve(temporary, 'launcher-wide.png')
+  const beforeModeCapture = await readFile(settingsPath, 'utf8')
+  try {
+    for (const launchMode of ['web', 'desktop']) {
+      await writeFile(settingsPath, JSON.stringify({ ...JSON.parse(beforeModeCapture), LaunchMode: launchMode }))
+      const shortScreenshot = resolve(temporary, `launcher-${launchMode}-short.png`)
+      const shortCapture = run(executable, ['--screenshot', shortScreenshot, 'overview', 'short'], { env: environment })
+      const shortBytes = await readFile(shortScreenshot)
+      assert.equal(shortCapture.status, 0, shortCapture.stderr)
+      assert.equal(shortBytes.readUInt32BE(16), 990)
+      assert.equal(shortBytes.readUInt32BE(20), 560)
+    }
+  } finally { await writeFile(settingsPath, beforeModeCapture) }
   const wideCapture = run(executable, ['--screenshot', wideScreenshot, 'overview', 'wide'], { env: environment })
   const wideBytes = await readFile(wideScreenshot)
   if (wideCapture.status !== 0 || wideBytes.length < 20_000

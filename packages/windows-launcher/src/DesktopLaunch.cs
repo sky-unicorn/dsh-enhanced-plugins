@@ -16,8 +16,12 @@ namespace DshEnhanced.WindowsLauncher
         internal const string Source = "查看源码";
         internal const string Build = "构建并启动";
         internal const string Logs = "桌面日志";
-        internal const string WebHint = "浏览器访问本机 Web 服务，使用当前 Web 插件配置。";
-        internal const string DesktopHint = "使用官方源码启动命令；独立开发数据，不自动继承 Web 已装插件。";
+        internal const string WebHint = "浏览器访问 · 使用 Web 插件配置";
+        internal const string DesktopHint = "源码桌面 · 独立开发数据";
+        internal const string ModeHint = "默认启动方式；登录自动启动也使用此选择";
+        internal const string LocalService = "本机服务";
+        internal const string DesktopReady = "已有构建，可以直接启动";
+        internal const string DesktopData = "独立开发数据 · 首次使用请先构建";
         internal const string SelectFirst = "请先绑定包含桌面启动脚本的 DSH 源码目录。";
         internal const string NeedsBuild = "桌面构建产物不完整，请点击“构建并启动”。";
         internal const string Failed = "桌面启动失败。";
@@ -62,31 +66,38 @@ namespace DshEnhanced.WindowsLauncher
 
     internal sealed partial class MainForm
     {
-        private RoundedPanel launchModeCard;
+        private RoundedPanel launchModeSelector;
         private ModernButton browserModeButton;
         private ModernButton desktopModeButton;
         private ModernButton desktopSourceButton;
         private ModernButton desktopBuildButton;
-        private Label launchModeHint;
-        private Label desktopPathLabel;
 
-        private void BuildLaunchModeCard()
+        private void BuildLaunchModeSelector()
         {
-            launchModeCard = new RoundedPanel();
-            overviewPage.Content.Controls.Add(launchModeCard);
-            AddCardTitle(launchModeCard, DesktopText.Title, "选择默认启动体验；登录自动启动也使用此选择");
-            browserModeButton = NewButton(DesktopText.Browser, ModernButtonKind.Secondary, 118);
-            desktopModeButton = NewButton(DesktopText.Desktop, ModernButtonKind.Secondary, 118);
-            desktopSourceButton = NewButton(DesktopText.Source, ModernButtonKind.Quiet, 118);
+            launchModeSelector = new RoundedPanel { Radius = 12, BackColor = UiTheme.SurfaceSoft,
+                AccessibleRole = AccessibleRole.Grouping, AccessibleName = DesktopText.Title };
+            header.Controls.Add(launchModeSelector);
+            browserModeButton = NewButton(DesktopText.Browser, ModernButtonKind.SegmentSelected, 0);
+            desktopModeButton = NewButton(DesktopText.Desktop, ModernButtonKind.Segment, 0);
+            desktopSourceButton = NewButton(DesktopText.Source, ModernButtonKind.Secondary, 96);
             desktopBuildButton = NewButton(DesktopText.Build, ModernButtonKind.Secondary, 136);
             desktopBuildButton.Click += delegate { RunOperation(runtime.BuildAndStartDesktop); };
-            launchModeHint = NewLabel(DesktopText.WebHint, 9f, FontStyle.Regular, UiTheme.Muted);
-            desktopPathLabel = NewLabel("", 8.5f, FontStyle.Regular, UiTheme.Muted);
-            launchModeCard.Controls.Add(browserModeButton);
-            launchModeCard.Controls.Add(desktopModeButton);
-            launchModeCard.Controls.Add(desktopSourceButton);
-            launchModeCard.Controls.Add(launchModeHint);
-            launchModeCard.Controls.Add(desktopPathLabel);
+            launchModeSelector.Controls.Add(browserModeButton);
+            launchModeSelector.Controls.Add(desktopModeButton);
+            foreach (ModernButton button in new[] { browserModeButton, desktopModeButton })
+            {
+                button.AccessibleRole = AccessibleRole.RadioButton;
+                button.AccessibleName = button.Text;
+                runtimeTips.SetToolTip(button, DesktopText.ModeHint);
+                button.KeyDown += delegate(object sender, KeyEventArgs e)
+                {
+                    if (e.KeyCode != Keys.Left && e.KeyCode != Keys.Right) return;
+                    bool desktop = e.KeyCode == Keys.Right;
+                    SelectLaunchMode(desktop ? "desktop" : "web");
+                    (desktop ? desktopModeButton : browserModeButton).Focus();
+                    e.Handled = e.SuppressKeyPress = true;
+                };
+            }
             browserModeButton.Click += delegate { SelectLaunchMode("web"); };
             desktopModeButton.Click += delegate { SelectLaunchMode("desktop"); };
             desktopSourceButton.Click += delegate { ShowPage(sourcePage, sourceNav, "DSH 源码"); };
@@ -102,52 +113,45 @@ namespace DshEnhanced.WindowsLauncher
             RefreshNow();
         }
 
-        private int LayoutLaunchModeCard(int left, int width)
+        private void LayoutLaunchModeSelector(int left, int top, int width)
         {
-            bool desktop = runtime.Settings.LaunchMode == "desktop";
-            int height = Dip(desktop ? 228 : 184);
-            SetBoundsIfChanged(launchModeCard, left, 0, width, height);
-            LayoutCardHeader(launchModeCard);
-            SetBoundsIfChanged(browserModeButton, Dip(28), Dip(76), Dip(118), Dip(40));
-            SetBoundsIfChanged(desktopModeButton, Dip(158), Dip(76), Dip(118), Dip(40));
-            SetRuntimeLabel(launchModeHint, Dip(28), Dip(124), Math.Max(Dip(100), width - Dip(56)), Dip(42));
-            SetRuntimeLabel(desktopPathLabel, Dip(28), Dip(178), Math.Max(Dip(80), width - Dip(192)), Dip(28));
-            SetBoundsIfChanged(desktopSourceButton, Math.Max(Dip(28), width - Dip(146)), Dip(174), Dip(118), Dip(36));
-            desktopSourceButton.Visible = desktop;
-            desktopPathLabel.Visible = desktop;
-            return height + Dip(16);
+            SetBoundsIfChanged(launchModeSelector, left, top, width, Dip(44));
+            int segmentWidth = (width - Dip(8)) / 2;
+            SetBoundsIfChanged(browserModeButton, Dip(4), Dip(4), segmentWidth, Dip(36));
+            SetBoundsIfChanged(desktopModeButton, Dip(4) + segmentWidth, Dip(4), segmentWidth, Dip(36));
         }
 
         private void ApplyLaunchModeStatus()
         {
             bool desktop = runtime.Settings.LaunchMode == "desktop";
-            browserModeButton.Text = (desktop ? "" : "✓ ") + DesktopText.Browser;
-            desktopModeButton.Text = (desktop ? "✓ " : "") + DesktopText.Desktop;
-            browserModeButton.Kind = desktop ? ModernButtonKind.Secondary : ModernButtonKind.Primary;
-            desktopModeButton.Kind = desktop ? ModernButtonKind.Primary : ModernButtonKind.Secondary;
-            launchModeHint.Text = desktop ? DesktopText.DesktopHint : DesktopText.WebHint;
+            browserModeButton.Kind = desktop ? ModernButtonKind.Segment : ModernButtonKind.SegmentSelected;
+            desktopModeButton.Kind = desktop ? ModernButtonKind.SegmentSelected : ModernButtonKind.Segment;
+            browserModeButton.TabStop = !desktop;
+            desktopModeButton.TabStop = desktop;
+            if (activePage == overviewPage) pageSubtitle.Text = desktop ? DesktopText.DesktopHint : DesktopText.WebHint;
             string source = runtime.ResolveDshSource();
-            desktopPathLabel.Text = source ?? DesktopText.SelectFirst;
+            desktopSourceButton.Visible = desktop;
+            runtimeTips.SetToolTip(desktopSourceButton, source ?? DesktopText.SelectFirst);
             startButton.Text = desktop ? "启动桌面端" : "启动 Web";
             openButton.Text = desktop ? DesktopText.Logs : "打开页面";
             restartButton.Visible = !desktop;
             desktopBuildButton.Visible = desktop;
             noOpenToggle.Enabled = !desktop;
             portLabel.Visible = portInput.Visible = browserLabel.Visible = noOpenToggle.Visible = !desktop;
-            shieldLabel.Text = "只管理由 Launcher 启动的进程";
             pathCard.Visible = true;
             if (!desktop) return;
             bool configured = DesktopLaunch.SupportsSource(source);
             bool built = configured && DesktopLaunch.HasBuild(source);
             bool running = runtime.DesktopRunning();
+            desktopBuildButton.Kind = !built && !running ? ModernButtonKind.Primary : ModernButtonKind.Secondary;
             LauncherState last = runtime.DesktopLastState();
             bool failed = !running && last != null && (last.status != "stopped" || last.exitCode != 0) && !last.stoppedByLauncher;
             SetLabelText(statusTitle, running ? DesktopText.Running : failed ? DesktopText.Failed
                 : !configured ? "绑定 DSH 源码" : !built ? "桌面端需要构建" : "源码桌面可启动");
             SetLabelText(statusDetail, running ? "命令正在执行；窗口就绪情况请查看桌面窗口"
                 : failed ? "启动命令未成功结束，请打开桌面日志查看原因"
-                : !configured ? DesktopText.SelectFirst : !built ? DesktopText.NeedsBuild : "pnpm run start:desktop · 复用已有构建");
-            SetLabelText(statusPort, "独立开发 profile · 首次或更新源码后使用“构建并启动”");
+                : !configured ? DesktopText.SelectFirst : !built ? DesktopText.NeedsBuild : DesktopText.DesktopReady);
+            SetLabelText(statusPort, DesktopText.DesktopData);
             statusDot.IndicatorColor = failed ? UiTheme.Danger : running || built ? UiTheme.Primary : UiTheme.Warning;
             startButton.Enabled = built && !running;
             desktopBuildButton.Enabled = configured && !running;

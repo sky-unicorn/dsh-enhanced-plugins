@@ -532,11 +532,15 @@ namespace DshEnhanced.WindowsLauncher
         private Label managerVersionLabel;
         private Label managerRequirementLabel;
         private ModernButton runtimeRefresh;
+        private ModernComboBox nodeVersionInput;
+        private Label nodeSelectionLabel;
+        private Label nodeSelectionHint;
+        private string[] nodeChoiceVersions = new string[0];
+        private string nodeChoiceSignature;
         private ToolchainSnapshot inspectedToolchain;
         private int inspectRequested = 1;
         private readonly ToolTip runtimeTips = new ToolTip { AutoPopDelay = 20000 };
         private Label privacyLabel;
-        private Label shieldLabel;
         private Label portLabel;
         private Label browserLabel;
         private Label launcherAutoLabel;
@@ -987,7 +991,7 @@ namespace DshEnhanced.WindowsLauncher
 
         private void BuildOverviewPage()
         {
-            BuildLaunchModeCard();
+            BuildLaunchModeSelector();
             hero = new HeroPanel();
             hero.Size = new Size(780, 154);
             overviewPage.Content.Controls.Add(hero);
@@ -996,38 +1000,38 @@ namespace DshEnhanced.WindowsLauncher
             hero.Controls.Add(statusDot);
             statusTitle.AutoSize = true;
             statusTitle.Font = UiTheme.Font(16.5f, FontStyle.Bold);
-            statusTitle.ForeColor = Color.White;
+            statusTitle.ForeColor = UiTheme.Text;
             statusTitle.BackColor = Color.Transparent;
             statusTitle.Location = new Point(54, 23);
             statusTitle.Text = "正在检查 Web 状态";
             hero.Controls.Add(statusTitle);
             statusDetail.AutoSize = true;
             statusDetail.Font = UiTheme.Font(9.5f, FontStyle.Regular);
-            statusDetail.ForeColor = Color.FromArgb(184, 199, 222);
+            statusDetail.ForeColor = UiTheme.Muted;
             statusDetail.BackColor = Color.Transparent;
             statusDetail.Location = new Point(31, 64);
             hero.Controls.Add(statusDetail);
             statusPort.AutoSize = true;
             statusPort.Font = UiTheme.Font(10f, FontStyle.Bold);
-            statusPort.ForeColor = Color.FromArgb(146, 172, 255);
+            statusPort.ForeColor = UiTheme.Primary;
             statusPort.BackColor = Color.Transparent;
             statusPort.Location = new Point(31, 103);
             hero.Controls.Add(statusPort);
-            privacyLabel = NewLabel("LOCAL ONLY", 8f, FontStyle.Bold, Color.FromArgb(140, 165, 216));
+            privacyLabel = NewLabel(DesktopText.LocalService, 8f, FontStyle.Regular, UiTheme.Subtle);
             hero.Controls.Add(privacyLabel);
-            shieldLabel = NewLabel("只管理由 Launcher 启动的进程", 8.5f, FontStyle.Regular, Color.FromArgb(177, 193, 218));
-            hero.Controls.Add(shieldLabel);
+            hero.Controls.Add(desktopSourceButton);
 
             overviewActions = new FlowLayoutPanel();
             overviewActions.Size = new Size(780, 48);
-            overviewActions.BackColor = UiTheme.Background;
+            overviewActions.BackColor = UiTheme.Surface;
             overviewActions.WrapContents = false;
             overviewActions.Controls.Add(startButton);
             overviewActions.Controls.Add(desktopBuildButton);
             overviewActions.Controls.Add(openButton);
             overviewActions.Controls.Add(restartButton);
             overviewActions.Controls.Add(stopButton);
-            overviewPage.Content.Controls.Add(overviewActions);
+            foreach (ModernButton button in overviewActions.Controls) button.LogicalWidth = 0;
+            hero.Controls.Add(overviewActions);
 
             settingsCard = new RoundedPanel();
             settingsCard.Size = new Size(780, 168);
@@ -1068,6 +1072,14 @@ namespace DshEnhanced.WindowsLauncher
             runtimeRefresh.Click += delegate { Interlocked.Exchange(ref inspectRequested, 1); RefreshNow(); };
             Disposed += delegate { runtimeTips.Dispose(); };
             pathCard.Controls.Add(runtimeRefresh);
+            nodeSelectionLabel = NewLabel(RuntimeText.VersionSelection, 8.5f, FontStyle.Regular, UiTheme.Muted);
+            nodeSelectionHint = NewLabel(RuntimeText.SelectionHint, 8f, FontStyle.Regular, UiTheme.Muted);
+            nodeVersionInput = new ModernComboBox { SelectionOnly = true, AccessibleName = RuntimeText.VersionSelection };
+            nodeVersionInput.SelectionChangeCommitted += delegate { SaveNodeSelection(); };
+            pathCard.Controls.Add(nodeSelectionLabel);
+            pathCard.Controls.Add(nodeVersionInput);
+            pathCard.Controls.Add(nodeSelectionHint);
+            ApplyNodeSelection(null);
             Label nodeNameLabel;
             nodeTile = NewRuntimeTile(RuntimeText.Node, out nodeVersionLabel, out nodeRequirementLabel, out nodeNameLabel);
             managerTile = NewRuntimeTile(RuntimeText.Manager, out managerVersionLabel, out managerRequirementLabel, out managerNameLabel);
@@ -1220,8 +1232,6 @@ namespace DshEnhanced.WindowsLauncher
 
         private void LayoutChrome()
         {
-            int headerHeight = Dip(92);
-            if (header.Height != headerHeight) header.Height = headerHeight;
             int toastHeight = Dip(42);
             if (toast.Height != toastHeight) toast.Height = toastHeight;
             Padding toastPadding = new Padding(Dip(36), 0, 0, 0);
@@ -1278,13 +1288,22 @@ namespace DshEnhanced.WindowsLauncher
             int left = pageHost.Padding.Left + contentLeft;
             contentWidth = Math.Min(contentWidth,
                 Math.Max(1, header.ClientSize.Width - left - pageHost.Padding.Right));
+            bool overview = activePage == overviewPage;
+            bool stackModes = contentWidth < Dip(480);
+            int selectorWidth = Math.Min(Dip(240), contentWidth);
+            launchModeSelector.Visible = overview;
+            int headerHeight = Dip(overview && stackModes ? 140 : 92);
+            if (header.Height != headerHeight) header.Height = headerHeight;
+            if (overview) LayoutLaunchModeSelector(stackModes ? left : left + contentWidth - selectorWidth,
+                Dip(stackModes ? 88 : 24), selectorWidth);
+            int textWidth = overview && !stackModes ? contentWidth - selectorWidth - Dip(16) : contentWidth;
             pageTitle.AutoSize = false;
             pageTitle.AutoEllipsis = true;
             pageSubtitle.AutoSize = false;
             pageSubtitle.AutoEllipsis = true;
-            SetBoundsIfChanged(pageTitle, left, Dip(14), Math.Max(Dip(120), contentWidth), Dip(40));
+            SetBoundsIfChanged(pageTitle, left, Dip(14), Math.Max(Dip(120), textWidth), Dip(40));
             SetBoundsIfChanged(pageSubtitle, left + Dip(2), Dip(56),
-                Math.Max(Dip(120), contentWidth - Dip(2)), Dip(24));
+                Math.Max(Dip(120), textWidth - Dip(2)), Dip(24));
         }
 
         private void LayoutSidebar()
@@ -1321,31 +1340,31 @@ namespace DshEnhanced.WindowsLauncher
             GetContentBounds(overviewPage, out left, out width);
             if (width < 1) return;
 
-            int heroHeight = Dip(154);
-            int modeHeight = LayoutLaunchModeCard(left, width);
-            SetBoundsIfChanged(hero, left, modeHeight, width, heroHeight);
+            bool desktopMode = runtime.Settings.LaunchMode == "desktop";
+            overviewActions.WrapContents = true;
+            int actionWidth = Math.Max(Dip(120), width - Dip(56));
+            int actionsHeight = LayoutOverviewActions(actionWidth, desktopMode);
+            int actionsTop = Dip(142);
+            int heroHeight = actionsTop + actionsHeight + Dip(18);
+            SetBoundsIfChanged(hero, left, 0, width, heroHeight);
             bool compactHero = width < Dip(560);
             privacyLabel.Visible = !compactHero;
-            shieldLabel.Visible = !compactHero;
-            SetBoundsIfChanged(statusDot, Dip(30), Dip(33), Dip(14), Dip(14));
-            SetBoundsIfChanged(statusTitle, Dip(54), Dip(22),
-                Math.Max(Dip(140), width - Dip(compactHero ? 86 : 250)), Dip(34));
-            SetBoundsIfChanged(statusDetail, Dip(31), Dip(62), Math.Max(Dip(120), width - Dip(62)), Dip(25));
-            SetBoundsIfChanged(statusPort, Dip(31), Dip(101), Math.Max(Dip(120), width - Dip(62)), Dip(25));
+            SetBoundsIfChanged(statusDot, Dip(28), Dip(32), Dip(14), Dip(14));
+            SetRuntimeLabel(statusTitle, Dip(50), Dip(22),
+                Math.Max(Dip(140), width - Dip(compactHero ? 78 : 200)), Dip(34));
+            SetRuntimeLabel(statusDetail, Dip(28), Dip(62), Math.Max(Dip(120), width - Dip(56)), Dip(38));
+            SetRuntimeLabel(statusPort, Dip(28), Dip(106),
+                Math.Max(Dip(120), width - Dip(desktopMode ? 168 : 56)), Dip(22));
+            SetBoundsIfChanged(desktopSourceButton, width - Dip(124), Dip(102), Dip(96), Dip(30));
             if (!compactHero)
             {
-                privacyLabel.Location = new Point(Math.Max(Dip(31), width - privacyLabel.PreferredSize.Width - Dip(31)), Dip(28));
-                shieldLabel.Location = new Point(Math.Max(Dip(31), width - shieldLabel.PreferredSize.Width - Dip(31)), Dip(109));
+                privacyLabel.Location = new Point(Math.Max(Dip(28), width - privacyLabel.PreferredSize.Width - Dip(28)), Dip(28));
             }
 
-            overviewActions.WrapContents = true;
-            int actionsTop = modeHeight + heroHeight + Dip(16);
-            int actionsHeight = FlowLayoutHeight(overviewActions, width, Dip(48));
-            SetBoundsIfChanged(overviewActions, left, actionsTop, width, actionsHeight);
-            int cardsTop = actionsTop + actionsHeight + Dip(12);
+            SetBoundsIfChanged(overviewActions, Dip(28), actionsTop, actionWidth, actionsHeight);
+            int cardsTop = heroHeight + Dip(18);
 
             int availableForSettings = Math.Max(Dip(120), width - Dip(56));
-            bool desktopMode = runtime.Settings.LaunchMode == "desktop";
             int settingsCount = desktopMode ? 2 : 4;
             int settingsColumns = Math.Max(1, Math.Min(settingsCount, availableForSettings / Dip(165)));
             int settingsRows = (settingsCount + settingsColumns - 1) / settingsColumns;
@@ -1354,7 +1373,7 @@ namespace DshEnhanced.WindowsLauncher
             // A wider viewport may give controls more room inside a card, but must not turn
             // the page itself into a left-to-right dashboard.
             bool stackRuntime = width < Dip(520);
-            int pathHeight = Dip(stackRuntime ? 400 : 290);
+            int pathHeight = Dip(stackRuntime ? 514 : 404);
             int gap = Dip(18);
             SetBoundsIfChanged(pathCard, left, cardsTop, width, pathHeight);
             SetBoundsIfChanged(settingsCard, left, cardsTop + pathHeight + gap, width, settingsHeight);
@@ -1378,21 +1397,47 @@ namespace DshEnhanced.WindowsLauncher
             }
 
             int runtimeWidth = width - Dip(56);
-            SetRuntimeLabel(runtimeBadge, Dip(28), Dip(76), runtimeWidth, Dip(24));
-            SetRuntimeLabel(runtimeContext, Dip(28), Dip(100), runtimeWidth, Dip(20));
+            SetRuntimeLabel(nodeSelectionLabel, Dip(28), Dip(76), runtimeWidth, Dip(22));
+            SetBoundsIfChanged(nodeVersionInput, Dip(28), Dip(102), runtimeWidth, Dip(42));
+            SetRuntimeLabel(nodeSelectionHint, Dip(28), Dip(150), runtimeWidth, Dip(36));
+            SetRuntimeLabel(runtimeBadge, Dip(28), Dip(190), runtimeWidth, Dip(24));
+            SetRuntimeLabel(runtimeContext, Dip(28), Dip(214), runtimeWidth, Dip(20));
             int tileWidth = stackRuntime ? runtimeWidth : (runtimeWidth - Dip(12)) / 2;
-            SetBoundsIfChanged(nodeTile, Dip(28), Dip(128), tileWidth, Dip(100));
+            SetBoundsIfChanged(nodeTile, Dip(28), Dip(242), tileWidth, Dip(100));
             SetBoundsIfChanged(managerTile, stackRuntime ? Dip(28) : Dip(40) + tileWidth,
-                Dip(stackRuntime ? 238 : 128), tileWidth, Dip(100));
+                Dip(stackRuntime ? 352 : 242), tileWidth, Dip(100));
             foreach (RoundedPanel tile in new[] { nodeTile, managerTile })
             {
                 SetRuntimeLabel((Label)tile.Controls[0], Dip(16), Dip(10), tileWidth - Dip(32), Dip(20));
                 SetRuntimeLabel((Label)tile.Controls[1], Dip(16), Dip(31), tileWidth - Dip(32), Dip(32));
                 SetRuntimeLabel((Label)tile.Controls[2], Dip(16), Dip(67), tileWidth - Dip(32), Dip(22));
             }
-            SetRuntimeLabel(runtimeMessage, Dip(28), Dip(stackRuntime ? 348 : 238), runtimeWidth, Dip(22));
-            SetRuntimeLabel(dshPath, Dip(28), Dip(stackRuntime ? 374 : 264), runtimeWidth, Dip(20));
+            SetRuntimeLabel(runtimeMessage, Dip(28), Dip(stackRuntime ? 462 : 352), runtimeWidth, Dip(22));
+            SetRuntimeLabel(dshPath, Dip(28), Dip(stackRuntime ? 488 : 378), runtimeWidth, Dip(20));
             overviewPage.AutoScrollMinSize = new Size(0, bottom + Dip(8));
+        }
+
+        private int LayoutOverviewActions(int availableWidth, bool desktopMode)
+        {
+            ModernButton[] buttons = desktopMode
+                ? new[] { startButton, desktopBuildButton, openButton, stopButton }
+                : new[] { startButton, openButton, restartButton, stopButton };
+            int[] preferred = desktopMode ? new[] { 116, 136, 112, 92 } : new[] { 116, 112, 112, 92 };
+            desktopBuildButton.Visible = desktopMode;
+            restartButton.Visible = !desktopMode;
+            int gap = Dip(10);
+            bool twoRows = availableWidth < Dip(360);
+            double total = 0;
+            foreach (int width in preferred) total += Dip(width);
+            double scale = Math.Min(1, (availableWidth - (gap * 3)) / total);
+            for (int index = 0; index < buttons.Length; index++)
+            {
+                int width = twoRows ? (availableWidth - gap) / 2 : (int)Math.Floor(Dip(preferred[index]) * scale);
+                buttons[index].Size = new Size(Math.Max(Dip(64), width), Dip(42));
+                buttons[index].Margin = new Padding(0, 0, (twoRows ? index % 2 == 0 : index < 3) ? gap : 0,
+                    twoRows && index < 2 ? Dip(8) : 0);
+            }
+            return Dip(twoRows ? 92 : 42);
         }
 
         private static void SetRuntimeLabel(Label label, int left, int top, int width, int height)
@@ -1592,7 +1637,8 @@ namespace DshEnhanced.WindowsLauncher
                     if (Interlocked.Exchange(ref inspectRequested, 0) != 0)
                         inspectedToolchain = toolchain = runtime.InspectToolchain();
                     if (launched != null && launchState != null && launched.requestId == launchState.requestId
-                        && (owned || launched.phase == "error")) toolchain = launched;
+                        && (owned || launched.phase == "error" && String.Equals(launched.requestedNodeVersion ?? String.Empty,
+                            runtime.Settings.NodeVersion, StringComparison.Ordinal))) toolchain = launched;
                     else if (owned) toolchain = new ToolchainSnapshot {
                         mode = "unknown", phase = "preparing", message = RuntimeText.Detecting };
                 }
@@ -1670,7 +1716,8 @@ namespace DshEnhanced.WindowsLauncher
             bool desktopMode = runtime.Settings.LaunchMode == "desktop";
             bool external = !desktopMode && status.Ownership == WebOwnership.External;
             bool active = desktopMode ? runtime.DesktopRunning() : status.CanStop;
-            runtimeRefresh.Enabled = !active;
+            runtimeRefresh.Enabled = true;
+            ApplyNodeSelection(inspectedToolchain ?? value);
             if (value == null) return;
             bool sandbox = value.mode == "sandbox";
             bool error = value.phase == "error";
@@ -1708,6 +1755,49 @@ namespace DshEnhanced.WindowsLauncher
             ShowToast(result);
         }
 
+        private void ApplyNodeSelection(ToolchainSnapshot snapshot)
+        {
+            string selected = runtime.Settings.NodeVersion ?? String.Empty;
+            List<string> versions = new List<string> { String.Empty };
+            if (snapshot != null && snapshot.installedNodeVersions != null) versions.AddRange(snapshot.installedNodeVersions);
+            bool missing = selected.Length > 0 && !versions.Contains(selected);
+            if (missing) versions.Add(selected);
+            string signature = String.Join("\n", versions.ToArray()) + "\nselected=" + selected;
+            if (signature != nodeChoiceSignature)
+            {
+                nodeChoiceSignature = signature;
+                nodeChoiceVersions = versions.ToArray();
+                List<string> labels = new List<string> { RuntimeText.Automatic };
+                for (int index = 1; index < versions.Count; index++)
+                    labels.Add(versions[index] + (missing && versions[index] == selected ? RuntimeText.MissingVersion : String.Empty));
+                nodeVersionInput.SetItems(labels.ToArray());
+                nodeVersionInput.SelectedIndex = versions.IndexOf(selected);
+            }
+            nodeVersionInput.Enabled = versions.Count > 1;
+            SetLabelText(nodeSelectionHint, snapshot != null && String.IsNullOrEmpty(snapshot.nvmRoot) && selected.Length == 0
+                ? RuntimeText.NoNvm : RuntimeText.SelectionHint);
+        }
+
+        private void SaveNodeSelection()
+        {
+            int index = nodeVersionInput.SelectedIndex;
+            if (index < 0 || index >= nodeChoiceVersions.Length) return;
+            string previous = runtime.Settings.NodeVersion;
+            runtime.Settings.NodeVersion = nodeChoiceVersions[index];
+            try { runtime.SaveSettings(); }
+            catch (Exception error)
+            {
+                runtime.Settings.NodeVersion = previous;
+                nodeChoiceSignature = null;
+                ApplyNodeSelection(inspectedToolchain);
+                ShowToast(OperationResult.Fail(RuntimeText.SelectionFailed + error.Message));
+                return;
+            }
+            Interlocked.Exchange(ref inspectRequested, 1);
+            RefreshNow();
+            ShowToast(OperationResult.Ok(RuntimeText.SelectionSaved));
+        }
+
         private void ApplyStartupModeToControls(LoginStartupMode mode)
         {
             launcherAutostartToggle.Checked = mode == LoginStartupMode.LauncherOnly;
@@ -1740,11 +1830,14 @@ namespace DshEnhanced.WindowsLauncher
                 Scale(new SizeF(layoutScaleOverride, layoutScaleOverride));
                 Size = simulated150Wide ? new Size(1920, 1024) : new Size(1366, 720);
             }
+            else if (String.Equals(layout, "short", StringComparison.OrdinalIgnoreCase)) Size = new Size(990, 560);
             else if (String.Equals(layout, "compact", StringComparison.OrdinalIgnoreCase)) Size = new Size(820, 600);
             else if (String.Equals(layout, "wide", StringComparison.OrdinalIgnoreCase)) Size = new Size(1600, 900);
             else if (pluginScrollStress) Size = new Size(1600, 900);
             Show();
             Application.DoEvents();
+            if (!firstShow && String.Equals(page, "overview", StringComparison.OrdinalIgnoreCase))
+                ApplyStatus(runtime.Snapshot(), runtime.GetAutostartMode(), runtime.ResolveDsh());
             if (String.Equals(layout, "runtime", StringComparison.OrdinalIgnoreCase))
             {
                 ToolchainSnapshot detected = runtime.InspectToolchain();
@@ -1756,7 +1849,7 @@ namespace DshEnhanced.WindowsLauncher
             }
             if (firstShow)
             {
-                if (overviewActions.Top <= hero.Bottom || pathCard.Top <= overviewActions.Bottom
+                if (hero.Top != 0 || overviewActions.Parent != hero || overviewActions.Bottom > hero.Height || pathCard.Top <= hero.Bottom
                     || settingsCard.Top <= pathCard.Top)
                     throw new InvalidOperationException("The overview page did not complete its first-show layout.");
             }
@@ -1849,6 +1942,12 @@ namespace DshEnhanced.WindowsLauncher
             LayoutResponsivePages();
             activePage.PerformLayout();
             ValidateResponsiveLayout();
+            if (String.Equals(layout, "short", StringComparison.OrdinalIgnoreCase))
+            {
+                Point actionsBottom = overviewPage.PointToClient(overviewActions.PointToScreen(new Point(0, overviewActions.Height)));
+                if (actionsBottom.Y > overviewPage.ClientSize.Height)
+                    throw new InvalidOperationException("Primary service actions must be visible in the short overview window.");
+            }
             Refresh();
             Application.DoEvents();
             Thread.Sleep(160);
@@ -1895,6 +1994,15 @@ namespace DshEnhanced.WindowsLauncher
                 EnsureContained(overviewActions, openButton, "overview open action");
                 EnsureContained(overviewActions, restartButton, "overview restart action");
                 EnsureContained(overviewActions, stopButton, "overview stop action");
+                EnsureContained(hero, overviewActions, "service actions");
+                EnsureContained(header, launchModeSelector, "launch mode selector");
+                EnsureContained(launchModeSelector, browserModeButton, "browser mode");
+                EnsureContained(launchModeSelector, desktopModeButton, "desktop mode");
+                if (launchModeSelector.Bounds.IntersectsWith(pageTitle.Bounds)
+                    || launchModeSelector.Bounds.IntersectsWith(pageSubtitle.Bounds))
+                    throw new InvalidOperationException("Launch mode selector must not overlap the page heading.");
+                if (statusPort.Bottom > overviewActions.Top || pathCard.Top <= hero.Bottom)
+                    throw new InvalidOperationException("Service status, actions, and runtime must remain separate.");
                 EnsureContained(settingsCard, portInput, "port setting");
                 EnsureContained(settingsCard, noOpenToggle, "browser setting");
                 EnsureContained(settingsCard, launcherAutostartToggle, "Launcher startup setting");
@@ -1903,6 +2011,10 @@ namespace DshEnhanced.WindowsLauncher
                 EnsureContained(pathCard, nodeTile, "Node runtime");
                 EnsureContained(pathCard, managerTile, "package manager runtime");
                 EnsureContained(pathCard, runtimeRefresh, "runtime refresh");
+                EnsureContained(pathCard, nodeVersionInput, "Node version selector");
+                EnsureContained(pathCard, nodeSelectionHint, "Node selection hint");
+                if (nodeSelectionHint.Bottom > runtimeBadge.Top || nodeVersionInput.Bottom > nodeSelectionHint.Top)
+                    throw new InvalidOperationException("Node selection must not overlap runtime facts.");
                 foreach (Control control in pathCard.Controls)
                 {
                     string role = control.Tag as string;
@@ -2152,7 +2264,7 @@ namespace DshEnhanced.WindowsLauncher
             pluginNav.Selected = nav == pluginNav;
             page.BringToFront();
             pageTitle.Text = title;
-            if (page == overviewPage) pageSubtitle.Text = "本机 DSH 服务与任务控制中心";
+            if (page == overviewPage) pageSubtitle.Text = runtime.Settings.LaunchMode == "desktop" ? DesktopText.DesktopHint : DesktopText.WebHint;
             else if (page == tasksPage) pageSubtitle.Text = "安全运行单次任务或启动独立 Profile";
             else if (page == diagnosticsPage) pageSubtitle.Text = "查看运行记录并检查本机环境";
             else if (page == sourcePage) pageSubtitle.Text = "更新源码并构建，或仅构建安装时确认的本地 checkout";

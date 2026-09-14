@@ -88,6 +88,8 @@ namespace DshEnhanced.WindowsLauncher
 
     internal sealed class PluginApplyRequest
     {
+        public string runtimeNode { get; set; }
+        public string nodeVersion { get; set; }
         public string requestId { get; set; }
         public string profile { get; set; }
         public string[] desiredFeatures { get; set; }
@@ -246,8 +248,12 @@ namespace DshEnhanced.WindowsLauncher
             bool updateSource, PluginManagementPlan plan, out PendingPluginOperation pending)
         {
             pending = null;
-            if (!File.Exists(ScriptPath) || !File.Exists(GitProxyHelperPath))
+            if (!File.Exists(ScriptPath) || !File.Exists(GitProxyHelperPath) || !File.Exists(ToolchainInspector.BundlePath))
                 return OperationResult.Fail("插件管理组件缺失，请从项目源码重新安装 Launcher。");
+            string runtimeNode = ToolchainInspector.BootstrapNode();
+            string nodeVersion = new SettingsStore().Load().NodeVersion;
+            if (runtimeNode == null && (ToolchainInspector.HasNvm() || !String.IsNullOrEmpty(nodeVersion)))
+                return OperationResult.Fail(RuntimeText.NoBootstrap);
             string requestId = Guid.NewGuid().ToString("D");
             string requestDirectory = Path.GetFullPath(Path.Combine(LauncherPaths.Updates, "current"));
             ClearUpdateWorkspace(requestDirectory);
@@ -257,8 +263,11 @@ namespace DshEnhanced.WindowsLauncher
             string coordinatorPath = Path.Combine(requestDirectory, "coordinator.ps1");
             File.Copy(ScriptPath, coordinatorPath, true);
             File.Copy(GitProxyHelperPath, Path.Combine(requestDirectory, "DSH-Launcher.GitProxy.ps1"), true);
+            File.Copy(ToolchainInspector.BundlePath, Path.Combine(requestDirectory, "DSH-Launcher.Toolchain.cjs"), true);
             JsonFile.Write(requestPath, new PluginApplyRequest
             {
+                runtimeNode = runtimeNode,
+                nodeVersion = nodeVersion,
                 requestId = requestId,
                 profile = profile,
                 desiredFeatures = desired.Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray(),

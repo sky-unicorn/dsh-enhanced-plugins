@@ -24,6 +24,8 @@ it.runIf(process.platform === 'win32')('reuses the update workspace without over
       `\uFEFF${readFileSync(resolve(source, 'DSH-Launcher.PluginManager.ps1'), 'utf8')}`, 'utf8')
     copyFileSync(resolve(source, 'DSH-Launcher.GitProxy.ps1'),
       resolve(temporary, 'DSH-Launcher.GitProxy.ps1'))
+    copyFileSync(resolve(root, 'packages/windows-launcher/lib/DSH-Launcher.Toolchain.cjs'),
+      resolve(temporary, 'DSH-Launcher.Toolchain.cjs'))
     const tested = spawnSync(executable, [root], {
       cwd: temporary, encoding: 'utf8', windowsHide: true, timeout: 75_000,
       env: {

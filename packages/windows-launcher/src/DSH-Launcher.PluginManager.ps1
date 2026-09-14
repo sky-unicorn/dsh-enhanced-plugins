@@ -1081,6 +1081,35 @@ function Update-StateBinding {
   $State
 }
 
+function Initialize-PluginToolchain {
+  param([object] $Request, [string] $Source, [string] $DshCheckout, [string] $LauncherRoot, [string] $LogPath)
+
+  $runtimeNode = [string](Get-OptionalProperty $Request 'runtimeNode' '')
+  if ([string]::IsNullOrWhiteSpace($runtimeNode)) { return }
+  $toolchainRequestPath = Join-Path (Get-UpdateWorkspace $LauncherRoot) 'toolchain-request.json'
+  Write-JsonFile $toolchainRequestPath ([ordered]@{
+    requestId = [string]$Request.requestId
+    mode = 'build'
+    nodeVersion = [string](Get-OptionalProperty $Request 'nodeVersion' '')
+    sourceDirectory = $DshCheckout
+    pluginSourceDirectory = $Source
+    sandboxHome = Join-Path $LauncherRoot 'sandbox'
+    runtimePath = Join-Path (Get-UpdateWorkspace $LauncherRoot) 'toolchain.json'
+  })
+  $helper = Join-Path $PSScriptRoot 'DSH-Launcher.Toolchain.cjs'
+  $planJson = & $runtimeNode $helper prepare $toolchainRequestPath
+  if ($LASTEXITCODE -ne 0) { throw '插件源码运行环境准备失败。请查看更新日志。' }
+  $toolchain = $planJson | ConvertFrom-Json
+  if ($toolchain.summary.mode -ne 'sandbox') { return }
+  if ($toolchain.summary.manager -ne 'pnpm') { throw 'DSH plugin installation requires pnpm.' }
+  foreach ($entry in $toolchain.environment.PSObject.Properties) {
+    [Environment]::SetEnvironmentVariable($entry.Name, [string]$entry.Value, 'Process')
+  }
+  [System.IO.File]::AppendAllText($LogPath,
+    "NVM: Node $($toolchain.summary.nodeVersion) [$($toolchain.summary.nodePath)], pnpm $($toolchain.summary.managerVersion); npm uses the same Node." +
+    [Environment]::NewLine, $Utf8NoBom)
+}
+
 function Invoke-LoggedCommand {
   param(
     [string] $Command,
@@ -1424,9 +1453,10 @@ function Invoke-Apply {
   $featureArgument = if ($desired.Count -eq 0) { 'none' } else { $desired -join ',' }
   [System.IO.File]::AppendAllText($logPath,
     "[$([DateTime]::Now.ToString('s'))] request=$requestId profile=$profileName source=$source revision=$($catalog.sourceRevision)`r`n", $Utf8NoBom)
-  $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
   $installerPowerShell = Get-Command -Name 'powershell.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
   Assert-SourceDshCompatibility $source $dshCheckout $logPath
+  Initialize-PluginToolchain $Request $source $dshCheckout $LauncherRoot $logPath
+  $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
   Invoke-LoggedCommand $npm.Source @('ci', '--no-audit', '--no-fund', '--ignore-scripts=false') $source $logPath 'npm ci'
   # The repository tsconfig files intentionally resolve DSH types from the
   # sibling development checkout.  This request workspace is isolated under

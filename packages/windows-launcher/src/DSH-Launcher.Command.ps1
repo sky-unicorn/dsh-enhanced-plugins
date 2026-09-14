@@ -305,6 +305,22 @@ try {
       if (-not (Test-Path -LiteralPath (Join-Path $workingDirectory 'pnpm-lock.yaml') -PathType Leaf)) {
         throw 'The configured DSH checkout has no pnpm-lock.yaml; frozen dependency installation is required.'
       }
+      $runtimeNodeProperty = $request.PSObject.Properties['runtimeNode']
+      if ($null -ne $runtimeNodeProperty -and -not [string]::IsNullOrWhiteSpace([string]$runtimeNodeProperty.Value)) {
+        $helper = Join-Path $PSScriptRoot 'DSH-Launcher.Toolchain.cjs'
+        $planJson = & ([string]$runtimeNodeProperty.Value) $helper prepare $RequestPath
+        if ($LASTEXITCODE -ne 0) { throw '源码运行环境准备失败。请查看构建日志。' }
+        $toolchain = $planJson | ConvertFrom-Json
+        if ($toolchain.summary.mode -eq 'sandbox') {
+          if ($toolchain.summary.manager -ne 'pnpm') { throw 'DSH source build requires pnpm.' }
+          foreach ($entry in $toolchain.environment.PSObject.Properties) {
+            [Environment]::SetEnvironmentVariable($entry.Name, [string]$entry.Value, 'Process')
+          }
+          [System.IO.File]::AppendAllText($logPath,
+            "NVM: Node $($toolchain.summary.nodeVersion) [$($toolchain.summary.nodePath)], pnpm $($toolchain.summary.managerVersion)" +
+            [Environment]::NewLine, $Utf8NoBom)
+        }
+      }
       $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
         Select-Object -First 1
       # pnpm 11 otherwise auto-installs before `run clean`, potentially rewriting

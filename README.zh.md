@@ -29,9 +29,9 @@
 
 ## 快速开始
 
-### 6.2.0 启动方式与兼容范围
+### 6.2.1 启动方式与兼容范围
 
-- 插件 `6.2.0` 仅支持 DSH `0.1.5-rc.2`，源码基线为 `c291e7961a515f6d7af9304e7fd1d257929aef26`。发布标签为 `6.2.0/dsh-0.1.5-rc.2(c291e7961a)`。
+- 插件 `6.2.1` 仅支持 DSH `0.1.5-rc.2`，源码基线为 `c291e7961a515f6d7af9304e7fd1d257929aef26`。发布标签为 `6.2.1/dsh-0.1.5-rc.2(c291e7961a)`。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
 - 源码桌面复用已绑定的 DSH checkout 和 Launcher 工具链：“启动桌面端”运行 `pnpm run start:desktop`，“构建并启动”运行 `pnpm run dev:desktop`。缺少构建产物时禁用普通启动并提示构建；源码依赖需先通过 `pnpm install --frozen-lockfile` 安装。启动过程、失败原因和退出码进入桌面日志；“停止”只结束 Launcher 拥有的命令进程树。构建并启动仍在运行时，禁止同时启动 Web 读取共享产物。旧的 `DesktopExecutable` 字段不再使用，无需选择 EXE。
 - 官方源码命令每次重建 `apps/desktop/.desktop-build/development/project`，数据默认位于同级 `home`，或使用继承的 `DSH_HOME`；默认关闭 DevTools，显式设置 `DSH_DESKTOP_OPEN_DEVTOOLS=1` 可打开。源码模式禁用官方包管理 UI，目前没有公开参数继承 Web bundles，Launcher 不向生成的 profile 私自复制插件。打包后的 Desktop 应用则独立管理保留的 `desktop` profile，仍不能通过 `dsh plugin --profile desktop` 操作。
@@ -134,11 +134,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 - **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。即使关闭了启动时自动打开浏览器，“打开页面”也会使用当前 Launcher-owned DSH 进程的认证入口，启动 token 不会写入 Launcher 日志。
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
-- **Web 运行环境：** 概览按“服务状态 → 操作 → 运行环境 → 启动选项”纵向排列，展示 NVM 沙盒/系统模式、Node 与 npm/pnpm/Yarn 的需求及实际版本、检测来源和准备/失败状态。停止时可重新检测，运行中显示本次启动记录，外部服务版本不会被猜测。
+- **Web 运行环境：** 概览在标题旁提供紧凑的“浏览器／源码桌面”分段切换，将服务状态与主要操作合并在同一张浅色卡片内，下方依次展示运行环境和启动选项。切换支持左右方向键，窄窗口中的操作按钮会缩排为一行或均衡的两行。运行环境展示 NVM 沙盒/系统模式、Node 与 npm/pnpm/Yarn 的需求及实际版本、检测来源和准备/失败状态。“Node 版本选择”提供“自动选择（最高兼容版本）”和已安装的 NVM 版本；选择后自动保存，供后续 Web／源码桌面启动、DSH 构建和插件源码操作使用，旧设置默认自动选择。“重新检测”可刷新已安装版本列表。手动版本仍须满足项目要求，未安装或不兼容时直接报错，不自动换版本；已保存但被卸载的版本会标注“未安装”，可重新选择或切回自动。运行中显示本次启动记录，切换选择不会重启已有进程，外部服务版本不会被猜测。
 
-  每次启动 Web（含托盘、重启、登录自动启动）都会检测 nvm-windows。已安装时，从绑定的 DSH checkout 或可识别的 npm DSH shim 读取元数据：Node 按 `.nvmrc`、`.node-version`、`volta.node`、`engines.node` 选择，并始终满足 `engines.node`，使用 NVM 已安装的最高匹配版本。包管理器优先读取 `packageManager`/`devEngines.packageManager`，再参考 Volta、engines 和锁文件；锁文件只标识工具种类或 Yarn 主版本系列，不被当作精确版本。缺少的包管理器在首次启动时下载到 Launcher 的 `sandbox` 目录，后续复用；声明冲突会明确报错。
+  每次启动 Web（含托盘、重启、登录自动启动）都会检测 nvm-windows。已安装时，从绑定的 DSH checkout 或可识别的 npm DSH shim 读取元数据：Node 按 `.nvmrc`、`.node-version`、`volta.node`、`engines.node` 选择，并始终满足 `engines.node`，自动模式使用 NVM 已安装的最高匹配版本，手动模式只使用已保存的版本。包管理器优先读取 `packageManager`/`devEngines.packageManager`，再参考 Volta、engines 和锁文件；锁文件只标识工具种类或 Yarn 主版本系列，不被当作精确版本。缺少的包管理器在首次启动时下载到 Launcher 的 `sandbox` 目录，后续复用；声明冲突会明确报错。
 
-  沙盒直接用所选 Node 调用同一个 DSH CLI，仅隔离该服务的 PATH、全局安装目录及 npm/pnpm/Yarn/Corepack 缓存，不执行 `nvm use`，不修改系统 Node、NVM 链接或 DSH 源码。这是工具链的进程级隔离，不是文件或网络权限沙箱。未检测到 NVM 时保留原启动方式；NVM 中缺少匹配 Node、项目声明无效或下载失败时停止启动并显示原因，Node 需先用 `nvm install` 安装。无法识别的自定义启动器需重新绑定 DSH 源码。Headless、其他 Profile、源码构建沿用原有流程。
+  沙盒直接用所选 Node 调用同一个 DSH CLI，仅隔离该服务的 PATH、npm/Yarn 全局安装目录及 npm/Yarn/Corepack 缓存，不执行 `nvm use`，不修改系统 Node、NVM 链接或 DSH 源码。pnpm 保留用户／项目配置及原有 store 位置，以复用源码和 Profile 已安装的依赖。Launcher 和候选安装器只清理由旧版本传入、且位于 Launcher 沙盒内的存储覆盖；安装器退出时恢复调用方环境。这是工具链的进程级隔离，不是文件或网络权限沙箱。未检测到 NVM 时保留原启动方式；NVM 中缺少匹配 Node、项目声明无效或下载失败时停止启动并显示原因，Node 需先用 `nvm install` 安装。无法识别的自定义启动器需重新绑定 DSH 源码。DSH 源码构建和插件源码操作复用概览的 Node 选择与沙盒，包括 DSH 声明的 pnpm 和该 Node 内置的 npm。DSH 拉取后会在清理前重新检测，构建检测不要求依赖或 CLI 产物已存在。插件操作在 npm ci、构建、停止 DSH 或安装 Profile 前校验候选源码的 Node/npm 要求；不兼容时直接报错，不另选 Node。构建／更新日志记录所选运行环境。未检测到 NVM 时，自动模式仍使用系统工具链；已保存的手动选择会报错，直到恢复 NVM 或切回自动。Headless、其他 Profile 沿用原有流程。
 - **源码维护：** “更新源码并构建”对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后依次运行 `pnpm run clean`、`pnpm install --frozen-lockfile`、`pnpm run build`。拉取 HTTP(S) 远端前，Launcher 会按远端 URL 解析当前 Windows 系统代理；若系统为该地址选择了代理，则仅通过 Git 的单次命令配置应用到本次拉取，命令结束（包括失败）后自动失效，不会写入或覆盖仓库、用户或系统级 Git 代理设置。SSH 远端不使用这项 HTTP(S) 代理发现。“仅构建”直接使用当前本地源码，跳过 Git 更新，仍执行这三个 pnpm 步骤；无 Git 时，“更新源码并构建”也可经确认跳过拉取。操作期间两个构建按钮均禁用，避免重复启动。清理前会检查 checkout 是否具备 clean/build 脚本和锁文件，以及 pnpm 是否可用。任一步失败即停止后续步骤，锁文件错误不会降级为非冻结安装。Git 进度和 pnpm 警告不会被误判为失败，操作以真实退出码为准。页面会区分拉取、清理、依赖安装、构建与环境错误，放大的日志文字和“打开日志目录”入口便于排查；完整 UTF-8 输出、命令引擎错误及最终结果保存在 `logs/dsh-build.log`，刷新或重新进入页面不会丢失。运行前请先停止使用此 checkout 的 DSH：清理会删除现有构建产物，后续步骤失败时旧产物不会恢复。本操作不会自动停止或重启 DSH，请在构建成功后手动启动服务。
 
   源码操作进程会临时设置 `pnpm_config_verify_deps_before_run=false`，防止 pnpm 的[脚本前自动安装](https://pnpm.io/settings/build#verifydepsbeforerun)在明确的冻结安装步骤前改写锁文件；不会修改仓库或全局 pnpm 配置。
@@ -251,7 +251,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 重新发送仍在当前会话内完成：插件从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH Session 日志保持追加式审计记录，已经执行的工具副作用不会回滚。上传的通用文件继续使用 DSH 文件卡呈现；包含任意附件或其他非文本块的消息不会提供编辑入口，以免静默丢失内容。
 
-6.2.0 保留 DSH rc.2 的已发送引用预览：点击文件标签或该步骤实际加载的 Skill 标签，会在当前会话右侧栏打开预览，不修改文本或重新发送。编辑后的气泡也提供文件预览；Skill 标签只使用编辑所属步骤的调用记录，不沿用被替换轮次的记录。重新发送继续使用插件来源，斜杠文本本身不会被当作新的用户 Skill 调用。
+6.2.1 保留 DSH rc.2 的已发送引用预览：点击文件标签或该步骤实际加载的 Skill 标签，会在当前会话右侧栏打开预览，不修改文本或重新发送。编辑后的气泡也提供文件预览；Skill 标签只使用编辑所属步骤的调用记录，不沿用被替换轮次的记录。重新发送继续使用插件来源，斜杠文本本身不会被当作新的用户 Skill 调用。
 
 6.1.0 起使用 V3 的替换字段与标准插件来源格式，只保存原始消息 ID，不再嵌入事件序号，避免迁移重编号导致编辑位置错误。早期嵌套标记及 5.x 的独立 `edit-last-message` 来源均不被 V2→V3 迁移接受。升级后打开这类旧会话前，请先停止所有 DSH Host，对受影响的日志执行离线修复：
 
@@ -294,7 +294,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `6.2.0` 支持 DSH `0.1.5-rc.2`，源码基线见上文。聚合包、7 个独立功能包和 Windows Launcher 均使用 `6.2.0`。
+- **版本对应：** 插件 `6.2.1` 支持 DSH `0.1.5-rc.2`，源码基线见上文。聚合包、7 个独立功能包和 Windows Launcher 均使用 `6.2.1`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。允许的精确版本由 `dshVersion` 加可选的 `additionalDshVersions` 声明，peerDependencies 声明相同的支持版本。版本不受支持、声明缺失或格式错误、插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。

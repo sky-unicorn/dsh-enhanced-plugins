@@ -504,6 +504,23 @@ function Ensure-PluginBuild {
   }
 }
 
+function Suspend-LegacyLauncherPnpmStorage {
+  # The candidate installer must also work when an older tray coordinator
+  # launched it with storage overrides. Keep Node/PATH selection intact.
+  $saved = @{}
+  $sandboxPrefix = [System.IO.Path]::GetFullPath((Join-Path (Get-WindowsLauncherInstallRoot) 'sandbox')).TrimEnd('\') + '\'
+  foreach ($name in @('PNPM_HOME', 'NPM_CONFIG_STORE_DIR', 'PNPM_CONFIG_STORE_DIR')) {
+    $value = [Environment]::GetEnvironmentVariable($name, 'Process')
+    if ([string]::IsNullOrWhiteSpace($value)) { continue }
+    try { $fullPath = [System.IO.Path]::GetFullPath($value) } catch { continue }
+    if (-not $fullPath.StartsWith($sandboxPrefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+    $saved[$name] = $value
+    [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+  }
+  if ($saved.Count -gt 0) { Write-Host 'Preserving the pnpm store: cleared legacy Launcher storage overrides for this installation.' }
+  return $saved
+}
+
 function Get-WindowsLauncherInstallRoot {
   if (-not [string]::IsNullOrWhiteSpace($env:DEEPSEEK_HARNESS_LAUNCHER_HOME)) {
     return [System.IO.Path]::GetFullPath($env:DEEPSEEK_HARNESS_LAUNCHER_HOME).TrimEnd('\')
@@ -1283,6 +1300,7 @@ $prefixArguments = @('dsh')
 $runnerWorkingDirectory = $checkout
 
 $originalWorkingDirectory = (Get-Location).Path
+$legacyPnpmStorage = Suspend-LegacyLauncherPnpmStorage
 try {
   if ($runnerWorkingDirectory -ne '') {
     # Corepack selects pnpm before pnpm can process --dir. Enter the DSH
@@ -1440,6 +1458,9 @@ try {
   Write-Host "Installed enhanced feature set '$selectedLabel' for profile '$Profile'."
   Write-Host 'Use the compatible official DSH release and type @ in the conversation input for workspace file references.'
 } finally {
+  foreach ($name in $legacyPnpmStorage.Keys) {
+    [Environment]::SetEnvironmentVariable($name, $legacyPnpmStorage[$name], 'Process')
+  }
   if ($runnerWorkingDirectory -ne '') {
     Set-Location -LiteralPath $originalWorkingDirectory
   }

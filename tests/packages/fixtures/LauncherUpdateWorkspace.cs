@@ -36,6 +36,9 @@ internal static class LauncherUpdateWorkspaceTest
             Directory.CreateDirectory(staleLegacy);
             File.WriteAllText(Path.Combine(staleLegacy, "source.zip"), "previous build");
             PluginManagerRuntime runtime = new PluginManagerRuntime();
+            LauncherSettings settings = LauncherSettings.Defaults();
+            settings.NodeVersion = "22.22.3";
+            new SettingsStore().Save(settings);
             PluginManagementPlan plan = new PluginManagementPlan { sourceRevision = "stale-test-revision" };
             PendingPluginOperation first;
             Check(runtime.StartApply(args[0], "web", new string[0], false, plan, out first).Success, "First start failed.");
@@ -44,6 +47,11 @@ internal static class LauncherUpdateWorkspaceTest
             Check(runtime.TryReadResult(first, out result) && !result.success, "Expected a real coordinator validation failure.");
             Check(result.message.Contains("源码在计划生成后发生变化"), "Failure did not reach Apply validation: " + result.message);
             string current = Path.Combine(LauncherPaths.Updates, "current");
+            Check(File.Exists(Path.Combine(current, "DSH-Launcher.Toolchain.cjs")), "Coordinator lost its toolchain bundle.");
+            Check(JsonFile.Read<PluginApplyRequest>(Path.Combine(current, "request.json")).runtimeNode
+                == ToolchainInspector.BootstrapNode(), "Coordinator did not receive the same bootstrap Node as Overview.");
+            Check(JsonFile.Read<PluginApplyRequest>(Path.Combine(current, "request.json")).nodeVersion == settings.NodeVersion,
+                "Coordinator did not receive the saved manual Node version.");
             Check(first.RequestDirectory == current, "Update did not use the fixed directory.");
             Check(result.logPath == Path.Combine(current, "logs", "update.log") && File.Exists(result.logPath), "Incorrect failure log path.");
             Directory.CreateDirectory(Path.Combine(current, "downloaded", "nested"));

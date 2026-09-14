@@ -7,10 +7,12 @@ using System.Web.Script.Serialization;
 
 namespace DshEnhanced.WindowsLauncher
 {
-    // This snapshot contains runtime facts only; inherited environment variables never cross into UI state.
+    // Runtime facts and version choices only; inherited environment variables never cross into UI state.
     internal sealed class ToolchainSnapshot
     {
         public string requestId { get; set; }
+        public string requestedNodeVersion { get; set; }
+        public string[] installedNodeVersions { get; set; }
         public string mode { get; set; }
         public string phase { get; set; }
         public string nodeVersion { get; set; }
@@ -92,8 +94,10 @@ namespace DshEnhanced.WindowsLauncher
         internal static ToolchainSnapshot Inspect(LauncherRequest request)
         {
             string node = BootstrapNode();
-            if (node == null) return new ToolchainSnapshot { mode = HasNvm() ? "sandbox" : "system", phase = HasNvm() ? "error" : "detected",
-                message = HasNvm() ? RuntimeText.NoBootstrap : "未找到可用于检测的 Node；启动时保留原有方式。" };
+            if (node == null) return new ToolchainSnapshot { mode = HasNvm() ? "sandbox" : "system",
+                requestedNodeVersion = request.nodeVersion, installedNodeVersions = new string[0],
+                phase = HasNvm() || !String.IsNullOrEmpty(request.nodeVersion) ? "error" : "detected",
+                message = HasNvm() || !String.IsNullOrEmpty(request.nodeVersion) ? RuntimeText.NoBootstrap : "未找到可用于检测的 Node；启动时保留原有方式。" };
             string file = Path.Combine(LauncherPaths.Requests, "inspect-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {
@@ -132,7 +136,14 @@ namespace DshEnhanced.WindowsLauncher
     internal static class RuntimeText
     {
         internal const string Title = "运行环境";
-        internal const string Subtitle = "自动匹配 DSH 依赖，启动前重新检测";
+        internal const string Subtitle = "自动匹配或指定 Node 版本，启动前校验";
+        internal const string VersionSelection = "Node 版本选择";
+        internal const string Automatic = "自动选择（最高兼容版本）";
+        internal const string SelectionHint = "用于后续启动和源码操作；正在运行的进程不变";
+        internal const string NoNvm = "未检测到 NVM，自动模式使用系统环境";
+        internal const string MissingVersion = "（未安装）";
+        internal const string SelectionSaved = "Node 版本选择已保存，将用于后续启动和源码操作。";
+        internal const string SelectionFailed = "无法保存 Node 版本选择：";
         internal const string Detecting = "正在检测运行环境…";
         internal const string Sandbox = "NVM 沙盒";
         internal const string System = "系统环境";
@@ -150,6 +161,6 @@ namespace DshEnhanced.WindowsLauncher
         internal const string Requirement = "需求 ";
         internal const string Source = "来源 ";
         internal const string Install = "启动时准备";
-        internal const string NoBootstrap = "已安装 NVM，但没有可用于检测的 Node；请先通过 nvm install 安装 DSH 所需版本。";
+        internal const string NoBootstrap = "没有可用于检测的 Node；请通过 nvm install 安装所需版本。若已移除 NVM，请恢复系统 Node 并切回自动选择。";
     }
 }

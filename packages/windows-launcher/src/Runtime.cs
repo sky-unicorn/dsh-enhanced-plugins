@@ -19,6 +19,7 @@ namespace DshEnhanced.WindowsLauncher
         public string DshSourceDirectory { get; set; }
         public string WorkingDirectory { get; set; }
         public string LaunchMode { get; set; }
+        public string NodeVersion { get; set; }
         public LauncherWindowPlacement WindowPlacement { get; set; }
 
         internal static LauncherSettings Defaults()
@@ -28,6 +29,7 @@ namespace DshEnhanced.WindowsLauncher
                 Port = 3080,
                 NoOpen = false,
                 LaunchMode = "web",
+                NodeVersion = String.Empty,
                 DshCommand = String.Empty,
                 DshSourceDirectory = String.Empty,
                 WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -72,6 +74,7 @@ namespace DshEnhanced.WindowsLauncher
         public string runtimeNode { get; set; }
         public string runtimePath { get; set; }
         public string sandboxHome { get; set; }
+        public string nodeVersion { get; set; }
     }
 
     internal sealed class LauncherCommandResult
@@ -289,6 +292,7 @@ namespace DshEnhanced.WindowsLauncher
             if (settings.DshCommand == null) settings.DshCommand = String.Empty;
             if (settings.DshSourceDirectory == null) settings.DshSourceDirectory = String.Empty;
             if (settings.LaunchMode != "desktop") settings.LaunchMode = "web";
+            if (settings.NodeVersion == null) settings.NodeVersion = String.Empty;
             LauncherWindowPlacement placement = settings.WindowPlacement;
             if (placement != null && (placement.Width < 240 || placement.Height < 180
                 || placement.Width > 32768 || placement.Height > 32768
@@ -569,7 +573,8 @@ namespace DshEnhanced.WindowsLauncher
             request.accessPath = LauncherPaths.Access;
             request.sourceDirectory = settings.DshSourceDirectory;
             request.runtimeNode = ToolchainInspector.BootstrapNode();
-            if (request.runtimeNode == null && ToolchainInspector.HasNvm()) return OperationResult.Fail(RuntimeText.NoBootstrap);
+            if (request.runtimeNode == null && (ToolchainInspector.HasNvm() || !String.IsNullOrEmpty(settings.NodeVersion)))
+                return OperationResult.Fail(RuntimeText.NoBootstrap);
             request.runtimePath = ToolchainInspector.StatePath;
             request.sandboxHome = Path.Combine(LauncherPaths.DataRoot, "sandbox");
             JsonFile.Write(requestPath, request);
@@ -831,6 +836,11 @@ namespace DshEnhanced.WindowsLauncher
             request.logPath = LauncherPaths.BuildLog;
             request.resultPath = Path.Combine(LauncherPaths.Requests, "build-" + request.requestId + ".result.json");
             request.updateSource = updateSource;
+            request.runtimeNode = ToolchainInspector.BootstrapNode();
+            if (request.runtimeNode == null && (ToolchainInspector.HasNvm() || !String.IsNullOrEmpty(settings.NodeVersion)))
+                return OperationResult.Fail(RuntimeText.NoBootstrap);
+            request.sandboxHome = Path.Combine(LauncherPaths.DataRoot, "sandbox");
+            request.runtimePath = Path.Combine(LauncherPaths.Run, "build-toolchain.json");
             string commandOutput;
             LauncherLog.Write((updateSource ? "update and build" : "build") + " DSH source=" + source);
             File.AppendAllText(LauncherPaths.BuildLog, Environment.NewLine + "===== "
@@ -978,6 +988,7 @@ namespace DshEnhanced.WindowsLauncher
             {
                 requestId = Guid.NewGuid().ToString("D"),
                 mode = mode,
+                nodeVersion = settings.NodeVersion,
                 dshCommand = dsh,
                 workingDirectory = settings.WorkingDirectory,
                 port = settings.Port,
