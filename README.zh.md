@@ -29,9 +29,10 @@
 
 ## 快速开始
 
-### 6.2.1 启动方式与兼容范围
+### 6.2.2 启动方式与兼容范围
 
-- 插件 `6.2.1` 仅支持 DSH `0.1.5-rc.2`，源码基线为 `c291e7961a515f6d7af9304e7fd1d257929aef26`。发布标签为 `6.2.1/dsh-0.1.5-rc.2(c291e7961a)`。
+- 插件 `6.2.2` 仅支持 DSH `0.1.5-rc.2`，源码基线为 `c291e7961a515f6d7af9304e7fd1d257929aef26`。发布标签为 `6.2.2/dsh-0.1.5-rc.2(c291e7961a)`。
+- 本版减少 Launcher 切页、滚动和功能筛选的重复布局，修复切换启动方式后按钮文案延迟刷新；执行日志按功能只保留最新一轮，并限制界面读取量。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
 - 源码桌面复用已绑定的 DSH checkout 和 Launcher 工具链：“启动桌面端”运行 `pnpm run start:desktop`，“构建并启动”运行 `pnpm run dev:desktop`。缺少构建产物时禁用普通启动并提示构建；源码依赖需先通过 `pnpm install --frozen-lockfile` 安装。启动过程、失败原因和退出码进入桌面日志；“停止”只结束 Launcher 拥有的命令进程树。构建并启动仍在运行时，禁止同时启动 Web 读取共享产物。旧的 `DesktopExecutable` 字段不再使用，无需选择 EXE。
 - 官方源码命令每次重建 `apps/desktop/.desktop-build/development/project`，数据默认位于同级 `home`，或使用继承的 `DSH_HOME`；默认关闭 DevTools，显式设置 `DSH_DESKTOP_OPEN_DEVTOOLS=1` 可打开。源码模式禁用官方包管理 UI，目前没有公开参数继承 Web bundles，Launcher 不向生成的 profile 私自复制插件。打包后的 Desktop 应用则独立管理保留的 `desktop` profile，仍不能通过 `dsh plugin --profile desktop` 操作。
@@ -155,6 +156,10 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 任务与 Profile 均通过无控制台窗口的子进程运行。用户任务经 UTF-8 请求文件传给 PowerShell 命令引擎，不会拼接进 `cmd.exe`；隐藏主窗口后会停止前台轮询，但托盘和后台服务仍继续工作。
 
+Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次执行日志；新一轮开始时覆盖上一轮，同一次执行中的各阶段输出、错误和退出码仍写在一起。Launcher 自身日志在新实例取得单实例锁后覆盖，唤起已有窗口不会清空；更新清理日志也只保留最近一轮，插件更新继续复用 `updates/current`。正在执行的日志不会被另一轮覆盖。Headless 输出在任务结束后显示，下一次任务会替换它。
+
+日志页和构建日志的每次读取最多访问文件末尾 256 KiB，再提取所需行数，避免当前运行产生的大日志在切页或刷新时阻塞界面；读取不改写本轮日志。页面滚动不触发布局，功能筛选复用现有行并保留选择，全选与清空只更新一次变更摘要。切换启动方式会刷新按钮文案，无需滚动页面。
+
 </details>
 
 <details>
@@ -251,7 +256,7 @@ Launcher 只停止自己启动的 DSH 进程树。端口上出现外部 Web 服�
 
 重新发送仍在当前会话内完成：插件从被编辑的用户消息开始替换当前模型上下文，再通过同一个 AgentLoop 生成后续内容。DSH Session 日志保持追加式审计记录，已经执行的工具副作用不会回滚。上传的通用文件继续使用 DSH 文件卡呈现；包含任意附件或其他非文本块的消息不会提供编辑入口，以免静默丢失内容。
 
-6.2.1 保留 DSH rc.2 的已发送引用预览：点击文件标签或该步骤实际加载的 Skill 标签，会在当前会话右侧栏打开预览，不修改文本或重新发送。编辑后的气泡也提供文件预览；Skill 标签只使用编辑所属步骤的调用记录，不沿用被替换轮次的记录。重新发送继续使用插件来源，斜杠文本本身不会被当作新的用户 Skill 调用。
+6.2.2 保留 DSH rc.2 的已发送引用预览：点击文件标签或该步骤实际加载的 Skill 标签，会在当前会话右侧栏打开预览，不修改文本或重新发送。编辑后的气泡也提供文件预览；Skill 标签只使用编辑所属步骤的调用记录，不沿用被替换轮次的记录。重新发送继续使用插件来源，斜杠文本本身不会被当作新的用户 Skill 调用。
 
 6.1.0 起使用 V3 的替换字段与标准插件来源格式，只保存原始消息 ID，不再嵌入事件序号，避免迁移重编号导致编辑位置错误。早期嵌套标记及 5.x 的独立 `edit-last-message` 来源均不被 V2→V3 迁移接受。升级后打开这类旧会话前，请先停止所有 DSH Host，对受影响的日志执行离线修复：
 
@@ -294,7 +299,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `6.2.1` 支持 DSH `0.1.5-rc.2`，源码基线见上文。聚合包、7 个独立功能包和 Windows Launcher 均使用 `6.2.1`。
+- **版本对应：** 插件 `6.2.2` 支持 DSH `0.1.5-rc.2`，源码基线见上文。聚合包、7 个独立功能包和 Windows Launcher 均使用 `6.2.2`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。允许的精确版本由 `dshVersion` 加可选的 `additionalDshVersions` 声明，peerDependencies 声明相同的支持版本。版本不受支持、声明缺失或格式错误、插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
@@ -390,6 +395,8 @@ Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home �
 `npm run verify:desktop-host` 在隔离目录中加载官方 Desktop Host 与固定插件发布快照，并验证实际 Client 首页响应；它不构建或修改 DSH checkout。
 
 `npm run verify:launcher` 在临时目录中验证编译后的 Launcher 和 PowerShell 命令引擎，包括清理、安装、构建的顺序、失败即停止，以及真实 pnpm 对过期锁文件的拒绝。需要 Windows，并在 `PATH` 中提供 Git 和 pnpm；不会清理或重建真实 DSH checkout。
+
+`npm run verify:launcher-ui` 在隔离目录中编译并验证真实 WinForms 控件：滚动、筛选、批量选择、页面与模式切换、重复布局、UTF-8 日志读取上限及已移除控件的释放。它使用约 64 MB 的日志测量切页耗时，并检查五个页面在普通、紧凑、宽屏与 150% 缩放下的布局；截图保存在 `.verify-dsh-home/ui-performance/`。输出的耗时是界面处理与离屏绘制基准，不代表显示器实际帧率，也不使用易受机器负载影响的固定耗时阈值判定通过。
 
 `npm run test:launcher-toolchain` 验证版本检测、NVM 回退、声明冲突和环境隔离（先构建 Launcher）。`node scripts/verify-launcher-sandbox.mjs <DSH-checkout>` 在 Windows 上使用临时 DSH Home 验证真实 Web 就绪、所选包管理器、缓存重启和停止，可能下载所需包管理器；只读引用 DSH checkout，截图与结果写入 `.verify-dsh-home/sandbox-artifacts`。
 

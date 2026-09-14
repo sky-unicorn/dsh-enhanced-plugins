@@ -54,6 +54,12 @@ function Protect-LoggedWebUrl {
   return [regex]::Replace($Line, '([?&]token=)[A-Za-z0-9_-]+', '$1<redacted>')
 }
 
+function Write-RequestLog {
+  param([string] $Text)
+  $script:requestLogWriter.Write($Text)
+  $script:requestLogWriter.Flush()
+}
+
 function Invoke-LoggedDsh {
   param(
     [Parameter(Mandatory = $true)]
@@ -61,9 +67,6 @@ function Invoke-LoggedDsh {
 
     [Parameter(Mandatory = $true)]
     [string[]] $Arguments,
-
-    [Parameter(Mandatory = $true)]
-    [string] $LogPath,
 
     [Parameter(Mandatory = $true)]
     [string] $Header,
@@ -75,12 +78,8 @@ function Invoke-LoggedDsh {
     [int] $ExpectedPort = 0
   )
 
-  $logDirectory = Split-Path -Parent $LogPath
-  if (-not (Test-Path -LiteralPath $logDirectory -PathType Container)) {
-    [void](New-Item -ItemType Directory -Force -Path $logDirectory)
-  }
-  [System.IO.File]::AppendAllText($LogPath, $Header + [Environment]::NewLine, $Utf8NoBom)
-  $writer = New-Object System.IO.StreamWriter($LogPath, $true, $Utf8NoBom)
+  $writer = $script:requestLogWriter
+  Write-RequestLog ($Header + [Environment]::NewLine)
   $tail = New-Object 'System.Collections.Generic.Queue[string]'
   $originalErrorActionPreference = $ErrorActionPreference
   try {
@@ -102,7 +101,7 @@ function Invoke-LoggedDsh {
     return [pscustomobject]@{ code = $code; output = ($tail.ToArray() -join [Environment]::NewLine) }
   } finally {
     $ErrorActionPreference = $originalErrorActionPreference
-    $writer.Dispose()
+    $writer.Flush()
   }
 }
 
@@ -115,8 +114,7 @@ function Write-BuildOutcome {
     exitCode = $ExitCode
     message = $Message
   }
-  [System.IO.File]::AppendAllText([string] $request.logPath,
-    $Message + [Environment]::NewLine, $Utf8NoBom)
+  Write-RequestLog ($Message + [Environment]::NewLine)
   $resultProperty = $request.PSObject.Properties['resultPath']
   if ($null -ne $resultProperty -and -not [string]::IsNullOrWhiteSpace([string] $resultProperty.Value)) {
     [System.IO.File]::WriteAllText([string] $resultProperty.Value,
@@ -179,20 +177,32 @@ if ($mode -notin @('build', 'doctor', 'headless', 'profile', 'web', 'desktop')) 
   throw "Unsupported launcher request mode '$mode'."
 }
 $dsh = $null
-$workingDirectory = if ($mode -in @('build', 'desktop')) {
-  [string] $request.sourceDirectory
-} else {
-  $dsh = Resolve-SafeDshCommand -Path ([string] $request.dshCommand) -Mode $mode
-  [string] $request.workingDirectory
-}
-if (-not (Test-Path -LiteralPath $workingDirectory -PathType Container)) {
-  throw "Working directory does not exist: $workingDirectory"
-}
-
+$script:requestLogWriter = $null
 $originalDirectory = (Get-Location).Path
 $originalPnpmVerifyDeps = [Environment]::GetEnvironmentVariable('pnpm_config_verify_deps_before_run', 'Process')
 $buildStage = '环境检查'
 try {
+  if ($mode -in @('build', 'desktop', 'web', 'profile')) {
+    $logPath = [string] $request.logPath
+    if ([string]::IsNullOrWhiteSpace($logPath)) { throw 'Execution log path is missing.' }
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $logPath))
+    # Open with one writer for the whole request. A competing run cannot
+    # truncate an active log, and build steps keep appending within this run.
+    $logStream = [System.IO.File]::Open($logPath, [System.IO.FileMode]::Create,
+      [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
+    try { $script:requestLogWriter = New-Object System.IO.StreamWriter($logStream, $Utf8NoBom) }
+    catch { $logStream.Dispose(); throw }
+    Write-RequestLog ("===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) $mode request=$($request.requestId) =====" + [Environment]::NewLine)
+  }
+  $workingDirectory = if ($mode -in @('build', 'desktop')) {
+    [string] $request.sourceDirectory
+  } else {
+    $dsh = Resolve-SafeDshCommand -Path ([string] $request.dshCommand) -Mode $mode
+    [string] $request.workingDirectory
+  }
+  if (-not (Test-Path -LiteralPath $workingDirectory -PathType Container)) {
+    throw "Working directory does not exist: $workingDirectory"
+  }
   Set-Location -LiteralPath $workingDirectory
   switch ($mode) {
     'desktop' {
@@ -237,7 +247,6 @@ try {
         [Environment]::SetEnvironmentVariable('DSH_DESKTOP_OPEN_DEVTOOLS', '0', 'Process')
       }
       $desktopResult = Invoke-LoggedDsh -Command $pnpm.Source -Arguments @('run', $desktopScript) `
-        -LogPath ([string]$request.logPath) `
         -Header "===== pnpm run $desktopScript ($workingDirectory) ====="
       exit $desktopResult.code
     }
@@ -266,22 +275,19 @@ try {
           # -c is scoped to this Git process. It neither overwrites an existing
           # user/repository proxy nor leaves a setting behind when pull fails.
           $gitArguments += @('-c', "http.proxy=$gitProxy")
-          [System.IO.File]::AppendAllText($logPath,
-            '===== Windows system proxy detected; applying it only to this Git pull =====' +
-            [Environment]::NewLine, $Utf8NoBom)
+          Write-RequestLog ('===== Windows system proxy detected; applying it only to this Git pull =====' +
+            [Environment]::NewLine)
         }
         $gitArguments += @('pull', '--ff-only')
         try {
           $gitResult = Invoke-LoggedDsh `
             -Command $git.Source `
             -Arguments $gitArguments `
-            -LogPath $logPath `
             -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) git pull --ff-only ($workingDirectory) ====="
         } finally {
           if ($usesTemporaryGitProxy) {
-            [System.IO.File]::AppendAllText($logPath,
-              '===== Temporary Git proxy scope ended; no Git proxy setting was persisted =====' +
-              [Environment]::NewLine, $Utf8NoBom)
+            Write-RequestLog ('===== Temporary Git proxy scope ended; no Git proxy setting was persisted =====' +
+              [Environment]::NewLine)
           }
         }
         if ($gitResult.code -ne 0) {
@@ -290,7 +296,7 @@ try {
         }
       } else {
         $skipHeader = "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) Skipping Git source update; running clean, frozen install, and build ($workingDirectory) ====="
-        [System.IO.File]::AppendAllText($logPath, $skipHeader + [Environment]::NewLine, $Utf8NoBom)
+        Write-RequestLog ($skipHeader + [Environment]::NewLine)
       }
 
       # Pull can change the scripts or lockfile. Validate the updated checkout
@@ -316,9 +322,8 @@ try {
           foreach ($entry in $toolchain.environment.PSObject.Properties) {
             [Environment]::SetEnvironmentVariable($entry.Name, [string]$entry.Value, 'Process')
           }
-          [System.IO.File]::AppendAllText($logPath,
-            "NVM: Node $($toolchain.summary.nodeVersion) [$($toolchain.summary.nodePath)], pnpm $($toolchain.summary.managerVersion)" +
-            [Environment]::NewLine, $Utf8NoBom)
+          Write-RequestLog ("NVM: Node $($toolchain.summary.nodeVersion) [$($toolchain.summary.nodePath)], pnpm $($toolchain.summary.managerVersion)" +
+            [Environment]::NewLine)
         }
       }
       $pnpm = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction Stop |
@@ -337,7 +342,6 @@ try {
         $stepResult = Invoke-LoggedDsh `
           -Command $pnpm.Source `
           -Arguments $step.arguments `
-          -LogPath $logPath `
           -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) $commandLabel ($workingDirectory) ====="
         if ($stepResult.code -ne 0) {
           Write-BuildOutcome $false $stepResult.code (Get-SourceFailureMessage $buildStage $stepResult)
@@ -366,7 +370,6 @@ try {
       $profileResult = Invoke-LoggedDsh `
         -Command $dsh `
         -Arguments @('--profile', $profile) `
-        -LogPath $logPath `
         -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) dsh --profile $profile ====="
       exit $profileResult.code
     }
@@ -399,7 +402,6 @@ try {
       $webResult = Invoke-LoggedDsh `
         -Command $dsh `
         -Arguments $arguments `
-        -LogPath $logPath `
         -Header "===== $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) dsh web --port $port =====" `
         -AccessPath ([string] $request.accessPath) `
         -RequestId ([string] $request.requestId) `
@@ -408,19 +410,23 @@ try {
     }
   }
 } catch {
+  # Failed acquisition must not write into the other run's active log.
+  if ($mode -in @('build', 'desktop', 'web', 'profile') -and $null -eq $script:requestLogWriter) { throw }
   if ($mode -eq 'desktop') {
-    [System.IO.File]::AppendAllText([string]$request.logPath,
-      ('桌面启动失败：' + $_.Exception.Message + [Environment]::NewLine), $Utf8NoBom)
+    Write-RequestLog ('桌面启动失败：' + $_.Exception.Message + [Environment]::NewLine)
     exit 1
   }
   if ($mode -eq 'web') {
-    [System.IO.File]::AppendAllText([string] $request.logPath,
-      ('Web 启动失败：' + $_.Exception.Message + [Environment]::NewLine), $Utf8NoBom)
+    Write-RequestLog ('Web 启动失败：' + $_.Exception.Message + [Environment]::NewLine)
+  }
+  if ($mode -eq 'profile') {
+    Write-RequestLog ('Profile 启动失败：' + $_.Exception.Message + [Environment]::NewLine)
   }
   if ($mode -ne 'build') { throw }
   Write-BuildOutcome $false 1 ($buildStage + '失败：' + $_.Exception.Message)
   exit 1
 } finally {
+  if ($null -ne $script:requestLogWriter) { $script:requestLogWriter.Dispose() }
   if ($mode -in @('build', 'desktop')) {
     [Environment]::SetEnvironmentVariable('pnpm_config_verify_deps_before_run', $originalPnpmVerifyDeps, 'Process')
   }

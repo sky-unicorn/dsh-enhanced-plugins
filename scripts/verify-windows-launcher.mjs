@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -222,11 +222,13 @@ try {
 
   // Explicit build-only must also skip an installed Git, even when pulling would fail.
   const explicitBuildOnlyPath = resolve(temporary, 'explicit-build-only-result.json')
+  await writeFile(resolve(dataRoot, 'logs/dsh-build.log'), `${buildOnlyLog}\nPREVIOUS_BUILD_RUN\n`, 'utf8')
   const explicitBuildOnly = run(executable, ['--automation', 'build-only', explicitBuildOnlyPath], {
     env: { ...environment, DSH_LAUNCHER_VERIFY_GIT_FAILURE: '1' },
   })
   const explicitBuildOnlyResult = await readJson(explicitBuildOnlyPath)
-  const explicitBuildOnlyLog = (await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')).slice(buildOnlyLog.length)
+  const explicitBuildOnlyLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+  assert.doesNotMatch(explicitBuildOnlyLog, /PREVIOUS_BUILD_RUN/)
   assert.equal(explicitBuildOnly.status, 0, JSON.stringify(explicitBuildOnlyResult))
   assert.equal(explicitBuildOnlyResult.success, true)
   assert.match(explicitBuildOnlyLog, /Skipping Git source update/)
@@ -237,10 +239,10 @@ try {
 
   const buildResultPath = resolve(temporary, 'build-result.json')
   const priorBuildSteps = await readPnpmSteps(dshSource)
-  const priorBuildLog = buildOnlyLog.length + explicitBuildOnlyLog.length
   const build = run(executable, ['--automation', 'build', buildResultPath], { env: environment })
   const buildResult = await readJson(buildResultPath)
-  const buildLog = (await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')).slice(priorBuildLog)
+  const buildLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+  assert.doesNotMatch(buildLog, /Skipping Git source update/, 'updated build replaces the previous build-only log')
   if (build.status !== 0 || buildResult.success !== true) {
     throw new Error(`launcher source build stopped before completion: ${JSON.stringify(buildResult)}\n${buildLog}`)
   }
@@ -267,12 +269,14 @@ try {
   async function failedBuild(name, env, expectedMessage, expectedLog,
     allowedSteps = expectedPnpmSteps, sourceDirectory = dshSource) {
     const previousLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
+    await writeFile(resolve(dataRoot, 'logs/dsh-build.log'), `${previousLog}\nPREVIOUS_BUILD_RUN\n`, 'utf8')
     const previousSteps = await readPnpmSteps(sourceDirectory)
     const resultPath = resolve(temporary, `${name}.json`)
     const processResult = run(executable, ['--automation', 'build', resultPath], { env })
     const result = await readJson(resultPath)
     const persistedLog = await readFile(resolve(dataRoot, 'logs/dsh-build.log'), 'utf8')
-    const currentLog = persistedLog.slice(previousLog.length)
+    const currentLog = persistedLog
+    assert.doesNotMatch(currentLog, /PREVIOUS_BUILD_RUN/, `${name} replaces the previous execution log`)
     assert.deepEqual((await readPnpmSteps(sourceDirectory)).slice(previousSteps.length), allowedSteps,
       `${name} must stop at the failed step`)
     if (processResult.status === 0 || result.success !== false
@@ -481,6 +485,7 @@ try {
 
   const profileRequest = resolve(temporary, 'profile.json')
   const profileLog = resolve(dataRoot, 'logs/profile-web.log')
+  await writeFile(profileLog, 'PREVIOUS_PROFILE_RUN\n', 'utf8')
   await writeFile(profileRequest, JSON.stringify({
     requestId: crypto.randomUUID(),
     mode: 'profile',
@@ -494,10 +499,60 @@ try {
     '-File', commandScript, '-RequestPath', profileRequest,
   ], { env: environment, windowsHide: true })
   const profileLogText = await readFile(profileLog, 'utf8')
+  assert.doesNotMatch(profileLogText, /PREVIOUS_PROFILE_RUN/)
   if (profile.status !== 0 || !profileLogText.includes('PROFILE:中文结果:web') || profileLogText.includes('\0')) {
     throw new Error(`hidden profile UTF-8 log validation failed: ${profileLogText}\n${profile.stderr}`)
   }
+  await writeFile(profileRequest, JSON.stringify({
+    requestId: crypto.randomUUID(), mode: 'profile', profile: 'web', logPath: profileLog,
+    dshCommand: resolve(temporary, 'missing-dsh.ps1'), workingDirectory: profileHome,
+  }), 'utf8')
+  const failedProfile = run('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', commandScript, '-RequestPath', profileRequest,
+  ], { env: environment, windowsHide: true })
+  assert.notEqual(failedProfile.status, 0)
+  const failedProfileLog = await readFile(profileLog, 'utf8')
+  assert.match(failedProfileLog, /Profile 启动失败/)
+  assert.doesNotMatch(failedProfileLog, /PROFILE:中文结果:web/, 'early failure replaces earlier success output')
 
+  // A second run must fail before truncating the log of an active writer.
+  const slowProfile = resolve(temporary, 'slow-profile.ps1')
+  const activeLog = resolve(temporary, 'active-profile.log')
+  await writeFile(slowProfile, 'Write-Output ACTIVE_PROFILE_RUN\nStart-Sleep -Seconds 4\nWrite-Output ACTIVE_PROFILE_DONE\nexit 0\n', 'utf8')
+  const activeRequest = resolve(temporary, 'active-profile.json')
+  const activePayload = { requestId: crypto.randomUUID(), mode: 'profile', dshCommand: slowProfile,
+    workingDirectory: profileHome, profile: 'fixture', logPath: activeLog }
+  await writeFile(activeRequest, JSON.stringify(activePayload), 'utf8')
+  const activeProcess = spawn('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', commandScript, '-RequestPath', activeRequest,
+  ], { env: environment, windowsHide: true, stdio: 'ignore' })
+  const activeCompletion = new Promise((resolveExit, reject) => {
+    activeProcess.once('error', reject)
+    activeProcess.once('exit', resolveExit)
+  })
+  try {
+    await waitFor(async () => (await readFile(activeLog, 'utf8').catch(() => '')).includes('ACTIVE_PROFILE_RUN'), 'active profile log')
+    const duplicateRequest = resolve(temporary, 'duplicate-profile.json')
+    const duplicateId = crypto.randomUUID()
+    await writeFile(duplicateRequest, JSON.stringify({ ...activePayload, requestId: duplicateId }), 'utf8')
+    const duplicate = run('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-File', commandScript, '-RequestPath', duplicateRequest,
+    ], { env: environment, windowsHide: true })
+    assert.notEqual(duplicate.status, 0, 'another active writer must reject the duplicate')
+    const retainedLog = await readFile(activeLog, 'utf8')
+    assert.match(retainedLog, /ACTIVE_PROFILE_RUN/)
+    assert.equal(retainedLog.includes(duplicateId), false, 'rejected run must not overwrite the active log')
+    assert.equal(await activeCompletion, 0)
+    assert.match(await readFile(activeLog, 'utf8'), /ACTIVE_PROFILE_DONE/)
+  } finally {
+    if (activeProcess.exitCode === null) activeProcess.kill()
+    await activeCompletion
+  }
+
+  await writeFile(resolve(dataRoot, 'logs/dsh-web.log'), 'PREVIOUS_WEB_RUN\n', 'utf8')
   const startOutput = resolve(temporary, 'start.json')
   const start = run(executable, ['--automation', 'start', startOutput], { env: environment })
   if (start.status !== 0) {
@@ -512,6 +567,7 @@ try {
     return (await readJson(statusOutput)).ownership === 'Owned'
   }, 'launcher-owned Web readiness')
   const ownedState = await readJson(resolve(dataRoot, 'run/web-state.json'))
+  assert.doesNotMatch(await readFile(resolve(dataRoot, 'logs/dsh-web.log'), 'utf8'), /PREVIOUS_WEB_RUN/)
   const accessPath = resolve(dataRoot, 'run/web-access.json')
   await waitFor(async () => stat(accessPath).then(() => true).catch(() => false), 'current Web authentication entry')
   const access = await readJson(accessPath)

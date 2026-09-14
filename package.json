@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugins",
-  "version": "6.2.1",
+  "version": "6.2.2",
   "description": "Aggregate and selective DeepSeek Harness enhancements, including a standalone Windows launcher companion",
   "type": "module",
   "main": "./lib/index.js",
@@ -102,6 +102,7 @@
     "pack:dry-run": "node scripts/pack-dry-run.mjs",
     "test:launcher-toolchain": "node --test tests/packages/launcher-toolchain.test.mjs",
     "verify:launcher": "node scripts/verify-windows-launcher.mjs",
+    "verify:launcher-ui": "node scripts/verify-launcher-ui.mjs",
     "verify:compat": "node scripts/verify-dsh-compatibility.mjs",
     "verify:edit-web": "node scripts/verify-edit-web.mjs",
     "verify:pack": "node scripts/verify-packed-features.mjs",

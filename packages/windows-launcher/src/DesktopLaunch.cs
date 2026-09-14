@@ -79,7 +79,7 @@ namespace DshEnhanced.WindowsLauncher
             header.Controls.Add(launchModeSelector);
             browserModeButton = NewButton(DesktopText.Browser, ModernButtonKind.SegmentSelected, 0);
             desktopModeButton = NewButton(DesktopText.Desktop, ModernButtonKind.Segment, 0);
-            desktopSourceButton = NewButton(DesktopText.Source, ModernButtonKind.Secondary, 96);
+            desktopSourceButton = NewButton(DesktopText.Source, ModernButtonKind.Secondary, 0);
             desktopBuildButton = NewButton(DesktopText.Build, ModernButtonKind.Secondary, 136);
             desktopBuildButton.Click += delegate { RunOperation(runtime.BuildAndStartDesktop); };
             launchModeSelector.Controls.Add(browserModeButton);

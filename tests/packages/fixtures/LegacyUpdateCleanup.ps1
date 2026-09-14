@@ -111,6 +111,9 @@ Assert-Test (Test-Path -LiteralPath $current) 'Repeated cleanup removed the curr
 # Exercise the shipped machine operation and its cross-process update lock.
 $startupStale = New-OldUpdate
 $machineResult = Join-Path $TestRoot 'cleanup-result.json'
+$cleanupLog = Join-Path $launcher 'logs\update-cleanup.log'
+[void][IO.Directory]::CreateDirectory((Split-Path -Parent $cleanupLog))
+[IO.File]::WriteAllText($cleanupLog, 'PREVIOUS_CLEANUP_RUN')
 $mutex = New-Object System.Threading.Mutex($false, 'Local\DSH.Enhanced.WindowsLauncher.UpdateWorkspace')
 $taken = $false
 try {
@@ -120,6 +123,7 @@ try {
   Assert-Test ($LASTEXITCODE -eq 0) 'Cleanup machine operation failed while busy.'
   Assert-Test ((Read-JsonFile $machineResult).stage -eq 'busy') 'Cleanup did not respect the update workspace lock.'
   Assert-Test (Test-Path -LiteralPath $startupStale) 'Busy cleanup deleted a directory.'
+  Assert-Test (([IO.File]::ReadAllText($cleanupLog)).Contains('PREVIOUS_CLEANUP_RUN')) 'Busy cleanup erased its previous log.'
 } finally {
   if ($taken) { $mutex.ReleaseMutex() }
   $mutex.Dispose()
@@ -127,4 +131,5 @@ try {
 & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ManagerScript -Operation Cleanup -OutputPath $machineResult
 Assert-Test ($LASTEXITCODE -eq 0 -and (Read-JsonFile $machineResult).stage -eq 'complete') 'Idle cleanup machine operation failed.'
 Assert-Test (-not (Test-Path -LiteralPath $startupStale)) 'Startup cleanup did not remove a stale update.'
+Assert-Test (-not ([IO.File]::ReadAllText($cleanupLog)).Contains('PREVIOUS_CLEANUP_RUN')) 'Cleanup retained a previous execution log.'
 Write-Output 'LEGACY_UPDATE_CLEANUP_OK'

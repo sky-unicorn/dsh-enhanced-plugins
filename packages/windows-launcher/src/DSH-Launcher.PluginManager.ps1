@@ -972,6 +972,8 @@ function Invoke-LegacyUpdateCleanup {
       return [pscustomobject]@{ protocolVersion = 1; success = $true; stage = 'busy' }
     }
     $logPath = Join-Path $LauncherRoot 'logs\update-cleanup.log'
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $logPath))
+    [System.IO.File]::WriteAllText($logPath, '', $Utf8NoBom)
     Remove-LegacyUpdateDirectories $LauncherRoot @((Get-UpdateWorkspace $LauncherRoot), $PSScriptRoot) $logPath
     [pscustomobject]@{ protocolVersion = 1; success = $true; stage = 'complete'; logPath = $logPath }
   } finally {

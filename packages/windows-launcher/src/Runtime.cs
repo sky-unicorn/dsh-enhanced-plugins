@@ -313,6 +313,17 @@ namespace DshEnhanced.WindowsLauncher
     {
         private static readonly object Gate = new object();
 
+        /// <summary>Starts the owning UI process's log after singleton acquisition.</summary>
+        internal static void BeginSession()
+        {
+            try
+            {
+                LauncherPaths.Ensure();
+                lock (Gate) File.WriteAllText(LauncherPaths.LauncherLog, String.Empty, new UTF8Encoding(false));
+            }
+            catch { /* Diagnostics must not prevent startup. */ }
+        }
+
         internal static void Write(string message)
         {
             try
@@ -843,9 +854,6 @@ namespace DshEnhanced.WindowsLauncher
             request.runtimePath = Path.Combine(LauncherPaths.Run, "build-toolchain.json");
             string commandOutput;
             LauncherLog.Write((updateSource ? "update and build" : "build") + " DSH source=" + source);
-            File.AppendAllText(LauncherPaths.BuildLog, Environment.NewLine + "===== "
-                + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " 开始 DSH 源码操作 =====" + Environment.NewLine,
-                new UTF8Encoding(false));
             OperationResult result = RunCapturedRequest(request, out commandOutput);
             LauncherCommandResult outcome = JsonFile.Read<LauncherCommandResult>(request.resultPath);
             TryDelete(request.resultPath);
@@ -858,6 +866,11 @@ namespace DshEnhanced.WindowsLauncher
             }
             try
             {
+                // If the engine could not initialize its own log/outcome,
+                // replace the previous run with this launch failure. An active
+                // writer denies this open before any existing data is truncated.
+                if (outcome == null || outcome.requestId != request.requestId)
+                    File.WriteAllText(LauncherPaths.BuildLog, String.Empty, new UTF8Encoding(false));
                 // The log is the single source for both the live refresh and final
                 // display. Never leave engine errors only in a transient textbox.
                 if (!String.IsNullOrWhiteSpace(commandOutput))
@@ -1113,26 +1126,57 @@ namespace DshEnhanced.WindowsLauncher
             if (!File.Exists(path)) return "（暂无日志）";
             try
             {
-                // The command engine keeps a writer open during long builds.
-                // Readers must share write access or live refresh fails while
-                // the command is running. Keep only the visible tail in memory.
+                // Share with the live writer and bound I/O as well as memory:
+                // this path also runs when navigating to a log page.
                 using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read,
                     FileShare.ReadWrite | FileShare.Delete))
-                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
-                {
-                    Queue<string> tail = new Queue<string>();
-                    string line;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        tail.Enqueue(line);
-                        if (tail.Count > lines) tail.Dequeue();
-                    }
-                    return TerminalText.ForDisplay(String.Join(Environment.NewLine, tail.ToArray()));
-                }
+                    return ReadLogTail(stream, lines);
             }
             catch (Exception error)
             {
                 return "（无法读取日志：" + error.Message + "）";
+            }
+        }
+
+        /// <summary>Reads at most 256 KiB from a seekable UTF-8 log, without closing the caller's stream.</summary>
+        internal static string ReadLogTail(Stream stream, int lines)
+        {
+            const int maximumBytes = 256 * 1024;
+            long fileLength = stream.Length;
+            long start = Math.Max(0, fileLength - maximumBytes);
+            stream.Position = start;
+            byte[] buffer = new byte[(int)(fileLength - start)];
+            int length = 0;
+            int read;
+            while (length < buffer.Length && (read = stream.Read(buffer, length, buffer.Length - length)) > 0)
+                length += read;
+            int first = 0;
+            if (start > 0)
+            {
+                // Drop the partial first line, including a possible split UTF-8 sequence.
+                while (first < length && buffer[first] != 10 && buffer[first] != 13) first++;
+                if (first < length)
+                {
+                    byte separator = buffer[first++];
+                    if (separator == 13 && first < length && buffer[first] == 10) first++;
+                }
+                if (first == length)
+                {
+                    // A single exceptionally long line still exposes its newest text.
+                    first = 0;
+                    while (first < length && (buffer[first] & 0xc0) == 0x80) first++;
+                }
+            }
+            using (StringReader reader = new StringReader(Encoding.UTF8.GetString(buffer, first, length - first).TrimStart('\ufeff')))
+            {
+                Queue<string> tail = new Queue<string>();
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    tail.Enqueue(line);
+                    if (tail.Count > lines) tail.Dequeue();
+                }
+                return TerminalText.ForDisplay(String.Join(Environment.NewLine, tail.ToArray()));
             }
         }
 

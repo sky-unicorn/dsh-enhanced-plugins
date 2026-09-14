@@ -77,10 +77,14 @@ async function stop() {
 }
 
 try {
+  const desktopLog = join(home, 'logs/dsh-desktop.log')
+  write(desktopLog, 'PREVIOUS_DESKTOP_RUN\n')
   assert.equal(action('start-desktop').success, false, 'missing build must fail before launch')
+  assert.match(readFileSync(desktopLog, 'utf8'), /PREVIOUS_DESKTOP_RUN/, 'a rejected action retains the latest run')
   assert.equal(calls().length, 0)
   assert.equal(action('build-desktop').success, true)
   await until(() => calls().length === 1, 'dev:desktop dispatch')
+  assert.doesNotMatch(readFileSync(desktopLog, 'utf8'), /PREVIOUS_DESKTOP_RUN/)
   assert.deepEqual(calls(), ['dev:desktop'])
   assert.equal(json(join(home, 'run/desktop-toolchain.json')).managerVersion, '11.7.0')
   assert.equal(readFileSync(join(source, 'devtools.txt'), 'utf8').trim(), '0')
@@ -91,6 +95,7 @@ try {
   for (const file of ['apps/desktop/lib/main.js', 'apps/desktop-host/lib/index.js', 'apps/web/dist/index.html']) write(join(source, file), '')
   assert.equal(action('start-desktop').success, true)
   await until(() => calls().length === 2, 'start:desktop dispatch')
+  assert.equal(readFileSync(desktopLog, 'utf8').includes(first), false, 'desktop restart replaces the earlier request log')
   assert.equal(calls()[1], 'start:desktop')
   await stop()
   write(join(source, 'fail'), '')

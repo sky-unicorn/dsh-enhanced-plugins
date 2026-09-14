@@ -164,6 +164,7 @@ namespace DshEnhanced.WindowsLauncher
                         SignalEvent(startDshAfterLogin ? StartDshEventName : ShowEventName);
                         return 0;
                     }
+                    LauncherLog.BeginSession();
                     LauncherLog.Write("launcher UI start pid=" + Process.GetCurrentProcess().Id.ToString()
                         + " tray=" + startHidden.ToString() + " activateUpdate=" + activateUpdate.ToString());
                     Application.Run(new LauncherApplicationContext(startHidden, startDshAfterLogin, readyFile));
@@ -1238,7 +1239,9 @@ namespace DshEnhanced.WindowsLauncher
             if (toast.Padding != toastPadding) toast.Padding = toastPadding;
             Padding hostPadding = new Padding(Dip(34), Dip(8), Dip(34), Dip(12));
             if (pageHost.Padding != hostPadding) pageHost.Padding = hostPadding;
-            ScaleStandardControls(this);
+            ScaleStandardControls(sidebar);
+            ScaleStandardControls(header);
+            if (activePage != null) ScaleStandardControls(activePage);
         }
 
         private void ScaleStandardControls(Control parent)
@@ -2269,7 +2272,11 @@ namespace DshEnhanced.WindowsLauncher
             else if (page == diagnosticsPage) pageSubtitle.Text = "查看运行记录并检查本机环境";
             else if (page == sourcePage) pageSubtitle.Text = "更新源码并构建，或仅构建安装时确认的本地 checkout";
             else pageSubtitle.Text = "按 Profile 管理本项目源码、独立功能包与 Launcher 更新";
-            if (page == diagnosticsPage) diagnosticsOutput.Text = runtime.RecentLogs();
+            if (page == diagnosticsPage)
+            {
+                string log = runtime.RecentLogs().Replace("\r\n", "\n");
+                if (!String.Equals(diagnosticsOutput.Text, log, StringComparison.Ordinal)) diagnosticsOutput.Text = log;
+            }
             if (page == sourcePage)
             {
                 UpdateSourcePath();

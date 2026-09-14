@@ -592,6 +592,10 @@ namespace DshEnhanced.WindowsLauncher
         private Color rowBackColor = UiTheme.Surface;
         private Color rowBorderColor = UiTheme.Border;
 
+        // Control.Visible includes ancestor visibility; filtering must also work
+        // while the catalog is warmed with the page hidden.
+        internal bool MatchesFilter { get; set; }
+
         internal event EventHandler SelectionChanged;
 
         internal PluginFeatureRow()
@@ -776,9 +780,10 @@ namespace DshEnhanced.WindowsLauncher
             pluginSourceStatus.AutoSize = false;
             pluginSourceStatus.TextAlign = ContentAlignment.MiddleLeft;
             pluginSourceStatusDot = new StatusIndicator();
-            pluginChooseSourceButton = NewButton("选择源码", ModernButtonKind.Secondary, 108);
-            pluginCheckButton = NewButton("检查更新", ModernButtonKind.Secondary, 108);
-            pluginUpdateButton = NewButton("更新源码并应用", ModernButtonKind.Primary, 156);
+            // These buttons are sized by LayoutPluginManager at every breakpoint.
+            pluginChooseSourceButton = NewButton("选择源码", ModernButtonKind.Secondary, 0);
+            pluginCheckButton = NewButton("检查更新", ModernButtonKind.Secondary, 0);
+            pluginUpdateButton = NewButton("更新源码并应用", ModernButtonKind.Primary, 0);
             pluginSourceCard.Controls.Add(pluginSourcePath);
             pluginSourceCard.Controls.Add(pluginSourceRevision);
             pluginSourceCard.Controls.Add(pluginSourceStatusDot);
@@ -798,8 +803,8 @@ namespace DshEnhanced.WindowsLauncher
             pluginSearchInput.ForeColor = UiTheme.Text;
             pluginSearchInput.Font = UiTheme.Font(9.2f, FontStyle.Regular);
             pluginSearchShell.Controls.Add(pluginSearchInput);
-            pluginSelectAllButton = NewButton("全选", ModernButtonKind.Secondary, 82);
-            pluginClearButton = NewButton("清空", ModernButtonKind.Secondary, 82);
+            pluginSelectAllButton = NewButton("全选", ModernButtonKind.Secondary, 0);
+            pluginClearButton = NewButton("清空", ModernButtonKind.Secondary, 0);
             pluginFeatureRows = NewPluginRowsPanel();
             pluginFeaturesCard.Controls.Add(pluginProfileCaption);
             pluginFeaturesCard.Controls.Add(pluginProfileInput);
@@ -818,7 +823,7 @@ namespace DshEnhanced.WindowsLauncher
             pluginPlanHeading = NewLabel("待确认更改", 9.2f, FontStyle.Bold, UiTheme.Text);
             pluginPlanText = NewLabel("正在读取安装状态…", 8.7f, FontStyle.Regular, UiTheme.Text);
             pluginPlanText.AutoSize = false;
-            pluginApplyButton = NewButton("确认并应用", ModernButtonKind.Primary, 148);
+            pluginApplyButton = NewButton("确认并应用", ModernButtonKind.Primary, 0);
             pluginPlanShell.Controls.Add(pluginPlanHeading);
             pluginPlanShell.Controls.Add(pluginPlanText);
             pluginPlanShell.Controls.Add(pluginApplyButton);
@@ -868,7 +873,7 @@ namespace DshEnhanced.WindowsLauncher
         {
             return new FlowLayoutPanel
             {
-                BackColor = Color.Transparent,
+                BackColor = UiTheme.Surface,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoScroll = false,
@@ -882,10 +887,7 @@ namespace DshEnhanced.WindowsLauncher
             if (!force && activePage != pluginPage) return;
             if (!force && pluginSnapshot != null
                 && DateTime.UtcNow - pluginSnapshotLoadedAtUtc < TimeSpan.FromSeconds(30))
-            {
-                LayoutPluginManager();
                 return;
-            }
             if (captureMode)
             {
                 string captureProfile = String.IsNullOrWhiteSpace(pluginProfileInput.Text) ? "web" : pluginProfileInput.Text.Trim();
@@ -958,7 +960,7 @@ namespace DshEnhanced.WindowsLauncher
             if (snapshot.features != null)
                 foreach (PluginFeatureSnapshot feature in snapshot.features.Where(value => value.scope == "profile"))
                     pluginSelections[feature.id] = feature.selected;
-            RenderPluginRows();
+            RenderPluginRows(false);
             UpdatePluginPlan();
             if (!pluginOperationHistoryLoaded)
             {
@@ -984,13 +986,12 @@ namespace DshEnhanced.WindowsLauncher
                 // cleanup, so its result cannot disappear before UI delivery.
                 if (!captureMode && pendingPluginOperation == null) pluginRuntime.QueueLegacyUpdateCleanup();
             }
-            LayoutPluginManager();
         }
 
-        private void RenderPluginRows()
+        private void RenderPluginRows(bool captureSelections = true)
         {
             if (pluginFeatureRows == null) return;
-            CapturePluginSelections();
+            if (captureSelections) CapturePluginSelections();
             string filter = pluginSearchInput == null ? String.Empty : pluginSearchInput.Text.Trim();
             pluginFeatureRows.SuspendLayout();
             bool previousLoading = pluginControlsLoading;
@@ -1029,7 +1030,8 @@ namespace DshEnhanced.WindowsLauncher
                             UpdatePluginPlan();
                         };
                     }
-                    row.Bind(feature);
+                    // Filtering changes visibility, not the bound data or toggle state.
+                    if (!Object.ReferenceEquals(row.Feature, feature)) row.Bind(feature);
                     bool selected;
                     if (pluginSelections.TryGetValue(feature.id, out selected)) row.Selected = selected;
                     bool matches = feature.scope == "global" || String.IsNullOrWhiteSpace(filter);
@@ -1039,6 +1041,7 @@ namespace DshEnhanced.WindowsLauncher
                             + feature.id + "\n" + feature.packageName).ToLowerInvariant();
                         matches = haystack.Contains(filter.ToLowerInvariant());
                     }
+                    row.MatchesFilter = matches;
                     row.Visible = matches;
                     pluginFeatureRows.Controls.SetChildIndex(row, displayIndex++);
                 }
@@ -1048,7 +1051,6 @@ namespace DshEnhanced.WindowsLauncher
                 pluginControlsLoading = previousLoading;
                 pluginFeatureRows.ResumeLayout(false);
             }
-            SizePluginRows();
             LayoutPluginManager();
         }
 
@@ -1070,7 +1072,13 @@ namespace DshEnhanced.WindowsLauncher
             if (pluginSnapshot != null && pluginSnapshot.features != null)
                 foreach (PluginFeatureSnapshot feature in pluginSnapshot.features.Where(value => value.scope == "profile"))
                     pluginSelections[feature.id] = selected;
-            foreach (PluginFeatureRow row in pluginFeatureRows.Controls.OfType<PluginFeatureRow>()) row.Selected = selected;
+            bool previousLoading = pluginControlsLoading;
+            pluginControlsLoading = true;
+            try
+            {
+                foreach (PluginFeatureRow row in pluginFeatureRows.Controls.OfType<PluginFeatureRow>()) row.Selected = selected;
+            }
+            finally { pluginControlsLoading = previousLoading; }
             UpdatePluginPlan();
         }
 
@@ -1410,9 +1418,9 @@ namespace DshEnhanced.WindowsLauncher
                 }
                 else
                 {
-                    pluginChooseSourceButton.Location = new Point(Dip(28), Dip(166));
-                    pluginCheckButton.Location = new Point(Dip(148), Dip(166));
-                    pluginUpdateButton.Location = new Point(Dip(268), Dip(166));
+                    SetBoundsIfChanged(pluginChooseSourceButton, Dip(28), Dip(166), Dip(108), Dip(42));
+                    SetBoundsIfChanged(pluginCheckButton, Dip(148), Dip(166), Dip(108), Dip(42));
+                    SetBoundsIfChanged(pluginUpdateButton, Dip(268), Dip(166), Dip(156), Dip(42));
                 }
             }
             else
@@ -1426,9 +1434,9 @@ namespace DshEnhanced.WindowsLauncher
                 SetBoundsIfChanged(pluginSourceStatusDot, sourceStatusLeft, Dip(80), Dip(14), Dip(14));
                 SetBoundsIfChanged(pluginSourceStatus, sourceStatusLeft + Dip(20), Dip(74),
                     Math.Max(Dip(120), sourceStatusWidth - Dip(20)), Dip(28));
-                pluginChooseSourceButton.Location = new Point(Dip(28), Dip(142));
-                pluginCheckButton.Location = new Point(Dip(148), Dip(142));
-                pluginUpdateButton.Location = new Point(Dip(268), Dip(142));
+                SetBoundsIfChanged(pluginChooseSourceButton, Dip(28), Dip(142), Dip(108), Dip(42));
+                SetBoundsIfChanged(pluginCheckButton, Dip(148), Dip(142), Dip(108), Dip(42));
+                SetBoundsIfChanged(pluginUpdateButton, Dip(268), Dip(142), Dip(156), Dip(42));
             }
 
             int mainTop = sourceHeight + gap;
@@ -1436,7 +1444,7 @@ namespace DshEnhanced.WindowsLauncher
             bool compactToolbar = toolbarWidth < Dip(720);
             bool stackCompactToolbar = toolbarWidth < Dip(400);
             int rowsTop = stackCompactToolbar ? Dip(290) : compactToolbar ? Dip(224) : Dip(158);
-            int visibleRows = pluginFeatureRows.Controls.OfType<PluginFeatureRow>().Count(row => row.Visible);
+            int visibleRows = pluginFeatureRows.Controls.OfType<PluginFeatureRow>().Count(row => row.MatchesFilter);
             int rowsHeight = visibleRows == 0 ? Dip(58)
                 : (visibleRows * Dip(82)) + (Math.Max(0, visibleRows - 1) * Dip(9));
             int planTop = rowsTop + rowsHeight + Dip(20);
@@ -1467,8 +1475,8 @@ namespace DshEnhanced.WindowsLauncher
                 searchWidth = toolbarWidth;
                 SetBoundsIfChanged(pluginProfileCaption, Dip(28), Dip(76), profileWidth, Dip(20));
                 SetBoundsIfChanged(pluginProfileInput, Dip(28), Dip(100), profileWidth, Dip(40));
-                pluginSelectAllButton.Location = new Point(pluginFeaturesCard.Width - Dip(202), Dip(100));
-                pluginClearButton.Location = new Point(pluginFeaturesCard.Width - Dip(112), Dip(100));
+                SetBoundsIfChanged(pluginSelectAllButton, pluginFeaturesCard.Width - Dip(202), Dip(100), Dip(82), Dip(42));
+                SetBoundsIfChanged(pluginClearButton, pluginFeaturesCard.Width - Dip(112), Dip(100), Dip(82), Dip(42));
                 SetBoundsIfChanged(pluginSearchCaption, Dip(28), Dip(150), searchWidth, Dip(20));
                 SetBoundsIfChanged(pluginSearchShell, Dip(28), Dip(174), searchWidth, Dip(40));
             }
@@ -1482,8 +1490,8 @@ namespace DshEnhanced.WindowsLauncher
                 SetBoundsIfChanged(pluginProfileInput, Dip(28), toolbarTop, profileWidth, Dip(40));
                 SetBoundsIfChanged(pluginSearchCaption, Dip(40) + profileWidth, Dip(76), searchWidth, Dip(20));
                 SetBoundsIfChanged(pluginSearchShell, Dip(40) + profileWidth, toolbarTop, searchWidth, Dip(40));
-                pluginSelectAllButton.Location = new Point(Dip(52) + profileWidth + searchWidth, toolbarTop);
-                pluginClearButton.Location = new Point(Dip(142) + profileWidth + searchWidth, toolbarTop);
+                SetBoundsIfChanged(pluginSelectAllButton, Dip(52) + profileWidth + searchWidth, toolbarTop, Dip(82), Dip(42));
+                SetBoundsIfChanged(pluginClearButton, Dip(142) + profileWidth + searchWidth, toolbarTop, Dip(82), Dip(42));
             }
             pluginSearchInput.SetBounds(Dip(8), Dip(9), Math.Max(Dip(80), searchWidth - Dip(16)), Dip(22));
             SetBoundsIfChanged(pluginFeatureRows, Dip(28), rowsTop, toolbarWidth, rowsHeight);
@@ -1531,12 +1539,18 @@ namespace DshEnhanced.WindowsLauncher
             if (pluginFeatureRows == null) return;
             int featureWidth = Math.Max(Dip(100), pluginFeatureRows.ClientSize.Width
                 - pluginFeatureRows.Padding.Horizontal);
-            foreach (PluginFeatureRow row in pluginFeatureRows.Controls.OfType<PluginFeatureRow>())
+            pluginFeatureRows.SuspendLayout();
+            try
             {
-                row.Width = featureWidth;
-                row.Height = Dip(82);
-                row.Margin = new Padding(0, 0, 0, Dip(9));
+                foreach (PluginFeatureRow row in pluginFeatureRows.Controls.OfType<PluginFeatureRow>())
+                {
+                    Size size = new Size(featureWidth, Dip(82));
+                    Padding margin = new Padding(0, 0, 0, Dip(9));
+                    if (row.Size != size) row.Size = size;
+                    if (row.Margin != margin) row.Margin = margin;
+                }
             }
+            finally { pluginFeatureRows.ResumeLayout(true); }
         }
     }
 }

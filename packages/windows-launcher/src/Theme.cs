@@ -139,7 +139,13 @@ namespace DshEnhanced.WindowsLauncher
         internal int ViewportSize
         {
             get { return viewportSize; }
-            set { viewportSize = Math.Max(1, value); Invalidate(); }
+            set
+            {
+                int next = Math.Max(1, value);
+                if (viewportSize == next) return;
+                viewportSize = next;
+                Invalidate();
+            }
         }
 
         internal int SmallChange
@@ -384,8 +390,21 @@ namespace DshEnhanced.WindowsLauncher
         {
             if (!hookedControls.Add(control)) return;
             control.Enter += OnContentControlEnter;
-            control.ControlAdded += delegate(object sender, ControlEventArgs args) { HookControlTree(args.Control); };
+            control.ControlAdded += OnContentControlAdded;
+            control.ControlRemoved += OnContentControlRemoved;
             foreach (Control child in control.Controls) HookControlTree(child);
+        }
+
+        private void OnContentControlAdded(object sender, ControlEventArgs args) { HookControlTree(args.Control); }
+        private void OnContentControlRemoved(object sender, ControlEventArgs args) { UnhookControlTree(args.Control); }
+
+        private void UnhookControlTree(Control control)
+        {
+            if (!hookedControls.Remove(control)) return;
+            control.Enter -= OnContentControlEnter;
+            control.ControlAdded -= OnContentControlAdded;
+            control.ControlRemoved -= OnContentControlRemoved;
+            foreach (Control child in control.Controls) UnhookControlTree(child);
         }
 
         public bool PreFilterMessage(ref Message message)
@@ -457,7 +476,12 @@ namespace DshEnhanced.WindowsLauncher
 
         private void ApplyScrollPosition()
         {
-            if (content.Top != -scrollBar.Value) content.Top = -scrollBar.Value;
+            if (content.Top == -scrollBar.Value) return;
+            // Moving the viewport does not change any layout metrics. Do not
+            // run OnLayout/UpdateScrollMetrics for every wheel or drag message.
+            SuspendLayout();
+            try { content.Top = -scrollBar.Value; }
+            finally { ResumeLayout(false); }
         }
 
         protected override void OnLayout(LayoutEventArgs e)
@@ -742,6 +766,14 @@ namespace DshEnhanced.WindowsLauncher
             EnabledChanged += delegate { Invalidate(); };
         }
 
+        protected override void OnTextChanged(EventArgs e)
+        {
+            base.OnTextChanged(e);
+            // This control paints its own label; changing Text alone does not
+            // invalidate its client area when bounds and enabled state stay put.
+            Invalidate();
+        }
+
         protected override void OnKeyDown(KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Space || e.KeyCode == Keys.Enter)
@@ -831,7 +863,11 @@ namespace DshEnhanced.WindowsLauncher
         private bool selected;
         private bool hovering;
         internal NavGlyph Glyph { get; set; }
-        internal bool Selected { get { return selected; } set { selected = value; Invalidate(); } }
+        internal bool Selected
+        {
+            get { return selected; }
+            set { if (selected == value) return; selected = value; Invalidate(); }
+        }
 
         internal NavButton()
         {

@@ -502,7 +502,7 @@ describe('selective feature packages', () => {
     expect(program).toContain('Screen.FromRectangle(Bounds).WorkingArea')
     expect(program).not.toContain('MaximizedBounds = workingArea')
     expect(program).toContain('Page title and subtitle must not overlap at any DPI.')
-    expect(program).toContain('ScaleStandardControls(this)')
+    // DPI/layout behavior is exercised with compiled controls by verify:launcher-ui.
     expect(program).toContain('overviewPage = new ModernScrollPage()')
     expect(program).toContain('overviewPage.Content.Controls.Add(hero)')
     expect(program).toContain('Pages must not expose a system-native scrollbar.')

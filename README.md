@@ -29,9 +29,11 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 ## Quick start
 
-### 6.2.1 launch modes and compatibility
+### 6.2.2 launch modes and compatibility
 
-Plugin `6.2.1` supports exactly DSH `0.1.5-rc.2` at source commit `c291e7961a515f6d7af9304e7fd1d257929aef26`. Release tag: `6.2.1/dsh-0.1.5-rc.2(c291e7961a)`.
+Plugin `6.2.2` supports exactly DSH `0.1.5-rc.2` at source commit `c291e7961a515f6d7af9304e7fd1d257929aef26`. Release tag: `6.2.2/dsh-0.1.5-rc.2(c291e7961a)`.
+
+This release reduces repeated Launcher layout during navigation, scrolling, and feature filtering, and refreshes button labels when launch mode changes. Each function retains its latest execution log, with bounded reads for the UI.
 
 Choose Browser or Source Desktop at the top of Launcher Overview. The saved choice also controls login startup; existing settings default to Browser. Source Desktop reuses the bound DSH checkout and the Launcher toolchain: Start Desktop runs `pnpm run start:desktop`, while Build and Start runs `pnpm run dev:desktop`. Missing build artifacts disable ordinary startup and direct you to Build and Start. Install the checkout dependencies with `pnpm install --frozen-lockfile` first. Desktop output and failures appear in Desktop Logs; Stop terminates only the Launcher-owned invocation. An active build invocation blocks starting Web against the shared artifacts. The old `DesktopExecutable` setting is ignored; no EXE selection is required.
 
@@ -157,6 +159,10 @@ The tray exposes two exit paths. “Exit Launcher Only” leaves DSH running; �
 
 Tasks and profiles run in no-console child processes. User task content travels through a UTF-8 request file to the PowerShell command engine and is never concatenated into `cmd.exe`. Hiding the main window stops foreground polling while the tray and background services continue running.
 
+Web, source Desktop, source builds, and each profile retain only their latest execution log. A new run replaces the previous one while keeping all stages, errors, and exit codes from that run together. The Launcher log resets after a new UI instance acquires the singleton lock; activating an existing window does not clear it. Update cleanup keeps its latest log, and plugin updates continue to reuse `updates/current`. Another run cannot overwrite an active execution log. Headless output is displayed after completion and replaced by the next task.
+
+Each diagnostics or build-log read accesses at most the last 256 KiB before selecting the requested lines, avoiding full-file scans of a large current run during navigation and refresh; reads do not modify that run's log. Page scrolling does not trigger layout. Feature filtering reuses rows and preserves selections, and select-all/clear updates the change summary once. Switching launch mode refreshes button labels without requiring a scroll.
+
 </details>
 
 <details>
@@ -253,7 +259,7 @@ The card appears only when the official `llm-pi-ai` settings namespace is availa
 
 Resend stays inside the current session: the plugin replaces model context starting at the edited user message, then generates through the same AgentLoop. The DSH Session log remains an append-only audit record, and side effects from tools that already ran are not rolled back. Uploaded generic files render with the DSH file-card presentation, while messages containing any attachment or other non-text block do not expose the editor, preventing silent data loss.
 
-6.2.1 preserves DSH rc.2 sent-reference previews: selecting a file or a Skill actually loaded in that step opens the current session's right sidebar without changing or resending the text. Edited bubbles also preview files; their Skill labels use only invocation records from the edited step, never records from the replaced turn. Resends keep plugin attribution, so slash text alone does not trigger a new user Skill invocation.
+6.2.2 preserves DSH rc.2 sent-reference previews: selecting a file or a Skill actually loaded in that step opens the current session's right sidebar without changing or resending the text. Edited bubbles also preview files; their Skill labels use only invocation records from the edited step, never records from the replaced turn. Resends keep plugin attribution, so slash text alone does not trigger a new user Skill invocation.
 
 Since release 6.1.0, the plugin writes V3 replacement operations and uses standard plugin attribution containing the original message ID, without embedding event sequence numbers. DSH migration can renumber events without losing the edit's identity. Older nested markers and the 5.x `edit-last-message` source kind are not accepted by the V2-to-V3 migrator. Before opening such sessions in the new DSH, stop every DSH Host and run the offline repair on each affected log:
 
@@ -296,7 +302,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** plugin `6.2.1` supports DSH `0.1.5-rc.2` at the source baseline listed above. The aggregate, all seven standalone bundles, and Windows Launcher use `6.2.1`.
+- **Version pairing:** plugin `6.2.2` supports DSH `0.1.5-rc.2` at the source baseline listed above. The aggregate, all seven standalone bundles, and Windows Launcher use `6.2.2`.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** the installer and Launcher plugin updater read `dshEnhanced.compatibility` from the root `package.json` before building, stopping services, or changing a profile. The exact allowed versions come from `dshVersion` plus optional `additionalDshVersions`; peer dependencies declare the same supported versions. An unsupported DSH version, missing or malformed declaration, or mixed plugin package versions stops installation. A matching version whose commit is absent from `sourceCommit` and `additionalSourceCommits`, local source changes, or no Git metadata produces an unverified-source warning.
@@ -392,6 +398,8 @@ Set `DSH_VERIFY_CHECKOUT` to a prepared copy of the verified DSH source commit w
 `npm run verify:desktop-host` loads the official Desktop Host with a fixed plugin snapshot in an isolated directory and verifies the actual Client index response. It does not build or modify the DSH checkout.
 
 `npm run verify:launcher` exercises the compiled Launcher and PowerShell command engine in temporary directories, including clean/install/build ordering, failure stops, and real pnpm frozen-lockfile rejection. It requires Windows, Git, and pnpm on `PATH`; it does not clean or rebuild the real DSH checkout.
+
+`npm run verify:launcher-ui` compiles real WinForms controls in an isolated directory and checks scrolling, filtering, bulk selection, page/mode changes, repeated layout, bounded UTF-8 log reads, and disposal of retired controls. It measures navigation with an approximately 64 MB log and checks all five pages at normal, compact, wide, and 150% layouts, saving screenshots under `.verify-dsh-home/ui-performance/`. Timings measure UI processing and offscreen drawing, not display frame rates; pass/fail checks avoid fixed timing thresholds that vary with machine load.
 
 `npm run test:launcher-toolchain` covers version detection, NVM fallback, declaration conflicts, and isolated environments (build Launcher first). On Windows, `node scripts/verify-launcher-sandbox.mjs <DSH-checkout>` verifies real Web readiness, the selected manager, cached restart, and stop using a temporary DSH Home. It may download the required manager, references DSH source read-only, and saves screenshots and results in `.verify-dsh-home/sandbox-artifacts`.
 
