@@ -44,7 +44,7 @@ afterEach(() => {
   }
 })
 
-describe('6.2.2 release compatibility', () => {
+describe('7.1.0 release compatibility', () => {
   it.runIf(process.platform === 'win32')('rejects the reserved Desktop profile before any installation', () => {
     const source = fixture()
     const result = check(source, ['-Profile', 'Desktop', '-Features', 'all'])
@@ -53,9 +53,9 @@ describe('6.2.2 release compatibility', () => {
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
   })
   it('keeps the aggregate, standalone packages, native version and DSH peers aligned', () => {
-    expect(release.version).toBe('6.2.2')
+    expect(release.version).toBe('7.1.0')
     expect(release.dshEnhanced.compatibility).toEqual({
-      dshVersion: '0.1.5-rc.2', sourceCommit: 'c291e7961a515f6d7af9304e7fd1d257929aef26',
+      dshVersion: '0.1.6-alpha.1', sourceCommit: '0d1f50007f9bca3f52b06e1c3074fa14d5fb0720',
     })
     const supportedVersions = [release.dshEnhanced.compatibility.dshVersion, ...(release.dshEnhanced.compatibility.additionalDshVersions ?? [])]
     for (const manifest of [release, ...packages.map(name => JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf8')))]) {
@@ -77,11 +77,11 @@ describe('6.2.2 release compatibility', () => {
     }
   })
 
-  it.runIf(process.platform === 'win32').each(['0.1.5-rc.2'])('accepts DSH %s source ZIP, warns about unverifiable Git, and writes nothing', (version) => {
+  it.runIf(process.platform === 'win32').each(['0.1.6-alpha.1'])('accepts DSH %s source ZIP, warns about unverifiable Git, and writes nothing', (version) => {
     const source = fixture(version)
     const result = check(source)
     expect(result.status, result.output).toBe(0)
-    expect(result.output).toContain(`Compatibility OK: plugin 6.2.2 -> DSH ${version}`)
+    expect(result.output).toContain(`Compatibility OK: plugin 7.1.0 -> DSH ${version}`)
     expect(result.output).toContain('source commit cannot be verified')
     expect(readdirSync(source.plugin).sort()).toEqual(['package.json', 'packages'])
     expect(readdirSync(source.dsh)).toEqual(['package.json'])
@@ -102,6 +102,7 @@ describe('6.2.2 release compatibility', () => {
     '0.1.5-alpha.3',
     '0.1.5-alpha.2',
     '0.1.5-rc.1',
+    '0.1.5-rc.2',
     '0.1.5',
   ])('rejects DSH %s before build or installation', (version) => {
     const source = fixture(version)
@@ -115,7 +116,7 @@ describe('6.2.2 release compatibility', () => {
   })
 
   it.runIf(process.platform === 'win32').each([
-    '0.1.5-rc.2', ['>=0.1.5-rc.2'], [null], ['0.1.5-rc.2'], ['0.1.5-rc.1', '0.1.5-rc.1'],
+    '0.1.6-alpha.1', ['>=0.1.6-alpha.1'], [null], ['0.1.6-alpha.1'], ['0.1.5-rc.1', '0.1.5-rc.1'],
   ].map(value => [value]))('rejects malformed additional versions %j before installation', (additionalDshVersions) => {
     const source = fixture()
     const path = resolve(source.plugin, 'package.json')

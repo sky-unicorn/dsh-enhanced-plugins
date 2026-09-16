@@ -12,7 +12,10 @@ export function apply(ctx: Context): void {
   const install = (agent: Agent): void => {
     if (!admissions.has(agent)) admissions.set(agent, installEditAdmission(agent.session))
   }
-  ctx.on('agent/created', ({ agent }) => install(agent))
+  ctx.on('agent/created', ({ agent }) => {
+    install(agent)
+    return undefined
+  })
   ctx.on('agent/disposed', ({ agent }) => {
     admissions.get(agent)?.()
     admissions.delete(agent)

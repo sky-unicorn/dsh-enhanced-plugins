@@ -26,25 +26,42 @@ const skillDirectory = resolve(workspace, '.agents/skills/compat-preview')
 mkdirSync(skillDirectory, { recursive: true })
 writeFileSync(resolve(skillDirectory, 'SKILL.md'), '---\nname: compat-preview\ndescription: Local compatibility preview fixture\n---\n\n# RC2_SKILL_PREVIEW\n\nReply briefly.\n')
 const requests = []
+const protocol = process.env.DSH_VERIFY_PROTOCOL ?? 'messages'
+assert.ok(protocol === 'messages' || protocol === 'chat-completions', 'Unknown DSH_VERIFY_PROTOCOL')
 const model = createServer(async (request, response) => {
   try {
     const parts = []
     for await (const part of request) parts.push(part)
     const payload = JSON.parse(Buffer.concat(parts).toString('utf8'))
+    assert.equal(request.url, protocol === 'messages' ? '/v1/messages' : '/chat/completions')
     requests.push(payload)
-    const base = { id: `fixture-${requests.length}`, object: 'chat.completion.chunk', created: 1, model: payload.model }
+    const id = `fixture-${requests.length}`
+    const text = `COMPAT_REPLY_${requests.length}`
     response.writeHead(200, { 'content-type': 'text/event-stream' })
-    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: 'assistant', content: `COMPAT_REPLY_${requests.length}` }, finish_reason: null }] })}\n\n`)
-    response.end(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`)
+    if (protocol === 'messages') {
+      const event = value => response.write(`event: ${value.type}\ndata: ${JSON.stringify(value)}\n\n`)
+      event({ type: 'message_start', message: { id, type: 'message', role: 'assistant', model: payload.model,
+        content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } })
+      event({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
+      event({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } })
+      event({ type: 'content_block_stop', index: 0 })
+      event({ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 5 } })
+      event({ type: 'message_stop' })
+      response.end()
+    } else {
+      const base = { id, object: 'chat.completion.chunk', created: 1, model: payload.model }
+      response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: 'assistant', content: text }, finish_reason: null }] })}\n\n`)
+      response.end(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`)
+    }
   } catch { response.writeHead(400); response.end('Invalid fixture request') }
 })
 model.listen(0, '127.0.0.1')
 await once(model, 'listening')
 const env = { ...process.env, DSH_HOME: home, DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(home, 'launcher'),
   DSH_TELEMETRY_MODE: 'DISABLED', DEEPSEEK_API_KEY: 'local-fixture',
-  DEEPSEEK_BASE_URL: `http://127.0.0.1:${model.address().port}/v1` }
+  DEEPSEEK_BASE_URL: `http://127.0.0.1:${model.address().port}` }
 const overlay = resolve(home, 'browser.patch.yml')
-writeFileSync(overlay, `- id: session-title-llm\n  disabled: true\n- id: directory-picker\n  disabled: true\n- insert:\n    - id: fixture-directory-host\n      name: '@deepseek-ai/dsh-host-directory-picker-browse'\n    - id: fixture-directory-client\n      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'\n`)
+writeFileSync(overlay, `${protocol === 'chat-completions' ? '- id: llm-deepseek\n  config:\n    protocol: chat-completions\n' : ''}- id: session-log-deepseek\n  config:\n    enabled: false\n- id: session-title-llm\n  disabled: true\n- id: directory-picker\n  disabled: true\n- insert:\n    - id: fixture-directory-host\n      name: '@deepseek-ai/dsh-host-directory-picker-browse'\n    - id: fixture-directory-client\n      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'\n`)
 let child, browser, page, exit
 let output = ''
 const redact = text => text.replace(/token=[^\s"'&]+/g, 'token=[redacted]')
@@ -138,7 +155,7 @@ try {
     await page.screenshot({ path: resolve(home, `attachment-${scheme}.png`), fullPage: true, animations: 'disabled' })
   }
   assert.deepEqual(errors, [])
-  writeFileSync(resolve(home, 'report.json'), JSON.stringify({ requests: requests.length, repeatedEdits: true, reload: true, attachment: true,
+  writeFileSync(resolve(home, 'report.json'), JSON.stringify({ protocol, requests: requests.length, repeatedEdits: true, reload: true, attachment: true,
     sentFilePreview: true, sentSkillPreview: true, editedFilePreview: true, schemes: ['light', 'dark'], pageErrors: errors }, null, 2))
   console.log(`Real Web edit verification passed: ${home}`)
 } catch (error) {

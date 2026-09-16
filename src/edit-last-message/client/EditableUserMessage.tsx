@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   Button, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconLoadingOutline16,
-  IconSendOutline16, JsonBlock, projectUserText, Tooltip, writeClipboard, FileTypeIcon, fileSizeText,
+  IconSendOutline14, JsonBlock, projectUserText, Tooltip, writeClipboard, FileTypeIcon, fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { EditLastMessageRequest } from './edit-session.ts'
 import {
@@ -242,7 +242,7 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, op
                           size="sm"
                           icon={saving
                             ? <IconLoadingOutline16 className={css.loadingIcon} />
-                            : <IconSendOutline16 />}
+                            : <IconSendOutline14 size={16} />}
                           aria-label={saving ? t('action.saving') : t('action.save')}
                           disabled={saving}
                           onClick={() => { void save() }}

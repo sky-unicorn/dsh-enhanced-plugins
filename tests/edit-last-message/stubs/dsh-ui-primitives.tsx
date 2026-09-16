@@ -17,9 +17,8 @@ export function IconLoadingOutline16(props: SVGProps<SVGSVGElement>) {
   return <svg aria-hidden {...props} />
 }
 
-export function IconSendOutline16(props: SVGProps<SVGSVGElement>) {
-  return <svg aria-hidden {...props} />
-}
+// Use the target DSH export so a removed icon cannot be hidden by a test double.
+export { IconSendOutline14 } from '@dsh-test/icons'
 
 export function Button({ children, icon, ...props }: {
   children?: ReactNode
