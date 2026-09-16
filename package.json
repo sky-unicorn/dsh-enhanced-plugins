@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugins",
-  "version": "7.1.0",
+  "version": "7.1.1",
   "description": "Aggregate and selective DeepSeek Harness enhancements, including a standalone Windows launcher companion",
   "type": "module",
   "main": "./lib/index.js",
@@ -57,11 +57,7 @@
         ],
         "notice": "Official DSH now supports @ workspace file references; update DSH to the latest release."
       }
-    ],
-    "compatibility": {
-      "dshVersion": "0.1.6-alpha.1",
-      "sourceCommit": "0d1f50007f9bca3f52b06e1c3074fa14d5fb0720"
-    }
+    ]
   },
   "files": [
     "lib/",
@@ -82,7 +78,10 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
-    "LICENSE"
+    "LICENSE",
+    "dsh-compatibility.json",
+    "scripts/dsh-compatibility.ps1",
+    "scripts/sync-dsh-compatibility.mjs"
   ],
   "scripts": {
     "build": "node build.mjs",
@@ -109,7 +108,8 @@
     "prepare": "npm run build",
     "verify:desktop-host": "node scripts/verify-desktop-host.mjs",
     "verify:desktop-launcher": "node scripts/verify-desktop-launcher.mjs",
-    "verify:desktop-source": "node scripts/verify-desktop-source.mjs"
+    "verify:desktop-source": "node scripts/verify-desktop-source.mjs",
+    "sync:compatibility": "node scripts/sync-dsh-compatibility.mjs"
   },
   "keywords": [
     "dsh",

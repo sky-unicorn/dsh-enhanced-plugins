@@ -29,9 +29,9 @@
 
 ## 快速开始
 
-### 7.1.0 启动方式与兼容范围
+### 7.1.1 启动方式与兼容范围
 
-- 插件 `7.1.0` 仅支持 DSH `0.1.6-alpha.1`，源码基线为 `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`。发布标签为 `7.1.0/dsh-0.1.6-alpha.1(0d1f50007f)`。
+- 插件 `7.1.1` 最初验证的 DSH 版本为 `0.1.6-alpha.1`，源码基线为 `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`。7.1.1 新增远程兼容关系更新与包内回退机制。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
 - 本版本适配 DSH 当前的发送图标与串行 `agent/created` 生命周期，编辑、重新发送和已发送引用预览继续在原会话内完成。7 个独立功能包和 Windows Launcher 使用同一发布版本与源码基线。
 - Launcher 减少切页、滚动和功能筛选的重复布局，切换启动方式后及时刷新按钮文案；执行日志按功能只保留最新一轮，并限制界面读取量。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
@@ -43,7 +43,7 @@
 
 - Node.js 22.19.x，或 Node.js 24 及更高版本。
 - 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
-- 支持的 DSH 源码基线为 [`0.1.6-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/0d1f50007f9bca3f52b06e1c3074fa14d5fb0720)，兼容声明不包含其他版本。
+- 支持的 DSH 源码基线为 [`0.1.6-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/0d1f50007f9bca3f52b06e1c3074fa14d5fb0720)，后续验证通过的版本可追加到 [`dsh-compatibility.json`](dsh-compatibility.json)，无需发布新的插件代码。
 - 此版本 DSH 的 Session 文件锁已不再依赖 `fs-ext`。原生构建要求以目标 checkout 为准；Launcher 自身使用系统 .NET Framework 的 `csc.exe`。不要跳过依赖安装脚本。
 - Windows Launcher、原生提示音和桌面宠物需要带 Windows PowerShell 5.1 的完整 Windows 桌面版本，即 Windows 10 1607 或更高版本，或 Windows 11。所需系统能力在 Home、Pro、Education / Pro Education 与 Enterprise 上相同；Windows S 模式、IoT / 精简版本以及 Windows 10 1507、1511 不在这一基线内。已经超出微软生命周期的 Windows 功能更新只能尽力兼容，因为所需 Node.js 工具链不保证支持已停止维护的操作系统。安装器不依赖某一个特定的 `tar.exe`；其余功能可跨平台使用。
 
@@ -292,7 +292,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 - Host 读取官方 `ctx.agentTeams`；冷历史由官方 Agent Teams 运行时注册的 `agentTeam` 投影和公开 `ctx.sessionProjections.restore()` 回放。日志通过不提交恢复的 `sessionQuery.observeSession()` 读取，不激活 Agent，也不创建第二份团队状态。
 - 只轮询当前会话（展开时 1.5 秒、收起时 5 秒）；隐藏页面或断线后暂停。后续启动的成员和状态变化会自动刷新，但不会自动打开面板。点击图标、外部区域或 Escape 可收起。切换会话、重连和请求失败不会把旧数据显示为实时状态。
 - 监控插件**不会启用 Agent Teams 或 workflow**，不注册模型工具，不创建/唤醒/中断成员，不编辑任务或调度工作。查看标准工作流无需实验性 Team 包；要查看 Agent Teams 的实时或历史状态，请按[官方 Team 文档](https://github.com/deepseek-ai/deepseek-harness/tree/0d1f50007f9bca3f52b06e1c3074fa14d5fb0720/packages/experimental/agent-team)单独启用实验性运行时，使其拥有并注册投影。
-- 支持 DSH `0.1.6-alpha.1` 的源码 ABI。实验包不由本插件打包或从 npm 获取；Agent Teams 历史回放依赖运行 profile 中已挂载的官方运行时及其投影。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
+- 使用兼容表中已验证的 DSH 源码 ABI。实验包不由本插件打包或从 npm 获取；Agent Teams 历史回放依赖运行 profile 中已挂载的官方运行时及其投影。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
 - 工作流最多显示 100 次运行、合计 256 条成员记录，汇总保持完整。未记录结束的冷历史不会冒充实时运行；原步骤或轮次已关闭时标记中断。监控只读取公开记录，不读取／执行工作流脚本，普通子代理不会被伪装成实验性 Team。
 - 原生子会话目录来自公开的 `subagents.listDescendants`，通过非写入的 `sessionPersistence.inspect()` 获取自身标题与轮次结果。实际 Agent 的运行／空闲状态优先，不能用“仍驻留”冒充“正在执行”。历史筛选包含当前未运行的会话，不表示全部成功。目录最多展示 256 条、优先运行中的 Agent；超限时显示已展示／总数，筛选计数只针对已展示条目。目录不可用不会影响已有 Team／工作流记录的查看。
 
@@ -300,10 +300,10 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** 插件 `7.1.0` 支持 DSH `0.1.6-alpha.1`，源码基线见上文。聚合包、7 个独立功能包和 Windows Launcher 均使用 `7.1.0`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、7 个独立功能包和 Windows Launcher 均使用 `7.1.1`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
-- **安装前检查：** 安装脚本和 Launcher 插件更新流程读取根 `package.json` 的 `dshEnhanced.compatibility`，在构建、停止服务或修改 profile 之前核对 DSH 版本。允许的精确版本由 `dshVersion` 加可选的 `additionalDshVersions` 声明，peerDependencies 声明相同的支持版本。版本不受支持、声明缺失或格式错误、插件包版本混杂时停止；版本相同但 commit 不在 `sourceCommit` 和 `additionalSourceCommits` 中、源码存在本地修改或 ZIP 无 Git 信息时显示“未经验证”警告。
+- **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件。每次检查重新获取，不覆盖本地回退文件。有效的远程表具有优先权：未列出当前插件版本、对应 DSH 列表为空或 DSH 版本不受支持时直接停止，不回退旧声明。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。
 - **提供方来源：** `subagent-codex`、`subagent-claude-code` 的 Loader ID 不变，改由本包的 `sub-agent/codex`、`sub-agent/claude-code` 入口转出官方提供方；独立包对应 `./codex`、`./claude-code`。这样新版 DeepSeek 请求的活动插件清单能解析其包来源，无需关闭该功能或修改 DSH。
 - **独立构建：** 各功能发布物携带自身源码和构建脚本，可在没有 sibling DSH checkout 的目录执行 `npm install --legacy-peer-deps`、`npm run prepare` 和 `npm pack`；运行时仍由匹配版本的 DSH 提供公开 peer 服务。Windows Launcher 原生重建需要 Windows 与 .NET Framework 4.x 编译器。
@@ -318,6 +318,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 ```
 
 需要旧版 DSH 时应选择其对应的插件版本，不要仅删除 peer dependency 检查或强行安装新版插件。
+
+验证新版 DSH 仍兼容后，只需编辑根目录 [`dsh-compatibility.json`](dsh-compatibility.json)：保持 `schemaVersion: 1`，在 `releases` 中找到精确的 `pluginVersion`，向其 `dsh` 数组追加 `{ "version": "<精确 DSH 版本>", "commits": ["<完整的小写 40 位 Git 哈希>"] }`。若只有提交改变，在该 DSH 版本的 `commits` 中追加即可。保留旧插件版本记录，以服务已有安装器。将此文件推送到 GitHub `master` 后，使用新安装器的用户无需更新插件代码即可获取新对应关系；旧安装器需要先升级到这套机制。GitHub 缓存可能造成短暂延迟。
+
+`peerDependencies` 仍是精确的包管理器声明，但由此表自动生成。`npm run build`（或 `npm run sync:compatibility`）按包内表同步各源码 manifest 及根锁文件元数据；安装器在构建后按本次选中的远程／本地表再次同步，`-SkipBuild` 同样适用。这些生成的改动可能出现在本地工作区，但只更新兼容关系时只需提交 JSON 文件，无需手工维护各包的依赖版本；插件版本号、实现和其他依赖字段不变。直接使用 `dsh plugin add` 或 Desktop 导入会绕过本安装器，采用发布物里的 peer 快照，需按更新后的表重新构建／打包后再走该路径。
+
+默认端点为 [GitHub 原始对应关系文件](https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/master/dsh-compatibility.json)。可用 `DSH_COMPATIBILITY_URL` 指向 HTTPS 镜像，仅本机回环测试服务器允许 HTTP。文件只能提供数据，不能改变代码、包下载地址或构建命令。`-CheckCompatibility` 保持只读。
+
 
 ## 配置参考
 

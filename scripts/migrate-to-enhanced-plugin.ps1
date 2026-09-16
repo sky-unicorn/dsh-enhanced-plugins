@@ -44,57 +44,18 @@ if ($CheckCompatibility -and ($UninstallLauncher -or $ListFeatures)) {
   throw '-CheckCompatibility cannot be combined with -UninstallLauncher or -ListFeatures.'
 }
 
+. (Join-Path $PSScriptRoot 'dsh-compatibility.ps1')
+
 function Assert-DshCompatibility {
   param(
     [Parameter(Mandatory = $true)][object] $PluginManifest,
     [Parameter(Mandatory = $true)][string] $Checkout,
-    [Parameter(Mandatory = $true)][object[]] $Catalog
+    [Parameter(Mandatory = $true)][object[]] $Catalog,
+    [Parameter(Mandatory = $true)][object] $Compatibility
   )
 
-  # The aggregate manifest is the release's sole compatibility authority.
-  # Check before builds, profile commands, service stops, or companion writes.
-  $metadata = $PluginManifest.PSObject.Properties['dshEnhanced']
-  $compatibility = if ($null -eq $metadata) { $null } else { $metadata.Value.PSObject.Properties['compatibility'] }
-  if ($null -eq $compatibility) {
-    throw 'Plugin release has no dshEnhanced.compatibility declaration; cannot safely install it.'
-  }
-  $versionProperty = $compatibility.Value.PSObject.Properties['dshVersion']
-  $commitProperty = $compatibility.Value.PSObject.Properties['sourceCommit']
-  if ($null -eq $versionProperty -or $versionProperty.Value -isnot [string] -or
-      $versionProperty.Value -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' -or
-      $null -eq $commitProperty -or $commitProperty.Value -isnot [string] -or
-      $commitProperty.Value -notmatch '^[0-9a-f]{40}$') {
-    throw 'Plugin release has an invalid DSH compatibility declaration.'
-  }
-  $expectedVersion = [string] $versionProperty.Value
-  $supportedVersions = @($expectedVersion)
-  $additionalVersions = $compatibility.Value.PSObject.Properties['additionalDshVersions']
-  if ($null -ne $additionalVersions) {
-    if ($additionalVersions.Value -isnot [array]) {
-      throw 'Plugin release has an invalid additionalDshVersions declaration.'
-    }
-    foreach ($candidate in $additionalVersions.Value) {
-      if ($candidate -isnot [string] -or $candidate -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' -or
-          $supportedVersions -ccontains $candidate) {
-        throw 'Plugin release has an invalid additionalDshVersions declaration.'
-      }
-      $supportedVersions += $candidate
-    }
-  }
-  $expectedCommit = [string] $commitProperty.Value
-  $verifiedCommits = @($expectedCommit)
-  $additionalCommits = $compatibility.Value.PSObject.Properties['additionalSourceCommits']
-  if ($null -ne $additionalCommits) {
-    if ($additionalCommits.Value -isnot [array]) {
-      throw 'Plugin release has an invalid additionalSourceCommits declaration.'
-    }
-    foreach ($commit in $additionalCommits.Value) {
-      if ($commit -isnot [string] -or $commit -notmatch '^[0-9a-f]{40}$') {
-        throw 'Plugin release has an invalid additionalSourceCommits declaration.'
-      }
-      $verifiedCommits += $commit
-    }
-  }
+  # Resolve once before builds, profile commands, service stops or companion writes.
+  $supportedVersions = @($Compatibility.dsh | ForEach-Object { $_.version })
   foreach ($feature in $Catalog) {
     if ($feature.Manifest.version -ne $PluginManifest.version) {
       throw "Mixed plugin release: '$($feature.PackageName)' is $($feature.Manifest.version), expected $($PluginManifest.version). Re-extract or update the complete plugin release."
@@ -114,6 +75,9 @@ function Assert-DshCompatibility {
   if ($supportedVersions -cnotcontains $version.Value) {
     throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $($supportedVersions -join ' or '), but '$Checkout' is $($version.Value). Use a supported DSH release or a matching plugin release. Nothing was installed or removed."
   }
+  $target = @($Compatibility.dsh | Where-Object { $_.version -ceq $version.Value })[0]
+  $verifiedCommits = @($target.commits)
+  $expectedCommit = $verifiedCommits -join ', '
   Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $($version.Value)."
 
   $git = Get-Command -Name 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -1229,7 +1193,8 @@ if ($ListFeatures) {
 $checkoutCandidate = if ($DshCheckout -ne '') { $DshCheckout }
   else { Join-Path $pluginRoot '..\deepseek-harness' }
 $checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
-Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -Catalog $catalog
+$compatibility = Resolve-DshCompatibility -RepositoryRoot $pluginRoot -PluginVersion $pluginManifest.version
+Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -Catalog $catalog -Compatibility $compatibility
 if ($CheckCompatibility) { return }
 
 $requestedFeatures = @(
@@ -1279,6 +1244,13 @@ if (-not $SkipBuild) {
     throw "The external coordinator marked the source as built, but runtime entries are missing: $($missingPreparedEntries -join ', ')."
   }
 }
+
+# Builds use the bundled table. Apply the already-resolved remote table afterward,
+# including -SkipBuild updates, so stale peer declarations cannot veto installation.
+$node = Get-Command -Name 'node' -CommandType Application -ErrorAction Stop | Select-Object -First 1
+$versions = @($compatibility.dsh | ForEach-Object { $_.version }) -join ','
+& $node.Source (Join-Path $PSScriptRoot 'sync-dsh-compatibility.mjs') $pluginRoot $versions
+if ($LASTEXITCODE -ne 0) { throw 'Cannot synchronize DSH peer dependencies; nothing was installed or removed.' }
 
 [string] $executable = ''
 [string[]] $prefixArguments = @()

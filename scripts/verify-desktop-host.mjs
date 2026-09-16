@@ -10,8 +10,11 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepseek-harness'))
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const dshVersion = JSON.parse(readFileSync(join(dsh, 'package.json'), 'utf8')).version
-const compatibility = manifest.dshEnhanced.compatibility
-assert.ok([compatibility.dshVersion, ...(compatibility.additionalDshVersions ?? [])].includes(dshVersion), 'Unsupported DSH checkout')
+// Use the same remote-first preflight as installation, including offline fallback.
+const preflight = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+  '-File', join(root, 'scripts/migrate-to-enhanced-plugin.ps1'), '-DshCheckout', dsh, '-CheckCompatibility'],
+{ cwd: root, windowsHide: true, encoding: 'utf8', timeout: 30_000 })
+assert.equal(preflight.status, 0, `${preflight.stdout}\n${preflight.stderr}`)
 assert.ok(existsSync(join(dsh, 'apps/desktop-host/lib/index.js')), 'Build the required DSH checkout first')
 
 if (process.argv[2] !== '--child') {

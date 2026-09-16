@@ -12,6 +12,10 @@ export async function build() {
   const shared = resolve(root, '../../src/agent-team-monitor')
   let inRepository = false
   try { inRepository = JSON.parse(await readFile(resolve(root, '../../package.json'), 'utf8')).name === 'dsh-enhanced-plugins' } catch {}
+  if (inRepository) {
+    const { syncDshPeers } = await import('../../scripts/sync-dsh-compatibility.mjs')
+    syncDshPeers(resolve(root, '../..'))
+  }
   const source = inRepository && existsSync(shared) ? shared : resolve(root, 'src')
   if (source === shared) {
     // This is the package's generated source snapshot, not the canonical source.

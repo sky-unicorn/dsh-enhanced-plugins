@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as esbuild from 'esbuild'
 import { buildClient } from './scripts/build-client.mjs'
 import { buildWindowsLauncher } from './packages/windows-launcher/build.mjs'
+import { syncDshPeers } from './scripts/sync-dsh-compatibility.mjs'
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url))
 const AGGREGATE_HOST_ENTRIES = [
@@ -172,6 +173,7 @@ async function buildTarget(target) {
 }
 
 async function main() {
+  syncDshPeers(ROOT)
   // New self-contained targets declare their build beside the authoritative
   // install identity. Installers/Launcher discover the same package manifest.
   const standalone = []
