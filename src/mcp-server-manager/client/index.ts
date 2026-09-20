@@ -31,7 +31,7 @@ export type {
 } from './mcp-card-controller.ts'
 export type {
   McpConfigSnapshot, McpConfigStore, McpFormatIssue, McpFormatIssueCode, McpFormatReport,
-  McpImportIssue, McpImportIssueCode, McpImportSource, McpImportSummary, McpWireOp,
+  McpImportIssue, McpImportIssueCode, McpImportSource, McpImportSummary, McpServerFieldOp, McpWireOp,
 } from './mcp-config-store.ts'
 export { collectArgs, collectPairs, isValidHttpUrl, planOps, recordsEqual, SERVER_NAME_PATTERN } from './mcp-card-controller.ts'
 

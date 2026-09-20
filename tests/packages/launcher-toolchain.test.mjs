@@ -26,6 +26,7 @@ function fixture(t) {
   write(`nvm/v${version}/node_modules/npm/bin/npx-cli.js`, 'console.log("10.9.0")')
   write('dsh/package.json', { name: '@deepseek-ai/dsh-root', engines: { node: `^${version}` }, packageManager: 'npm@10.9.0' })
   write('dsh/apps/cli/src/bin.ts', '')
+  write('dsh/apps/cli/lib/bin.js', '')
   write('dsh/node_modules/tsx/dist/esm/index.mjs', '')
   write('dsh/tsconfig.json', '{}')
   const env = { ...process.env, NVM_HOME: path.join(root, 'nvm'), NVM_DIR: '', APPDATA: root, LOCALAPPDATA: root, PATH: '' }
@@ -62,6 +63,8 @@ test('matches real Node, reports versions, isolates process environment and leav
   assert.equal(plan.summary.nodeVersion, f.version)
   assert.equal(plan.summary.managerVersion, '10.9.0')
   assert.equal(plan.summary.nodePath, f.node)
+  assert.deepEqual(plan.args, [path.join(f.request.sourceDirectory, 'apps/cli/lib/bin.js')])
+  assert.equal(plan.environment.TSX_TSCONFIG_PATH, undefined)
   assert.ok(plan.environment.NPM_CONFIG_PREFIX.startsWith(f.request.sandboxHome + path.sep))
   assert.ok(plan.environment.COREPACK_HOME.startsWith(f.request.sandboxHome + path.sep))
   assert.equal(process.env.PATH, parentPath)
@@ -152,6 +155,7 @@ test('source builds share Overview selection before dependencies exist', t => {
   const overview = inspectToolchain(f.request, f.env)
   fs.unlinkSync(path.join(f.root, 'dsh/node_modules/tsx/dist/esm/index.mjs'))
   fs.unlinkSync(path.join(f.root, 'dsh/apps/cli/src/bin.ts'))
+  fs.unlinkSync(path.join(f.root, 'dsh/apps/cli/lib/bin.js'))
   const build = inspectToolchain({ ...f.request, mode: 'build' }, f.env)
   assert.equal(build.summary.phase, 'ready', build.summary.message)
   assert.equal(build.summary.nodePath, overview.summary.nodePath)
@@ -159,6 +163,16 @@ test('source builds share Overview selection before dependencies exist', t => {
   assert.equal(build.home, overview.home)
   assert.deepEqual(build.args, [])
   assert.equal(inspectToolchain(f.request, f.env).summary.phase, 'error')
+  assert.match(inspectToolchain(f.request, f.env).summary.message, /CLI 构建产物缺失/)
+})
+
+test('checkout CLI uses built output without requiring tsx and refuses a source fallback', t => {
+  const f = fixture(t)
+  fs.unlinkSync(path.join(f.root, 'dsh/node_modules/tsx/dist/esm/index.mjs'))
+  assert.deepEqual(resolveProject(f.request).args, [path.join(f.root, 'dsh/apps/cli/lib/bin.js')])
+  fs.unlinkSync(path.join(f.root, 'dsh/apps/cli/lib/bin.js'))
+  f.write('dsh/node_modules/tsx/dist/esm/index.mjs', '')
+  assert.throws(() => resolveProject(f.request), /CLI 构建产物缺失/)
 })
 
 test('manual Node selection uses the exact installed version even when a higher candidate exists', t => {

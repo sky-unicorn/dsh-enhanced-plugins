@@ -28,9 +28,11 @@
 
 ## 快速开始
 
-### 7.2.2：适配 DSH 0.1.6-alpha.2
+### 7.2.3：适配 DSH 0.1.6-alpha.2
 
-- 插件 `7.2.2` 验证的 DSH 版本为 `0.1.6-alpha.2`，源码基线为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。远端表缺少当前插件或 DSH 版本时，安装器会继续查包内兼容表。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
+- 修复 Launcher 启动 DSH 后工具调用出现 `Cannot read properties of undefined (reading 'prepare')`：绑定源码 checkout 时，Web、Headless 和 Profile 通过构建后的 `apps/cli/lib/bin.js` 启动，避免 `tsx` 混用源码与构建模块。更新后需重新安装 Launcher 并重启 Web。
+
+- 插件 `7.2.3` 验证的 DSH 版本为 `0.1.6-alpha.2`，源码基线为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。远端表缺少当前插件或 DSH 版本时，安装器会继续查包内兼容表。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
 - `model-input-types` 已退役：官方 DSH 在“设置 → 模型 → 自定义设置 → 模型选项”中提供逐模型的“文本／图片”输入类型设置。更新安装会移除旧独立包；已有模型设置由官方设置系统保留。
 - MCP 配置位于侧栏“插件”页所属组件的配置入口；离开页面时丢弃未保存草稿。独立安装和聚合安装均提供入口。
 - 团队监控通过新版 `mainView` 会话引用识别主会话，成员跳转使用官方 `uiWorkspace.openSession()`；侧栏独立保留的子会话不会改变主会话监控。6 个独立功能包和 Windows Launcher 使用同一发布版本与源码基线。
@@ -111,6 +113,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 3. 成功后再移除聚合包、未选择的同仓库功能和已声明冲突的旧包。
 4. 检测并清理已经退役的文件引用插件。
 
+安装器会先将所选 bundle 打包，再安装到 Profile 内，避免源码目录链接使 DSH 构建入口无法解析插件依赖。按内容哈希命名的 tarball 保存在该 Profile 的 `.dsh-enhanced-bundles` 目录，供 pnpm 后续重装使用；请勿在仍被 Profile 引用时删除。重新安装会替换旧的源码链接。
+
 ### Launcher 插件管理
 
 安装脚本会把 DSH checkout、本项目源码路径、Git remote/ref、源码 revision 和每个已管理 Profile 的目标集合写入 `%LOCALAPPDATA%\DeepSeekHarness\Launcher\install-state.json`。控制中心的“插件管理”页据此提供：
@@ -118,7 +122,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 - 从各 `packages/*/package.json` 动态生成的功能列表，新增普通功能无需修改 Launcher；
 - 首次默认全选、按 Profile 选择、单项安装/卸载、历史聚合包迁移；
 - Git 工作区先按插件远端 URL 解析 Windows 系统代理；系统选择代理时，仅通过 Git 单次命令配置应用于带退避重试的安全 `fetch`，操作结束后自动失效且不修改既有 Git 配置。连接重置时自动改用 HTTP/1.1 重试，成功后仅在本地执行 `merge --ff-only`，避免 `pull` 再次访问网络；或没有 Git 时下载准确 commit 的源码 ZIP；无网络时也可手动绑定源码目录或导入源码 ZIP；
-- 只有源码 revision 或目标功能发生变化时，才在 `sources/runtime-*` 持久化隔离快照中执行 `npm ci`、正式 `npm run build` 和 runtime entry 校验；Profile 始终链接到仍然存在的活动快照，未被任何 Profile 引用的旧快照会安全清理；开发期的全仓类型检查仍在源码目录运行，不会因 sibling DSH 类型路径阻止安装；npm 的 stderr 警告保留在日志中，是否失败只看真实退出码；全部完成后才停止 Launcher-owned DSH 并提交更改；
+- 只有源码 revision 或目标功能发生变化时，才在 `sources/runtime-*` 持久化隔离快照中执行 `npm ci`、正式 `npm run build` 和 runtime entry 校验；将构建后的包打成 tarball 安装到 Profile 内，未被任何 Profile 引用的旧源码快照会安全清理；开发期的全仓类型检查仍在源码目录运行，不会因 sibling DSH 类型路径阻止安装；npm 的 stderr 警告保留在日志中，是否失败只看真实退出码；全部完成后才停止 Launcher-owned DSH 并提交更改；
 - Launcher 哈希变化时由外部协调器切换版本、等待新版就绪、失败回滚，并恢复此前运行的 DSH；DSH 连续保持 Launcher-owned 状态 15 秒后才报告恢复成功；
 - Launcher 重启后继续跟踪仍在运行的协调器；异常中断或状态文件损坏时保留日志/备份并从实际 Profile inventory 重新读取状态。
 
@@ -138,6 +142,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 - **Web 控制：** 查看状态，启动、打开、重启或停止 Web；识别外部端口服务并拒绝越权接管。即使关闭了启动时自动打开浏览器，“打开页面”也会使用当前 Launcher-owned DSH 进程的认证入口，启动 token 不会写入 Launcher 日志。
 - **任务与 Profile：** 运行 Headless 单次任务和后台 Profile，统一保存 UTF-8 结果与日志。
+- **CLI 启动入口：** 绑定源码 checkout 时使用已构建的 `apps/cli/lib/bin.js`。NVM 运行参数和系统模式的托管启动脚本均使用此入口；构建产物缺失时提示先构建 DSH。更新或修改 DSH 源码后，需要完成构建再启动。源码构建与官方桌面启动仍使用各自的流程。
 - **Web 运行环境：** 概览在标题旁提供紧凑的“浏览器／源码桌面”分段切换，将服务状态与主要操作合并在同一张浅色卡片内，下方依次展示运行环境和启动选项。切换支持左右方向键，窄窗口中的操作按钮会缩排为一行或均衡的两行。运行环境展示 NVM 沙盒/系统模式、Node 与 npm/pnpm/Yarn 的需求及实际版本、检测来源和准备/失败状态。“Node 版本选择”提供“自动选择（最高兼容版本）”和已安装的 NVM 版本；选择后自动保存，供后续 Web／源码桌面启动、DSH 构建和插件源码操作使用，旧设置默认自动选择。“重新检测”可刷新已安装版本列表。手动版本仍须满足项目要求，未安装或不兼容时直接报错，不自动换版本；已保存但被卸载的版本会标注“未安装”，可重新选择或切回自动。运行中显示本次启动记录，切换选择不会重启已有进程，外部服务版本不会被猜测。
 
   每次启动 Web（含托盘、重启、登录自动启动）都会检测 nvm-windows。已安装时，从绑定的 DSH checkout 或可识别的 npm DSH shim 读取元数据：Node 按 `.nvmrc`、`.node-version`、`volta.node`、`engines.node` 选择，并始终满足 `engines.node`，自动模式使用 NVM 已安装的最高匹配版本，手动模式只使用已保存的版本。包管理器优先读取 `packageManager`/`devEngines.packageManager`，再参考 Volta、engines 和锁文件；锁文件只标识工具种类或 Yarn 主版本系列，不被当作精确版本。缺少的包管理器在首次启动时下载到 Launcher 的 `sandbox` 目录，后续复用；声明冲突会明确报错。
@@ -228,12 +233,14 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 ![MCP 服务器管理](assets/readme/mcp-server-manager.png)
 
-1. 添加唯一名称，选择 `stdio` 或 Streamable HTTP。
-2. `stdio` 配置命令、参数、工作目录和环境变量；HTTP 配置 HTTP(S) URL 与请求头。
+1. 点击“添加服务器”或已有服务器的“编辑”，在弹窗中设置名称、连接方式和配置；取消或按 Esc 可关闭弹窗并放弃其中的修改。
+2. `stdio` 配置命令、参数、工作目录和环境变量；HTTP 配置 HTTP(S) URL 与请求头。两种连接方式均可设置工具调用超时。
 3. 也可由 Host 一键导入本机 Claude Code 与 Codex 配置；重复项会跳过，无法安全转换的项目会说明原因。
-4. 检查卡片顶部的格式审计后保存；Host 按服务器分别启动、更新或卸载连接。
+4. 在弹窗中点击“添加”或“应用修改”将该服务器放入页面草稿；检查卡片顶部的格式审计后，再点击页面的“保存”。Host 按服务器分别启动、更新或卸载连接。
 
-浏览器读取已有服务器时会掩码环境变量与请求头；未修改的机密不会从脱敏快照重建或覆盖。
+浏览器读取已有服务器时会掩码环境变量与请求头；编辑时保留掩码即可沿用原值，输入新值可替换，移除对应行可删除。修改变量或请求头名称时需要同时输入新值。Host 在未脱敏的原配置上应用修改，未修改的机密不会从脱敏快照重建或覆盖。切换连接方式会舍弃旧方式的环境变量或请求头。
+
+直接写在 `cordis.yml` 组合层的服务器可以编辑同名字段；由于 DSH 设置的继承规则，不能从本页面改名或移除，Host 会在写入前拒绝这些操作。
 
 草稿绑定开始编辑时的配置版本。其他页面或外部编辑更新配置后，旧草稿保存会被拒绝，不会删除对方新增的服务器；请离开页面丢弃草稿，再重新打开、查看最新配置后编辑。只有点击保存才提交 MCP 草稿。连接中断时会退出保存状态并保留草稿，写入失败后重新读取 Host 配置；较早的读取响应不会覆盖较新的刷新结果。
 
@@ -292,7 +299,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.2`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.3`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件；远端有效但没有匹配当前插件及 DSH 版本的记录时也会检查包内文件。只有两处都不支持当前 DSH 版本才拒绝安装。每次检查重新获取，不覆盖本地回退文件。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
@@ -397,6 +404,8 @@ Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home �
 `npm run verify:desktop-host` 在隔离目录中加载官方 Desktop Host 与固定插件发布快照，并验证实际 Client 首页响应；它不构建或修改 DSH checkout。
 
 `npm run verify:launcher` 在临时目录中验证编译后的 Launcher 和 PowerShell 命令引擎，包括清理、安装、构建的顺序、失败即停止，以及真实 pnpm 对过期锁文件的拒绝。需要 Windows，并在 `PATH` 中提供 Git 和 pnpm；不会清理或重建真实 DSH checkout。
+
+`npm run verify:launcher-tools` 将 Launcher 与 MCP 管理包安装到临时目录，通过真实 Launcher 启停 DSH，再由本地测试模型调用官方 `read` 工具并核对文件内容。它覆盖系统模式和本机有 NVM 时的沙盒模式，无需真实模型或 MCP 密钥。可将 `DSH_VERIFY_MANAGER_ROOT` 指向已有 pnpm package 目录，复制到临时缓存后由运行时校验版本，避免验证被首次下载耗时影响。
 
 `npm run verify:launcher-ui` 在隔离目录中编译并验证真实 WinForms 控件：滚动、筛选、批量选择、页面与模式切换、重复布局、UTF-8 日志读取上限及已移除控件的释放。它使用约 64 MB 的日志测量切页耗时，并检查五个页面在普通、紧凑、宽屏与 150% 缩放下的布局；截图保存在 `.verify-dsh-home/ui-performance/`。输出的耗时是界面处理与离屏绘制基准，不代表显示器实际帧率，也不使用易受机器负载影响的固定耗时阈值判定通过。
 

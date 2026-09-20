@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
 import semver from 'semver'
 
 const exists = file => fs.existsSync(file)
@@ -44,11 +43,12 @@ export function resolveProject(request) {
       }
       return { root, manifest, args: [], env: { TSX_TSCONFIG_PATH: path.join(root, 'tsconfig.json') } }
     }
-    const loader = path.join(root, 'node_modules/tsx/dist/esm/index.mjs')
-    const entry = path.join(root, 'apps/cli/src/bin.ts')
-    if (!exists(loader) || !exists(entry)) throw new Error('DSH 源码缺少 tsx 或 CLI 入口，请先安装依赖。')
-    return { root, manifest, args: ['--import', pathToFileURL(loader).href, entry],
-      env: { TSX_TSCONFIG_PATH: path.join(root, 'tsconfig.json') } }
+    // Keep the CLI and dynamically loaded plugins on the same compiled module
+    // graph. DSH 0.1.6-alpha.2 mixes src/lib identities under tsx, breaking
+    // the Symbol-keyed tool scheduler before a tool body can run.
+    const entry = path.join(root, 'apps/cli/lib/bin.js')
+    if (!exists(entry)) throw new Error('DSH CLI 构建产物缺失（apps/cli/lib/bin.js），请先在 DSH 源码页执行构建。')
+    return { root, manifest, args: [entry], env: {} }
   }
   const command = path.resolve(request.dshCommand)
   const base = path.dirname(command)

@@ -30,6 +30,8 @@ export interface McpWireStdioServer {
   env?: Record<string, string>
   /** Working directory for the child process. */
   cwd?: string
+  /** Per-tool-call timeout in milliseconds. */
+  toolCallTimeoutMs?: number
 }
 
 /** One Streamable HTTP server as the mutate wire accepts it. */
@@ -40,20 +42,29 @@ export interface McpWireHttpServer {
   url: string
   /** Additional headers attached to MCP requests. */
   headers?: Record<string, string>
+  /** Per-tool-call timeout in milliseconds. */
+  toolCallTimeoutMs?: number
 }
 
 /** One server definition a `set` op may write. */
 export type McpWireServer = McpWireStdioServer | McpWireHttpServer
 
-/** One `mcpConfig/mutate` path op. */
-export interface McpMutateWireOp {
-  /** The edit to perform. */
-  op: 'set' | 'unset'
-  /** Dotted path inside the `mcp` section, starting at a field name. */
-  path: readonly string[]
-  /** The server definition a `set` writes. */
-  value?: McpWireServer
-}
+/** One field edit applied to an existing unmasked server on the Host. */
+export type McpServerFieldOp =
+  | { op: 'set'; path: readonly string[]; value: unknown }
+  | { op: 'unset'; path: readonly string[] }
+
+/** One `mcpConfig/mutate` server edit. */
+export type McpMutateWireOp =
+  | { op: 'set'; path: readonly string[]; value: McpWireServer }
+  | { op: 'unset'; path: readonly string[] }
+  | {
+    op: 'edit'
+    path: readonly string[]
+    nextName: string
+    changes: readonly McpServerFieldOp[]
+    replacement?: McpWireServer
+  }
 
 /** One `mcpConfig/mutate` request. */
 export interface McpMutateRequest {

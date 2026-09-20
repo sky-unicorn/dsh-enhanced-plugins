@@ -199,6 +199,13 @@
   white-space: nowrap;
 }
 
+.rowActions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
 .remove {
   flex: none;
   color: var(--dsw-alias-state-error-primary);
@@ -333,42 +340,29 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.form {
-  margin-top: 10px;
-  padding: 0 12px 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
-  background: var(--dsw-alias-bg-layer-3);
+.serverDialog {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 48px);
 }
 
-.formHeading {
+.serverDialogContent {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.serverForm {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 0 -12px;
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  min-width: 0;
 }
 
-.formTitle {
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 600;
+.serverForm .field:first-child {
+  padding-top: 0;
 }
 
-.formSubtitle {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 17px;
-}
-
-.formActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--dsw-alias-border-l2);
+.serverForm .field:last-child {
+  padding-bottom: 0;
 }
 
 .listRow {
@@ -413,6 +407,11 @@
 
   .transportIcon {
     display: none;
+  }
+
+  .rowActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .listRow {

@@ -28,9 +28,11 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 ## Quick start
 
-### 7.2.2: DSH 0.1.6-alpha.2 compatibility
+### 7.2.3: DSH 0.1.6-alpha.2 compatibility
 
-Plugin `7.2.2` was validated against DSH `0.1.6-alpha.2` at source commit `ddefc45fbc7f8e46dd73185e68295696d1297887`. Current supported pairings are maintained in [`dsh-compatibility.json`](dsh-compatibility.json). If the remote table lacks this plugin version or DSH version, the installer checks the bundled table before refusing installation.
+- Fix Launcher-started DSH tool calls failing with `Cannot read properties of undefined (reading 'prepare')`: source checkouts now launch Web, Headless, and profiles through the built `apps/cli/lib/bin.js`, avoiding mixed source/build module identities under `tsx`. Reinstall Launcher and restart Web after updating.
+
+Plugin `7.2.3` was validated against DSH `0.1.6-alpha.2` at source commit `ddefc45fbc7f8e46dd73185e68295696d1297887`. Current supported pairings are maintained in [`dsh-compatibility.json`](dsh-compatibility.json). If the remote table lacks this plugin version or DSH version, the installer checks the bundled table before refusing installation.
 
 The `model-input-types` feature is retired because DSH now provides per-model Text and Image controls under Settings → Models → Custom settings → Model options. An update removes the old standalone bundle while preserving model settings in DSH. MCP configuration remains on the bundle row in sidebar Plugins and discards unsaved drafts when its page closes. Team Monitor follows the main Conversation through `mainView` references and opens members through `uiWorkspace.openSession()`, independently of sidebar-retained children. All six bundles and Windows Launcher share this release. Typecheck rejects DSH artifacts missing the new configuration and session-reference APIs.
 
@@ -112,6 +114,8 @@ Common combinations can replace the `-Features` value in that command:
 3. Only then removes the aggregate package, unselected sibling features, and declared legacy conflicts.
 4. Detects and cleans up the retired file-reference plugin.
 
+The installer packs selected bundles before installing them inside the Profile, avoiding source-directory links that prevent the built DSH entry from resolving plugin dependencies. Content-addressed tarballs remain in the Profile's `.dsh-enhanced-bundles` directory for future pnpm reinstalls; retain archives while the Profile references them. Reinstalling replaces legacy source links.
+
 ### Launcher plugin management
 
 The source installer records the DSH checkout, this repository's source path, Git remote/ref, source revision, and each managed Profile's desired set in `%LOCALAPPDATA%\DeepSeekHarness\Launcher\install-state.json`. The control center's **Plugin Management** page then provides:
@@ -119,7 +123,7 @@ The source installer records the DSH checkout, this repository's source path, Gi
 - a dynamic feature catalog generated from `packages/*/package.json`, so normal new features do not require Launcher changes;
 - first-use default selection, per-Profile desired state, individual install/removal, and aggregate-package migration;
 - Windows system-proxy resolution for the plugin remote URL before a safe Git `fetch`; when Windows selects a proxy, a command-scoped Git setting applies it to every backoff attempt and expires afterward without changing existing Git configuration. Connection-reset retries switch to HTTP/1.1, followed only by a local `merge --ff-only` so `pull` does not make a second network request; when Git is unavailable, Launcher downloads an exact-commit source ZIP, while an extracted source directory or manual source ZIP can be bound without network access;
-- `npm ci`, a production `npm run build`, and runtime-entry validation in a persistent isolated `sources/runtime-*` snapshot only when the source revision or desired feature set changed; Profiles always link to a retained active snapshot, while snapshots no longer referenced by any Profile are safely removed; repository-wide development typechecks remain a source-checkout concern so sibling DSH type paths do not block an isolated install; native stderr warnings remain in the log while failure is determined by the real process exit code; Launcher-owned DSH is stopped only after these checks pass;
+- `npm ci`, a production `npm run build`, and runtime-entry validation in a persistent isolated `sources/runtime-*` snapshot only when the source revision or desired feature set changed; built bundles are packed and installed inside the Profile, while old source snapshots no longer referenced by any Profile are safely removed; repository-wide development typechecks remain a source-checkout concern so sibling DSH type paths do not block an isolated install; native stderr warnings remain in the log while failure is determined by the real process exit code; Launcher-owned DSH is stopped only after these checks pass;
 - an external coordinator that switches Launcher versions only when the executable hash changes, waits for readiness, rolls back failures, and restores DSH when appropriate; restoration is reported successful only after DSH remains Launcher-owned for 15 consecutive seconds;
 - recovery of a still-running or interrupted coordinator after Launcher restarts, plus preservation and partial reconstruction when install state is damaged.
 
@@ -139,6 +143,7 @@ A Windows control center outside the Cordis plugin tree for local DSH users who 
 
 - **Web control:** inspect status, start, open, restart, or stop Web; identify services already bound to the port without taking ownership of them. Even when browser auto-open is disabled, **Open Page** uses the authentication entry for the current Launcher-owned DSH process, and launch tokens are not written to Launcher logs.
 - **Tasks and profiles:** run one-shot Headless tasks and background profiles with unified UTF-8 results and logs.
+- **CLI entry:** bound source checkouts use the built `apps/cli/lib/bin.js`. Both NVM runtime arguments and the managed system-mode launcher script use this entry; missing output reports that DSH must be built first. Build after updating or editing DSH source before starting it. Source builds and official Desktop retain their own command paths.
 - **Web runtime:** Overview places a compact Browser / Source Desktop selector beside the title and combines service status with primary actions in one light card. Runtime and startup options follow below. The selector supports Left/Right keys; actions fit one row or a balanced two-row layout in narrow windows. The runtime card shows NVM sandbox/system mode, required and actual Node and npm/pnpm/Yarn versions, detection sources, and preparation/failure status. The Node version selector offers Automatic (highest compatible version) and the installed NVM versions. Choosing a version saves it for subsequent Web/Desktop starts, DSH builds, and plugin source operations; existing settings default to Automatic. Refresh updates the installed-version list. A manual version must still satisfy project requirements; a missing or incompatible selection fails without switching to another Node. Missing saved versions remain visible so you can choose another version or return to Automatic. Running versions come from the current launch record; changing the selection does not restart an existing process, and external service versions are never inferred.
 
   Every Web start, including tray, restart, and login startup, detects nvm-windows. When installed, Launcher reads the bound DSH checkout or a recognizable npm DSH shim. Node selection follows `.nvmrc`, `.node-version`, `volta.node`, then `engines.node`, always respecting `engines.node`, and chooses the highest matching installed NVM version in Automatic mode; manual mode uses only the saved version. Manager selection prefers `packageManager`/`devEngines.packageManager`, then Volta, engines, and lockfiles. Lockfiles identify the tool or Yarn generation, not an exact version. Missing manager versions download into Launcher's `sandbox` directory on first start and are reused; conflicting declarations produce an error.
@@ -229,12 +234,14 @@ The page displays index generation time. An index older than 24 hours receives a
 
 ![MCP server manager](assets/readme/mcp-server-manager.png)
 
-1. Add a unique name and choose `stdio` or Streamable HTTP.
-2. Configure command, arguments, working directory, and environment for `stdio`; configure an HTTP(S) URL and headers for HTTP.
+1. Open Add server or an existing server's Edit action to set its name, transport, and configuration in a dialog. Cancel or Escape closes the dialog and drops its form changes.
+2. Configure command, arguments, working directory, and environment for `stdio`; configure an HTTP(S) URL and headers for HTTP. Both transports support a tool call timeout.
 3. The Host can import local Claude Code and Codex configurations in one pass. Duplicates are skipped and unsafe conversions report a reason.
-4. Review the format audit at the top of the card and save. The Host starts, updates, or unloads each connection independently.
+4. Choose Add or Apply changes in the dialog to stage that server, review the format audit at the top of the card, then select Save on the page. The Host starts, updates, or unloads each connection independently.
 
-Environment and header values are masked when existing servers reach the browser. Unchanged secrets are not reconstructed from, or overwritten by, redacted snapshots.
+Environment and header values are masked when existing servers reach the browser. Keep a masked value to preserve it, enter a new value to replace it, or remove its row to delete it. Changing an environment or header key also requires a new value. The Host applies edits to the unmasked definition; unchanged secrets are not reconstructed from, or overwritten by, redacted snapshots. Switching transport discards the old transport's environment or headers.
+
+Servers declared directly in the `cordis.yml` composition layer support field edits under the same name. DSH settings inheritance prevents renaming or removing them from this page; the Host rejects those operations before writing.
 
 Drafts retain the configuration revision at the start of editing. If another page or external editor changes the configuration, saving an older draft is refused without deleting the other editor's new servers; leave the page to discard the draft, then reopen it, review the latest configuration, and edit again. Only Save commits staged MCP changes. Interrupted saves leave the saving state and retain the draft. Failed writes re-read Host configuration, and older read responses cannot overwrite newer refresh results.
 
@@ -293,7 +300,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.2`.
+- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.3`.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** before building, stopping services, or changing a profile, the installer and Launcher updater fetch the compatibility file from this repository’s GitHub `master` branch. A failed request, an eight-second download timeout, or malformed/oversized data falls back to the bundled file with a warning. Every check fetches again; it does not overwrite the local fallback. The remote table takes precedence when it contains the current plugin and DSH version. If it omits either, or lists no DSH version for that plugin, the installer checks the bundled table; installation stops only when neither supports the checkout. Mixed package versions also stop installation. Commits belong to individual DSH versions; an unlisted commit, local tracked changes, or no Git metadata produces an unverified-source warning.
@@ -398,6 +405,8 @@ Set `DSH_VERIFY_CHECKOUT` to a prepared copy of the verified DSH source commit w
 `npm run verify:desktop-host` loads the official Desktop Host with a fixed plugin snapshot in an isolated directory and verifies the actual Client index response. It does not build or modify the DSH checkout.
 
 `npm run verify:launcher` exercises the compiled Launcher and PowerShell command engine in temporary directories, including clean/install/build ordering, failure stops, and real pnpm frozen-lockfile rejection. It requires Windows, Git, and pnpm on `PATH`; it does not clean or rebuild the real DSH checkout.
+
+`npm run verify:launcher-tools` installs Launcher and the MCP manager into temporary directories, starts and stops DSH through the real Launcher, and has a local test model call the official `read` tool to verify file contents. It covers system mode and, when NVM is present, sandbox mode without real model or MCP credentials. Set `DSH_VERIFY_MANAGER_ROOT` to an existing pnpm package directory to copy it into the temporary cache; the runtime verifies its version, avoiding cold-download delays in this gate.
 
 `npm run verify:launcher-ui` compiles real WinForms controls in an isolated directory and checks scrolling, filtering, bulk selection, page/mode changes, repeated layout, bounded UTF-8 log reads, and disposal of retired controls. It measures navigation with an approximately 64 MB log and checks all five pages at normal, compact, wide, and 150% layouts, saving screenshots under `.verify-dsh-home/ui-performance/`. Timings measure UI processing and offscreen drawing, not display frame rates; pass/fail checks avoid fixed timing thresholds that vary with machine load.
 

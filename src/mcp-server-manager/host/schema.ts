@@ -4,10 +4,9 @@
  *
  * This is the serialized settings shape both the Host manager and the Web
  * card agree on. `env` and `headers` stay plain (not `role('secret')`):
- * their values are user-private document content, and a redacted view would
- * additionally require path-addressed writes from the client — instead the
- * Remote masks every value on read and writes are path-addressed ops, so a
- * client never restates a masked value it read.
+ * their values are user-private document content. The Remote masks every
+ * value on read and applies edits to the Host's unmasked definition before
+ * path-addressed writes, so a client never restates a masked value it read.
  */
 
 import z from '@deepseek-ai/schemastery'

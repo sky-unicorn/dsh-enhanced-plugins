@@ -1,7 +1,6 @@
 /**
  * Unit tests for the card's pure form logic: staged-server reconciliation and
- * the path ops a save writes (one `set` per added server, one `unset` per
- * removed server, nothing for unchanged ones).
+ * the path ops a save writes for additions, edits and removals.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -27,8 +26,28 @@ function sourceOf(initial: McpConfigSnapshot): McpConfigSource {
         if (op.path[0] !== 'servers' || op.path.length !== 2) return false
         const serverName = op.path[1]
         if (serverName === undefined) return false
-        if (op.op === 'set') servers[serverName] = op.value as McpServer
-        else delete servers[serverName]
+        if (op.op === 'set') servers[serverName] = op.value
+        else if (op.op === 'unset') delete servers[serverName]
+        else {
+          const previous = servers[serverName]
+          if (previous === undefined) return false
+          const next = op.replacement ?? structuredClone(previous)
+          for (const change of op.changes) {
+            const [field, key] = change.path
+            if (field === undefined) return false
+            const fields = next as unknown as Record<string, unknown>
+            if (key === undefined) {
+              if (change.op === 'set') fields[field] = change.value
+              else delete fields[field]
+            } else {
+              const map = fields[field] as Record<string, string>
+              if (change.op === 'set') map[key] = change.value as string
+              else delete map[key]
+            }
+          }
+          delete servers[serverName]
+          servers[op.nextName] = next
+        }
       }
       snapshot = {
         ...snapshot,
@@ -73,12 +92,37 @@ describe('planOps', () => {
     ])
   })
 
-  it('handles replace and remove in one batch, set before unset', () => {
+  it('edits an existing server by field, then removes a different server', () => {
     const changed: McpServer = { transport: 'stdio', command: 'node', args: ['mcp.js'] }
     const ops = planOps({ a: serverA, b: serverB }, { a: changed })
     expect(ops).toEqual([
-      { op: 'set', path: ['servers', 'a'], value: changed },
+      { op: 'edit', path: ['servers', 'a'], nextName: 'a', changes: [
+        { op: 'set', path: ['command'], value: 'node' },
+        { op: 'set', path: ['args'], value: ['mcp.js'] },
+      ] },
       { op: 'unset', path: ['servers', 'b'] },
+    ])
+  })
+
+  it('preserves masked secrets while changing fields or renaming', () => {
+    const original: McpServer = { transport: 'stdio', command: 'npx', env: { TOKEN: '••••', OLD: '••••' } }
+    const updated: McpServer = { transport: 'stdio', command: 'node', env: { TOKEN: '••••', NEW: 'fresh' } }
+    expect(planOps({ demo: original }, { renamed: updated }, new Map([['renamed', 'demo']]))).toEqual([{
+      op: 'edit', path: ['servers', 'demo'], nextName: 'renamed', changes: [
+        { op: 'set', path: ['command'], value: 'node' },
+        { op: 'unset', path: ['env', 'OLD'] },
+        { op: 'set', path: ['env', 'NEW'], value: 'fresh' },
+      ],
+    }])
+  })
+
+  it('can reuse an original name for a newly added server after renaming it', () => {
+    const updated: McpServer = { transport: 'stdio', command: 'old-command' }
+    const added: McpServer = { transport: 'stdio', command: 'new-command' }
+    expect(planOps({ demo: updated }, { renamed: updated, demo: added },
+      new Map([['renamed', 'demo']]))).toEqual([
+      { op: 'edit', path: ['servers', 'demo'], nextName: 'renamed', changes: [] },
+      { op: 'set', path: ['servers', 'demo'], value: added },
     ])
   })
 })
@@ -139,6 +183,27 @@ describe('McpCardController', () => {
     expect(writes).toEqual([{ ops: [{ op: 'unset', path: ['servers', 'demo'] }], revision: 1 }])
     expect(source.getSnapshot().value?.servers).toHaveProperty('external')
     expect(snapshotOf(face)).toMatchObject({ saving: false, failed: true, dirty: true })
+  })
+
+  it('keeps the revision from opening an edit form when an external update arrives', async () => {
+    const source = sourceOf({ status: 'ready', writable: true, revision: 1, value: { servers: { demo: serverA } } })
+    const controller = new McpCardController(source)
+    const face = controller.inject()
+    face.editServer('demo')
+    face.editForm('command', 'node')
+    await source.mutate([{ op: 'set', path: ['servers', 'external'], value: serverB }], 1)
+    const mutate = source.mutate
+    const revisions: Array<number | undefined> = []
+    source.mutate = async (ops, revision) => {
+      revisions.push(revision)
+      if (revision !== source.getSnapshot().revision) return false
+      return mutate(ops, revision)
+    }
+    face.addServer()
+    await controller['save']()
+    expect(revisions).toEqual([1])
+    expect(snapshotOf(face)).toMatchObject({ failed: true, dirty: true })
+    expect(source.getSnapshot().value?.servers?.demo).toEqual(serverA)
   })
 
   it('releases saving and retains the draft when transport rejects', async () => {
@@ -211,6 +276,24 @@ describe('McpCardController', () => {
     expect(snapshotOf(face).formInvalid).toBe(true)
     face.addServer()
     expect(snapshotOf(face).dirty).toBe(false)
+  })
+
+  it('does not rewrite existing arguments with spaces when editing another field', () => {
+    const original: McpServer = {
+      transport: 'stdio', command: 'npx', args: [' leading ', ''], env: { TOKEN: '••••' },
+      cwd: '', toolCallTimeoutMs: 60_000,
+    }
+    const controller = new McpCardController(sourceOf({
+      status: 'ready', writable: true, revision: 1, value: { servers: { demo: original } },
+    }))
+    const face = controller.inject()
+    face.editServer('demo')
+    face.editForm('command', 'node')
+    face.addServer()
+    expect(planOps({ demo: original }, { demo: controller['current']().demo! })).toEqual([{
+      op: 'edit', path: ['servers', 'demo'], nextName: 'demo',
+      changes: [{ op: 'set', path: ['command'], value: 'node' }],
+    }])
   })
 
   it('stages removal and shows the draft until save', async () => {

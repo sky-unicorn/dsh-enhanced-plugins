@@ -10,8 +10,8 @@
  * by {@link SECRET_MASK}, because those fields carry credentials while this
  * endpoint sits behind the trusted-host fence rather than the loopback pin
  * the settings RPC applies. Writes are path-addressed ops, so a client never
- * restates a masked value it read - it sends only the servers it added or
- * removed, and untouched entries keep their stored secrets.
+ * restates a masked value it read. Existing-server edits are applied to the
+ * Host's unmasked record before one revision-fenced settings mutation.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,10 +21,10 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { discoverMcpImports, planMcpImports } from './importers.js'
-import { MCP_SETTINGS_NAMESPACE, type Config, type ServerDefinition } from './schema.js'
+import { MCP_SETTINGS_NAMESPACE, SERVER_NAME_PATTERN, type Config, type ServerDefinition } from './schema.js'
 import type {
   McpConfigView, McpImportOutcome, McpImportRequest, McpImportSource,
-  McpMutateOutcome, McpMutateRequest,
+  McpMutateOutcome, McpMutateRequest, McpMutateWireOp, McpServerFieldOp,
 } from './types.js'
 import { inspectMcpConfig } from './validation.js'
 
@@ -51,19 +51,18 @@ function assertMutateRequest(request: unknown): McpMutateRequest {
     throw new TypeError('mcpConfig/mutate: request.ops must be an array of path ops')
   }
   for (const op of ops) {
-    if (!isPlainObject(op) || (op['op'] !== 'set' && op['op'] !== 'unset')) {
-      throw new TypeError('mcpConfig/mutate: each op must be { op: \'set\' | \'unset\', path }')
+    if (!isPlainObject(op) || (op['op'] !== 'set' && op['op'] !== 'unset' && op['op'] !== 'edit')) {
+      throw new TypeError('mcpConfig/mutate: unsupported server operation')
     }
-    if (!Array.isArray(op['path']) || op['path'].some(part => typeof part !== 'string')) {
-      throw new TypeError('mcpConfig/mutate: each op path must be an array of strings')
+    if (!isServerPath(op['path'])) {
+      throw new TypeError('mcpConfig/mutate: each op must address one valid server name')
     }
     if (op['op'] === 'set') {
-      // The transport discriminant is the one shape fact this face relies on;
-      // the settings schema owns every deeper validation.
-      if (!isPlainObject(op['value']) || typeof op['value']['transport'] !== 'string') {
+      if (!isServerDefinition(op['value'])) {
         throw new TypeError('mcpConfig/mutate: a set op must carry a server definition')
       }
     }
+    if (op['op'] === 'edit') assertEditOp(op)
   }
   if (expectedRevision !== undefined && (
     typeof expectedRevision !== 'number' || !Number.isInteger(expectedRevision) || expectedRevision < 0
@@ -74,6 +73,128 @@ function assertMutateRequest(request: unknown): McpMutateRequest {
     ops: ops as McpMutateRequest['ops'],
     ...expectedRevision === undefined ? {} : { expectedRevision },
   }
+}
+
+/** Require an exact server path, never a section root or arbitrary nested field. */
+function isServerPath(path: unknown): path is [string, string] {
+  return Array.isArray(path) && path.length === 2 && path[0] === 'servers'
+    && typeof path[1] === 'string' && SERVER_NAME_PATTERN.test(path[1])
+}
+
+/** The settings schema validates the remaining fields and their values. */
+function isServerDefinition(value: unknown): boolean {
+  return isPlainObject(value)
+    && (value['transport'] === 'stdio' || value['transport'] === 'streamable-http')
+}
+
+/** Admit only known fields in a masked client's existing-server edit. */
+function assertEditOp(op: Record<string, unknown>): void {
+  if (typeof op['nextName'] !== 'string' || !SERVER_NAME_PATTERN.test(op['nextName'])) {
+    throw new TypeError('mcpConfig/mutate: edited server name is invalid')
+  }
+  const changes = op['changes']
+  if (!Array.isArray(changes)) throw new TypeError('mcpConfig/mutate: edit changes must be an array')
+  if (op['replacement'] !== undefined && (!isServerDefinition(op['replacement']) || changes.length > 0)) {
+    throw new TypeError('mcpConfig/mutate: transport replacement must be a complete server without field changes')
+  }
+  for (const change of changes) {
+    if (!isPlainObject(change) || (change['op'] !== 'set' && change['op'] !== 'unset')
+      || !Array.isArray(change['path'])) {
+      throw new TypeError('mcpConfig/mutate: invalid server field edit')
+    }
+    const path = change['path'] as unknown[]
+    const scalar = path.length === 1 && typeof path[0] === 'string'
+      && ['command', 'args', 'cwd', 'url', 'toolCallTimeoutMs'].includes(path[0])
+    const secret = path.length === 2 && (path[0] === 'env' || path[0] === 'headers')
+      && typeof path[1] === 'string' && path[1] !== ''
+      && path[1] !== '__proto__' && path[1] !== 'constructor' && path[1] !== 'prototype'
+    if (!scalar && !secret) throw new TypeError('mcpConfig/mutate: unsupported server field path')
+    if (change['op'] === 'set') {
+      const value = change['value']
+      if (secret && typeof value !== 'string') throw new TypeError('mcpConfig/mutate: secret field value must be text')
+      if (scalar && path[0] === 'args' && (!Array.isArray(value) || value.some(item => typeof item !== 'string'))) {
+        throw new TypeError('mcpConfig/mutate: args must be text entries')
+      }
+      if (scalar && path[0] === 'toolCallTimeoutMs' && (!Number.isSafeInteger(value) || (value as number) < 1)) {
+        throw new TypeError('mcpConfig/mutate: timeout must be a positive integer')
+      }
+      if (scalar && path[0] !== 'args' && path[0] !== 'toolCallTimeoutMs' && typeof value !== 'string') {
+        throw new TypeError('mcpConfig/mutate: server field value must be text')
+      }
+    }
+  }
+}
+
+/** Expand edits against unmasked resolved values; only expanded settings ops persist. */
+function expandMutations(
+  ops: readonly McpMutateWireOp[],
+  servers: Config['servers'],
+  inheritedNames: ReadonlySet<string>,
+): SettingsPathOp[] {
+  const working = new Map<string, ServerDefinition>(Object.entries(servers).map(([name, definition]) => (
+    [name, structuredClone(definition)]
+  )))
+  const expanded: SettingsPathOp[] = []
+  for (const op of ops) {
+    const serverName = op.path[1]!
+    if (op.op === 'set') {
+      if (working.has(serverName)) throw new TypeError(`mcpConfig/mutate: server "${serverName}" already exists; edit it instead`)
+      expanded.push({ op: 'set', path: op.path, value: op.value })
+      working.set(serverName, op.value as ServerDefinition)
+      continue
+    }
+    if (op.op === 'unset') {
+      if (inheritedNames.has(serverName)) {
+        throw new TypeError(`mcpConfig/mutate: inherited server "${serverName}" cannot be removed from user settings`)
+      }
+      expanded.push({ op: 'unset', path: op.path })
+      working.delete(serverName)
+      continue
+    }
+    const original = working.get(serverName)
+    if (original === undefined) throw new TypeError(`mcpConfig/mutate: server "${serverName}" no longer exists`)
+    if (op.nextName !== serverName && inheritedNames.has(serverName)) {
+      throw new TypeError(`mcpConfig/mutate: inherited server "${serverName}" cannot be renamed from user settings`)
+    }
+    if (op.nextName !== serverName && working.has(op.nextName)) {
+      throw new TypeError(`mcpConfig/mutate: server "${op.nextName}" already exists`)
+    }
+    const next = op.replacement === undefined
+      ? applyServerChanges(original, op.changes)
+      : op.replacement as ServerDefinition
+    expanded.push({ op: 'set', path: ['servers', op.nextName], value: next })
+    if (op.nextName !== serverName) {
+      expanded.push({ op: 'unset', path: op.path })
+      working.delete(serverName)
+    }
+    working.set(op.nextName, next)
+  }
+  return expanded
+}
+
+/** Apply vetted field ops to a private unmasked copy of the server. */
+function applyServerChanges(server: ServerDefinition, changes: readonly McpServerFieldOp[]): ServerDefinition {
+  const next = structuredClone(server) as unknown as Record<string, unknown>
+  for (const change of changes) {
+    const [field, key] = change.path
+    if (field === undefined) throw new TypeError('mcpConfig/mutate: empty server field path')
+    if ((field === 'env' && server.transport !== 'stdio')
+      || (field === 'headers' && server.transport !== 'streamable-http')
+      || (field === 'command' || field === 'args' || field === 'cwd') && server.transport !== 'stdio'
+      || field === 'url' && server.transport !== 'streamable-http') {
+      throw new TypeError('mcpConfig/mutate: field does not belong to this transport')
+    }
+    if (key === undefined) {
+      if (change.op === 'set') next[field] = change.value
+      else delete next[field]
+    } else {
+      const map = next[field]
+      if (!isPlainObject(map)) throw new TypeError('mcpConfig/mutate: server secret map is invalid')
+      if (change.op === 'set') map[key] = change.value
+      else delete map[key]
+    }
+  }
+  return next as unknown as ServerDefinition
 }
 
 /** Validate the import request at the Remote wire boundary. */
@@ -132,13 +253,18 @@ export class McpConfigRemote extends TypertRemoteService {
   }
 
   /** This namespace's descriptor, when its registration is live. */
-  private descriptor(): { value: Config; revision: number } | undefined {
+  private descriptor(): { value: Config; revision: number; inheritedNames: ReadonlySet<string> } | undefined {
     const descriptor = this.ctx.settings.describe()
       .find(entry => entry.ns === MCP_SETTINGS_NAMESPACE)
     if (descriptor === undefined) return undefined
     // The value carries this plugin's own registered schema; the seam types
     // it as unknown because it serves every registrant's schema alike.
-    return { value: descriptor.value as Config, revision: descriptor.revision }
+    const base = descriptor.base as Partial<Config> | undefined
+    return {
+      value: descriptor.value as Config,
+      revision: descriptor.revision,
+      inheritedNames: new Set(Object.keys(base?.servers ?? {})),
+    }
   }
 
   /**
@@ -168,10 +294,16 @@ export class McpConfigRemote extends TypertRemoteService {
   @Remote('mutate')
   async mutate(request: McpMutateRequest): Promise<McpMutateOutcome> {
     const { ops, expectedRevision } = assertMutateRequest(request)
+    const before = this.descriptor()
+    if (before === undefined) return { kind: 'conflict', revision: 0 }
+    if (expectedRevision !== undefined && expectedRevision !== before.revision) {
+      return { kind: 'conflict', revision: before.revision }
+    }
+    const expanded = expandMutations(ops, before.value.servers, before.inheritedNames)
     try {
       await this.ctx.settings.mutate(
         MCP_SETTINGS_NAMESPACE,
-        ops as readonly SettingsPathOp[],
+        expanded,
         expectedRevision,
       )
     } catch (error) {

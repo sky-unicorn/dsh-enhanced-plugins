@@ -2,20 +2,19 @@
  * The MCP card's staged form over the `mcp` namespace, served through the
  * `mcpConfig` Remote store.
  *
- * This card edits a whole server record: it stages a detached copy of the
- * authoritative `servers` map and applies add/remove edits to it, then writes
- * the change as path-addressed ops on save - one `set` per added server, one
- * `unset` per removed server, nothing for the rest, so stored secrets this
- * card only ever reads masked are never restated. Server fields are staged
- * as draft rows - one input per argument, one key-value pair row per
- * variable or header - and parsed into the record only when an add is
- * committed, so an invalid row blocks the save instead of being discarded.
+ * This card stages a detached server record. Existing servers are edited with
+ * field ops applied to the Host's unmasked definition, so unchanged secrets
+ * never cross the wire or get replaced with their display mask.
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
-  McpConfigSnapshot, McpFormatReport, McpImportSource, McpImportSummary, McpWireOp,
+  McpConfigSnapshot, McpFormatReport, McpImportSource, McpImportSummary,
+  McpServerFieldOp, McpWireOp,
 } from './mcp-config-store.ts'
+
+const SECRET_MASK = '••••'
+const DEFAULT_TIMEOUT_MS = 60_000
 
 /** The `mcpConfig` store surface this controller reads and writes through. */
 export interface McpConfigSource {
@@ -64,6 +63,7 @@ export interface StdioMcpServer {
   args?: string[]
   env?: Record<string, string>
   cwd?: string
+  toolCallTimeoutMs?: number
 }
 
 /** One Streamable HTTP server's editable fields. */
@@ -71,6 +71,7 @@ export interface StreamableHttpMcpServer {
   transport: 'streamable-http'
   url?: string
   headers?: Record<string, string>
+  toolCallTimeoutMs?: number
 }
 
 /** One server definition inside the `mcp` section. */
@@ -93,7 +94,7 @@ export interface McpServerRow {
   format: 'valid' | 'warning' | 'error'
 }
 
-/** One key-value row in the add form's `env`/`headers` lists. */
+/** One key-value row in the server form's `env`/`headers` lists. */
 export interface DraftPair {
   /** The variable or header name. */
   key: string
@@ -101,7 +102,7 @@ export interface DraftPair {
   value: string
 }
 
-/** The add-server form's draft fields: text fields as strings, list fields as rows. */
+/** The server form's draft fields: text fields as strings, list fields as rows. */
 export interface McpDraftForm {
   serverName: string
   transport: 'stdio' | 'streamable-http'
@@ -114,10 +115,11 @@ export interface McpDraftForm {
   env: DraftPair[]
   /** Header rows; blank rows drop on commit. */
   headers: DraftPair[]
+  toolCallTimeoutMs: string
 }
 
-/** Add-form fields staged as a single text value. */
-export type McpTextField = 'serverName' | 'transport' | 'command' | 'url' | 'cwd'
+/** Form fields staged as a single text value. */
+export type McpTextField = 'serverName' | 'transport' | 'command' | 'url' | 'cwd' | 'toolCallTimeoutMs'
 
 /** Add-form fields staged as editable row lists. */
 export type McpListField = 'args' | 'env' | 'headers'
@@ -126,8 +128,10 @@ export type McpListField = 'args' | 'env' | 'headers'
 export interface McpCardState extends CardShell {
   /** The servers the card currently shows (draft when dirty, else the document). */
   servers: McpServerRow[]
-  /** The add form, present while open. */
+  /** The server form, present while open. */
   form: McpDraftForm | null
+  /** Name of the row being edited, or null for an add form. */
+  editingName: string | null
   /** True when a staged serverName already exists, or the form is otherwise invalid. */
   formInvalid: boolean
   /** Value-free Host audit of the currently persisted record. */
@@ -150,6 +154,8 @@ export interface McpCardFace {
   discard: () => void
   /** Open the add form. */
   openForm: () => void
+  /** Open an existing server in the form. */
+  editServer: (serverName: string) => void
   /** Close the add form and drop its draft. */
   closeForm: () => void
   /** Stage one single-line form field. */
@@ -160,7 +166,7 @@ export interface McpCardFace {
   appendListRow: (field: McpListField) => void
   /** Remove one row from a list field. */
   removeListRow: (field: McpListField, index: number) => void
-  /** Commit the add form into the staged record. */
+  /** Commit the add or edit form into the staged record. */
   addServer: () => void
   /** Stage the removal of one server. */
   removeServer: (serverName: string) => void
@@ -179,6 +185,24 @@ function emptyForm(): McpDraftForm {
     cwd: '',
     env: [],
     headers: [],
+    toolCallTimeoutMs: String(DEFAULT_TIMEOUT_MS),
+  }
+}
+
+/** Seed an edit form from a masked server without revealing its credentials. */
+function formFor(serverName: string, server: McpServer): McpDraftForm {
+  return {
+    serverName,
+    transport: server.transport,
+    command: server.transport === 'stdio' ? server.command ?? '' : '',
+    url: server.transport === 'streamable-http' ? server.url ?? '' : '',
+    args: server.transport === 'stdio' ? [...(server.args ?? [])] : [],
+    cwd: server.transport === 'stdio' ? server.cwd ?? '' : '',
+    env: server.transport === 'stdio'
+      ? Object.entries(server.env ?? {}).map(([key, value]) => ({ key, value })) : [],
+    headers: server.transport === 'streamable-http'
+      ? Object.entries(server.headers ?? {}).map(([key, value]) => ({ key, value })) : [],
+    toolCallTimeoutMs: String(server.toolCallTimeoutMs ?? DEFAULT_TIMEOUT_MS),
   }
 }
 
@@ -194,45 +218,53 @@ export function collectArgs(rows: readonly string[]): string[] {
 
 /**
  * Collect key-value rows for commit, dropping fully blank rows; a later row
- * with a repeated key overwrites the earlier one.
+ * with a repeated key overwrites the earlier one. Existing values retain
+ * their exact text when `preserveText` is true.
  * @param rows - the staged key-value rows.
+ * @param preserveText - keep existing keys and values verbatim during edits.
  * @returns the committed record, or undefined when a row has a value but no key.
  */
-export function collectPairs(rows: readonly DraftPair[]): Record<string, string> | undefined {
-  const out: Record<string, string> = {}
+export function collectPairs(rows: readonly DraftPair[], preserveText = false): Record<string, string> | undefined {
+  const entries: Array<[string, string]> = []
   for (const row of rows) {
-    const key = row.key.trim()
-    const value = row.value.trim()
+    const key = preserveText ? row.key : row.key.trim()
+    const value = preserveText ? row.value : row.value.trim()
     if (key === '' && value === '') continue
-    if (key === '') return undefined
-    out[key] = value
+    if (key.trim() === '') return undefined
+    entries.push([key, value])
   }
-  return out
+  return Object.fromEntries(entries)
 }
 
-/** Build the server definition the add form describes, or undefined when invalid. */
-function parseForm(form: McpDraftForm): McpServer | undefined {
+/** Build the server definition the form describes, preserving existing text when editing. */
+function parseForm(form: McpDraftForm, editing: boolean): McpServer | undefined {
   if (!SERVER_NAME_PATTERN.test(form.serverName)) return undefined
+  const timeout = Number(form.toolCallTimeoutMs)
+  if (!Number.isSafeInteger(timeout) || timeout < 1) return undefined
+  const timeoutField = editing || timeout !== DEFAULT_TIMEOUT_MS ? { toolCallTimeoutMs: timeout } : {}
   if (form.transport === 'stdio') {
     if (form.command.trim() === '') return undefined
-    const env = collectPairs(form.env)
+    const env = collectPairs(form.env, editing)
     if (env === undefined) return undefined
-    const args = collectArgs(form.args)
+    const args = editing ? [...form.args] : collectArgs(form.args)
     return {
       transport: 'stdio',
-      command: form.command.trim(),
-      ...args.length > 0 ? { args } : {},
-      ...Object.keys(env).length > 0 ? { env } : {},
-      ...form.cwd.trim() !== '' ? { cwd: form.cwd.trim() } : {},
+      command: editing ? form.command : form.command.trim(),
+      ...editing || args.length > 0 ? { args } : {},
+      ...editing || Object.keys(env).length > 0 ? { env } : {},
+      ...editing || form.cwd.trim() !== '' ? { cwd: editing ? form.cwd : form.cwd.trim() } : {},
+      ...timeoutField,
     }
   }
+  if (form.transport !== 'streamable-http') return undefined
   if (!isValidHttpUrl(form.url.trim())) return undefined
-  const headers = collectPairs(form.headers)
+  const headers = collectPairs(form.headers, editing)
   if (headers === undefined || Object.keys(headers).some(key => !HEADER_NAME_PATTERN.test(key))) return undefined
   return {
     transport: 'streamable-http',
-    url: form.url.trim(),
-    ...Object.keys(headers).length > 0 ? { headers } : {},
+    url: editing ? form.url : form.url.trim(),
+    ...editing || Object.keys(headers).length > 0 ? { headers } : {},
+    ...timeoutField,
   }
 }
 
@@ -262,27 +294,72 @@ export function recordsEqual(a: Record<string, McpServer>, b: Record<string, Mcp
 }
 
 /**
- * Plan the path ops a save writes: one `set` per added server, one `unset`
- * per removed server, nothing for unchanged ones. Unchanged entries keep
- * their stored secrets exactly because no op restates a masked read.
+ * Plan one server op per changed entry. Edits carry only changed fields;
+ * the Host applies them to its unmasked resolved record before persisting.
  * @param authoritative - the masked record the draft was staged over.
  * @param draft - the staged record.
+ * @param origins - original names for staged rows, including renamed ones.
  * @returns the ordered ops for `mcpConfig/mutate`.
  */
 export function planOps(
   authoritative: Record<string, McpServer>,
   draft: Record<string, McpServer>,
+  origins?: ReadonlyMap<string, string>,
 ): McpWireOp[] {
   const ops: McpWireOp[] = []
+  const retained = new Set<string>()
   for (const [serverName, server] of Object.entries(draft)) {
-    const previous = authoritative[serverName]
-    if (previous !== undefined && JSON.stringify(server) === JSON.stringify(previous)) continue
-    ops.push({ op: 'set', path: ['servers', serverName], value: server })
+    const originalName = origins === undefined
+      ? (Object.hasOwn(authoritative, serverName) ? serverName : undefined)
+      : origins.get(serverName)
+    const previous = originalName === undefined ? undefined : authoritative[originalName]
+    if (previous === undefined || originalName === undefined) {
+      ops.push({ op: 'set', path: ['servers', serverName], value: server })
+      continue
+    }
+    retained.add(originalName)
+    const changes = planFieldChanges(previous, server)
+    if (originalName !== serverName || changes.length > 0 || previous.transport !== server.transport) {
+      ops.push({
+        op: 'edit', path: ['servers', originalName], nextName: serverName,
+        changes: previous.transport === server.transport ? changes : [],
+        ...previous.transport === server.transport ? {} : { replacement: server },
+      })
+    }
   }
   for (const serverName of Object.keys(authoritative)) {
-    if (!(serverName in draft)) ops.push({ op: 'unset', path: ['servers', serverName] })
+    if (!retained.has(serverName)) ops.push({ op: 'unset', path: ['servers', serverName] })
   }
   return ops
+}
+
+/** Compare a masked server with its staged version without restating hidden values. */
+function planFieldChanges(previous: McpServer, next: McpServer): McpServerFieldOp[] {
+  if (previous.transport !== next.transport) return []
+  const changes: McpServerFieldOp[] = []
+  const scalarFields = previous.transport === 'stdio'
+    ? ['command', 'args', 'cwd', 'toolCallTimeoutMs'] as const
+    : ['url', 'toolCallTimeoutMs'] as const
+  const beforeFields = previous as unknown as Record<string, unknown>
+  const afterFields = next as unknown as Record<string, unknown>
+  for (const field of scalarFields) {
+    const before = beforeFields[field]
+    const after = afterFields[field]
+    if (JSON.stringify(before) === JSON.stringify(after)) continue
+    if (after === undefined) changes.push({ op: 'unset', path: [field] })
+    else changes.push({ op: 'set', path: [field], value: after })
+  }
+  const mapField = previous.transport === 'stdio' ? 'env' : 'headers'
+  const beforeMap = (beforeFields[mapField] ?? {}) as Record<string, string>
+  const afterMap = (afterFields[mapField] ?? {}) as Record<string, string>
+  for (const key of Object.keys(beforeMap)) {
+    if (!Object.hasOwn(afterMap, key)) changes.push({ op: 'unset', path: [mapField, key] })
+  }
+  for (const [key, value] of Object.entries(afterMap)) {
+    if (Object.hasOwn(beforeMap, key) && value === SECRET_MASK) continue
+    if (beforeMap[key] !== value) changes.push({ op: 'set', path: [mapField, key], value })
+  }
+  return changes
 }
 
 /** Bridges the `mcpConfig` store onto the MCP card's staged server record. */
@@ -290,11 +367,17 @@ export class McpCardController {
   private readonly store: SnapshotStore<McpCardState>
   /** Detached staged record; null while not dirty. */
   private draft: Record<string, McpServer> | null = null
+  /** The authoritative row each draft row came from; additions have no entry. */
+  private draftOrigins = new Map<string, string>()
   /** The exact read that owns this draft's edits and revision fence. */
   private draftBase: Record<string, McpServer> = {}
   private draftRevision: number | undefined
   /** The add form; null while closed. */
   private form: McpDraftForm | null = null
+  private editingName: string | null = null
+  /** Authoritative view and revision at form opening, before any remote refresh. */
+  private formBase: Record<string, McpServer> | null = null
+  private formRevision: number | undefined
   private saving = false
   private failed = false
   private importing = false
@@ -315,8 +398,15 @@ export class McpCardController {
       hooks: { mcpCard: this.store },
       save: () => { void this.save() },
       discard: () => { this.discard() },
-      openForm: () => { this.form = emptyForm(); this.publish() },
-      closeForm: () => { this.form = null; this.publish() },
+      openForm: () => {
+        if (this.form !== null || this.saving || this.importing || !this.snapshot().writable) return
+        this.captureFormBase()
+        this.form = emptyForm()
+        this.editingName = null
+        this.publish()
+      },
+      editServer: (serverName) => { this.openEditForm(serverName) },
+      closeForm: () => { this.closeForm(); this.publish() },
       editForm: (field, text) => { this.setForm(field, text) },
       editListRow: (field, index, part, text) => { this.editRow(field, index, part, text) },
       appendListRow: (field) => { this.appendRow(field) },
@@ -357,9 +447,21 @@ export class McpCardController {
   }
 
   private formInvalid(form: McpDraftForm): boolean {
-    if (parseForm(form) === undefined) return true
-    // A duplicate serverName is refused by the manager, so the card blocks it too.
-    return Object.hasOwn(this.current(), form.serverName)
+    const parsed = parseForm(form, this.editingName !== null)
+    if (parsed === undefined) return true
+    if (form.serverName !== this.editingName && Object.hasOwn(this.current(), form.serverName)) return true
+    // The Host rejects renaming onto any configured name, even one staged for removal.
+    if (this.editingName !== null && form.serverName !== this.editingName
+      && Object.hasOwn(this.draft === null ? this.authoritative() : this.draftBase, form.serverName)) return true
+    const originalName = this.editingName === null ? undefined
+      : this.draft === null
+        ? (Object.hasOwn(this.formBase ?? {}, this.editingName) ? this.editingName : undefined)
+        : this.draftOrigins.get(this.editingName)
+    const original = originalName === undefined ? undefined : (this.formBase ?? this.authoritative())[originalName]
+    const map = parsed.transport === 'stdio' ? parsed.env ?? {} : parsed.headers ?? {}
+    const oldMap = original?.transport === parsed.transport
+      ? (original.transport === 'stdio' ? original.env ?? {} : original.headers ?? {}) : {}
+    return Object.entries(map).some(([key, value]) => value === SECRET_MASK && !Object.hasOwn(oldMap, key))
   }
 
   private projection(): McpCardState {
@@ -372,11 +474,12 @@ export class McpCardController {
       available: snapshot.status === 'ready',
       writable: snapshot.writable,
       dirty: this.draft !== null,
-      invalid: form !== null && this.formInvalid(form),
+      invalid: form !== null,
       saving: this.saving,
       failed: this.failed,
       servers,
       form,
+      editingName: this.editingName,
       formInvalid: form !== null && this.formInvalid(form),
       format: {
         valid: formatIssues.length === 0,
@@ -424,6 +527,28 @@ export class McpCardController {
     this.publish()
   }
 
+  private openEditForm(serverName: string): void {
+    if (this.form !== null || this.saving || this.importing || !this.snapshot().writable) return
+    const server = this.current()[serverName]
+    if (server === undefined) return
+    this.captureFormBase()
+    this.editingName = serverName
+    this.form = formFor(serverName, server)
+    this.publish()
+  }
+
+  private captureFormBase(): void {
+    this.formBase = this.draft === null ? { ...this.authoritative() } : null
+    this.formRevision = this.draft === null ? this.snapshot().revision : undefined
+  }
+
+  private closeForm(): void {
+    this.form = null
+    this.editingName = null
+    this.formBase = null
+    this.formRevision = undefined
+  }
+
   private removeRow(field: McpListField, index: number): void {
     const form = this.form
     if (form === null) return
@@ -435,45 +560,66 @@ export class McpCardController {
   }
 
   private addServer(): void {
-    if (this.form === null) return
-    const server = parseForm(this.form)
-    if (server === undefined || Object.hasOwn(this.current(), this.form.serverName)) return
-    const draft = this.draft ?? this.beginDraft()
+    if (this.form === null || this.saving || !this.snapshot().writable) return
+    if (this.formInvalid(this.form)) return
+    const server = parseForm(this.form, this.editingName !== null)
+    if (server === undefined) return
+    const previousName = this.editingName
+    if (previousName !== null && previousName === this.form.serverName
+      && JSON.stringify(this.current()[previousName]) === JSON.stringify(server)) {
+      this.closeForm()
+      this.publish()
+      return
+    }
+    const draft = this.draft ?? this.beginDraft(this.formBase ?? this.authoritative(), this.formRevision)
+    if (previousName !== null) {
+      const origin = this.draftOrigins.get(previousName)
+      this.draftOrigins.delete(previousName)
+      if (origin !== undefined) this.draftOrigins.set(this.form.serverName, origin)
+      delete draft[previousName]
+    }
     draft[this.form.serverName] = server
-    this.form = null
+    this.closeForm()
     this.failed = false
     this.importResult = null
     this.publish()
   }
 
   private removeServer(serverName: string): void {
+    if (this.form !== null || this.saving || !this.snapshot().writable
+      || !Object.hasOwn(this.current(), serverName)) return
     const draft = this.draft ?? this.beginDraft()
     this.draft = Object.fromEntries(Object.entries(draft).filter(([name]) => name !== serverName))
+    this.draftOrigins.delete(serverName)
     this.failed = false
     this.importResult = null
     this.publish()
   }
 
-  private beginDraft(): Record<string, McpServer> {
-    this.draftBase = { ...this.authoritative() }
-    this.draftRevision = this.snapshot().revision
+  private beginDraft(base = this.authoritative(), revision = this.snapshot().revision): Record<string, McpServer> {
+    this.draftBase = { ...base }
+    this.draftRevision = revision
     this.draft = { ...this.draftBase }
+    this.draftOrigins = new Map(Object.keys(this.draftBase).map(name => [name, name]))
     return this.draft
   }
 
   private async save(): Promise<void> {
     const draft = this.draft
-    if (draft === null || this.saving || !this.snapshot().writable) return
+    if (draft === null || this.form !== null || this.saving || !this.snapshot().writable) return
     this.saving = true
     this.failed = false
     this.publish()
     try {
-      const ops = planOps(this.draftBase, draft)
+      const ops = planOps(this.draftBase, draft, this.draftOrigins)
       const landed = ops.length > 0 ? await this.config.mutate(ops, this.draftRevision) : true
       // The authoritative read-back is masked, so compare server names.
       const names = Object.keys(this.authoritative()).sort().join('\u{0}')
       const staged = Object.keys(draft).sort().join('\u{0}')
-      if (landed && names === staged) this.draft = null
+      if (landed && names === staged) {
+        this.draft = null
+        this.draftOrigins.clear()
+      }
       this.failed = !(landed && names === staged)
     } catch {
       this.failed = true
@@ -506,7 +652,8 @@ export class McpCardController {
   private discard(): void {
     if (this.draft === null && this.form === null && !this.failed) return
     this.draft = null
-    this.form = null
+    this.draftOrigins.clear()
+    this.closeForm()
     this.failed = false
     this.importResult = null
     this.publish()

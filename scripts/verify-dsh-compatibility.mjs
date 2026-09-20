@@ -5,13 +5,14 @@ import { once } from 'node:events'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
+import { resolveProject } from '../packages/windows-launcher/src/toolchain.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepseek-harness'))
 const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
-const cli = resolve(dsh, 'apps/cli/src/bin.ts')
-const cliArgs = ['--import', pathToFileURL(resolve(dsh, 'node_modules/tsx/dist/esm/index.mjs')).href, cli]
+const cliArgs = resolveProject({ sourceDirectory: dsh }).args
+const cli = cliArgs[0]
 if (process.platform !== 'win32') throw new Error('This installer integration gate requires Windows PowerShell 5.1.')
 if (!existsSync(cli)) throw new Error('Build the required sibling DSH checkout before running this gate.')
 const packages = readdirSync(resolve(root, 'packages'))
@@ -55,7 +56,7 @@ async function verify(expected, label) {
   await once(reservation, 'listening')
   const port = reservation.address().port
   await new Promise((done, reject) => reservation.close(error => error ? reject(error) : done()))
-  // Match the documented `pnpm dsh` source execution, including its workspace resolver.
+  // Exercise the same compiled CLI entry selected by Launcher.
   const child = spawn(process.execPath, [...cliArgs, 'web', '--port', String(port), '--no-open'], {
     cwd: dsh, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -129,6 +130,10 @@ writeFileSync(resolve(retiredModel, 'cordis.patch.yml'), '- insert:\n    - id: m
 command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', retiredModel, '--yes'], 'retired-model-install', dsh)
 install(['none'], 'retired-model-cleanup', true)
 await verify([], 'retired-model-cleanup')
-command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', root, '--yes'], 'aggregate-install', dsh)
+const aggregatePack = spawnSync(process.execPath, [process.env.npm_execpath, 'pack', '--ignore-scripts', '--json',
+  '--pack-destination', home, root], { cwd: root, encoding: 'utf8', windowsHide: true })
+assert.equal(aggregatePack.status, 0, aggregatePack.stderr)
+const aggregateArchive = resolve(home, JSON.parse(aggregatePack.stdout)[0].filename)
+command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', aggregateArchive, '--yes'], 'aggregate-install', dsh)
 await verify([manifest.name], 'aggregate')
 console.log(`Compatibility selection gate passed; report: ${resolve(home, 'report.json')}`)

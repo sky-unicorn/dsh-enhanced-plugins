@@ -675,7 +675,7 @@ describe('selective feature packages', () => {
     expect(supervisor).toContain('$stopping = $true')
     expect(installer).toContain('Set-WindowsLauncherDshCommand')
     expect(installer).toContain('dsh-checkout-invoker.ps1')
-    expect(installer).toContain('TSX_TSCONFIG_PATH')
+    expect(installer).toContain("$cliEntry = Join-Path $checkout 'apps\\cli\\lib\\bin.js'")
     expect(installer).toContain('DshSourceDirectory')
     expect(installer).toContain("' --tray --start-dsh'")
     expect(installer).toContain('Save-LauncherInstallState')

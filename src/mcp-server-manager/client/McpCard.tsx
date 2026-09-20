@@ -1,14 +1,14 @@
 /**
  * The MCP card: the servers the agent can reach through the MCP manager, with
- * an add form for a new stdio or Streamable HTTP server and a remove per row.
+ * a shared add/edit form for stdio or Streamable HTTP, and a remove per row.
  * Every edit stages into a detached record and lands on one save.
  */
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import clsx from 'clsx'
 import {
-  Button, IconCheckOutline14, IconCodeOutline16, IconDownloadOutline16,
-  IconGlobeOutline14, IconPlusOutline16, IconTrashOutline16, IconWarningOutline16,
+  Button, IconCheckOutline14, IconCodeOutline16, IconDownloadOutline16, IconEditOutline16,
+  IconGlobeOutline14, IconPlusOutline16, IconTrashOutline16, IconWarningOutline16, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: loads the `plugins.row.config` SlotMap declaration the props
 // below name; cross-package collaboration goes through the slot, never a
@@ -110,16 +110,27 @@ export function McpCard(props: McpCardProps) {
                   </span>
                   <span className={fieldCss.serverTarget}>{server.target}</span>
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={fieldCss.remove}
-                  disabled={disabled}
-                  icon={<IconTrashOutline16 />}
-                  onClick={() => { props.removeServer(server.serverName) }}
-                >
-                  {t('mcpRemove')}
-                </Button>
+                <span className={fieldCss.rowActions}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled || state.form !== null || state.importing || state.saving}
+                    icon={<IconEditOutline16 />}
+                    onClick={() => { props.editServer(server.serverName) }}
+                  >
+                    {t('mcpEdit')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={fieldCss.remove}
+                    disabled={disabled || state.form !== null || state.importing || state.saving}
+                    icon={<IconTrashOutline16 />}
+                    onClick={() => { props.removeServer(server.serverName) }}
+                  >
+                    {t('mcpRemove')}
+                  </Button>
+                </span>
               </li>
             ))}
           </ul>
@@ -142,37 +153,50 @@ export function McpCard(props: McpCardProps) {
       </div>
       {state.importResult !== null ? <ImportResult t={t} summary={state.importResult} /> : null}
 
-      {state.form === null
-        ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className={fieldCss.addServer}
-            disabled={disabled || state.importing}
-            icon={<IconPlusOutline16 />}
-            onClick={props.openForm}
-          >
-            {t('mcpAddServer')}
-          </Button>
-        )
-        : (
-          <AddServerForm
+      <Button
+        variant="outline"
+        size="sm"
+        className={fieldCss.addServer}
+        disabled={disabled || state.form !== null || state.importing || state.saving}
+        icon={<IconPlusOutline16 />}
+        onClick={props.openForm}
+      >
+        {t('mcpAddServer')}
+      </Button>
+      {state.form === null ? null : (
+        <Modal
+          open
+          onClose={props.closeForm}
+          title={t(state.editingName === null ? 'mcpAddFormTitle' : 'mcpEditFormTitle')}
+          closeLabel={t('mcpCloseDialog')}
+          description={t(state.editingName === null ? 'mcpAddFormHint' : 'mcpEditFormHint')}
+          className={fieldCss.serverDialog}
+          contentClassName={fieldCss.serverDialogContent}
+          footer={(
+            <>
+              <Button variant="ghost" size="sm" onClick={props.closeForm}>{t('mcpCancel')}</Button>
+              <Button variant="primary" size="sm" disabled={disabled || state.formInvalid} onClick={props.addServer}>
+                {t(state.editingName === null ? 'mcpAdd' : 'mcpApplyEdit')}
+              </Button>
+            </>
+          )}
+        >
+          <ServerForm
             t={t}
             form={state.form}
             disabled={disabled}
             invalid={state.formInvalid}
             nameInvalid={
               (state.form.serverName !== '' && !SERVER_NAME_PATTERN.test(state.form.serverName))
-              || state.servers.some(server => server.serverName === state.form?.serverName)
+              || state.servers.some(server => server.serverName === state.form?.serverName && server.serverName !== state.editingName)
             }
             onEdit={props.editForm}
             onEditRow={props.editListRow}
             onAppendRow={props.appendListRow}
             onRemoveRow={props.removeListRow}
-            onAdd={props.addServer}
-            onCancel={props.closeForm}
           />
-        )}
+        </Modal>
+      )}
     </McpCardShell>
   )
 }
@@ -272,6 +296,7 @@ function FormField(props: {
   text: string
   invalid: boolean
   disabled: boolean
+  autoFocus?: boolean
   onEdit: (text: string) => void
 }) {
   return (
@@ -284,6 +309,7 @@ function FormField(props: {
         {...props.invalid ? { 'aria-invalid': true } : {}}
         value={props.text}
         disabled={props.disabled}
+        autoFocus={props.autoFocus}
         onChange={(event) => { props.onEdit(event.target.value) }}
       />
       <p className={props.invalid ? fieldCss.invalid : fieldCss.hint}>
@@ -398,8 +424,8 @@ function KeyValueField(props: {
   )
 }
 
-/** The add-server form. */
-function AddServerForm(props: {
+/** Fields shared by the add and edit dialogs. */
+function ServerForm(props: {
   t: McpCardProps['t']
   form: McpDraftForm
   disabled: boolean
@@ -409,17 +435,11 @@ function AddServerForm(props: {
   onEditRow: (field: McpListField, index: number, part: 'value' | 'key', text: string) => void
   onAppendRow: (field: McpListField) => void
   onRemoveRow: (field: McpListField, index: number) => void
-  onAdd: () => void
-  onCancel: () => void
 }) {
-  const { t, form, disabled, invalid, nameInvalid, onEdit, onEditRow, onAppendRow, onRemoveRow, onAdd, onCancel } = props
+  const { t, form, disabled, invalid, nameInvalid, onEdit, onEditRow, onAppendRow, onRemoveRow } = props
   const transport = form.transport
   return (
-    <div className={fieldCss.form}>
-      <div className={fieldCss.formHeading}>
-        <span className={fieldCss.formTitle}>{t('mcpAddFormTitle')}</span>
-        <span className={fieldCss.formSubtitle}>{t('mcpAddFormHint')}</span>
-      </div>
+    <div className={fieldCss.serverForm}>
       <FormField
         id="mcp-server-name"
         label={t('mcpServerName')}
@@ -428,6 +448,7 @@ function AddServerForm(props: {
         text={form.serverName}
         invalid={nameInvalid}
         disabled={disabled}
+        autoFocus
         onEdit={(text) => { onEdit('serverName', text) }}
       />
 
@@ -511,14 +532,17 @@ function AddServerForm(props: {
           </>
         )}
 
-      <div className={fieldCss.formActions}>
-        <Button variant="ghost" size="sm" disabled={disabled} onClick={onCancel}>
-          {t('mcpCancel')}
-        </Button>
-        <Button variant="primary" size="sm" disabled={disabled || invalid} onClick={onAdd}>
-          {t('mcpAdd')}
-        </Button>
-      </div>
+      <FormField
+        id="mcp-timeout"
+        label={t('mcpTimeout')}
+        hint={t('mcpTimeoutHint')}
+        invalidLabel={t('mcpFormatInvalidTimeout')}
+        text={form.toolCallTimeoutMs}
+        invalid={!Number.isSafeInteger(Number(form.toolCallTimeoutMs)) || Number(form.toolCallTimeoutMs) < 1}
+        disabled={disabled}
+        onEdit={(text) => { onEdit('toolCallTimeoutMs', text) }}
+      />
+
     </div>
   )
 }

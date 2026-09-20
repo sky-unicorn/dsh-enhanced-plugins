@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
+import { resolveProject } from '../packages/windows-launcher/src/toolchain.mjs'
 
 if (process.platform !== 'win32') throw new Error('This installer/browser gate requires Windows PowerShell 5.1.')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -76,8 +77,8 @@ try {
   portProbe.listen(0, '127.0.0.1'); await once(portProbe, 'listening')
   const port = portProbe.address().port
   await new Promise(done => portProbe.close(done))
-  child = spawn(process.execPath, ['--import', pathToFileURL(resolve(dsh, 'node_modules/tsx/dist/esm/index.mjs')).href,
-    resolve(dsh, 'apps/cli/src/bin.ts'), 'web', '--patch', overlay, '--port', String(port), '--no-open'],
+  child = spawn(process.execPath, [...resolveProject({ sourceDirectory: dsh }).args,
+    'web', '--patch', overlay, '--port', String(port), '--no-open'],
   { cwd: dsh, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   exit = once(child, 'exit')
   const url = await new Promise((done, reject) => {

@@ -3,9 +3,10 @@
 /** Locale keys this card renders. */
 export type McpSettingsLocaleKey =
   | 'expand' | 'collapse' | 'save' | 'saving' | 'discard' | 'unsaved' | 'saveFailed' | 'readOnly'
-  | 'mcpTitle' | 'mcpDescription' | 'mcpUnavailable' | 'mcpEmpty' | 'mcpAddServer' | 'mcpRemove' | 'mcpCancel' | 'mcpAdd'
+  | 'mcpTitle' | 'mcpDescription' | 'mcpUnavailable' | 'mcpEmpty' | 'mcpAddServer' | 'mcpEdit' | 'mcpRemove' | 'mcpCancel' | 'mcpCloseDialog' | 'mcpAdd' | 'mcpApplyEdit'
   | 'mcpServerName' | 'mcpServerNameHint' | 'mcpTransport' | 'mcpTransportStdio' | 'mcpTransportHttp'
   | 'mcpCommand' | 'mcpCommandHint' | 'mcpUrl' | 'mcpUrlHint'
+  | 'mcpTimeout' | 'mcpTimeoutHint'
   | 'mcpArgs' | 'mcpArgsHint' | 'mcpArgRow' | 'mcpArgPlaceholder' | 'mcpAddArg' | 'mcpCwd' | 'mcpCwdHint'
   | 'mcpEnv' | 'mcpEnvHint' | 'mcpEnvKeyPlaceholder' | 'mcpEnvValuePlaceholder' | 'mcpAddEnvVar'
   | 'mcpHeaders' | 'mcpHeadersHint' | 'mcpHeaderKeyPlaceholder' | 'mcpHeaderValuePlaceholder' | 'mcpAddHeader'
@@ -18,7 +19,7 @@ export type McpSettingsLocaleKey =
   | 'mcpSourceClaudeCode' | 'mcpSourceCodex' | 'mcpImportSourceUnreadable' | 'mcpImportSourceInvalid'
   | 'mcpImportServerInvalid' | 'mcpImportUnsupportedTransport' | 'mcpImportUnsupportedAuth'
   | 'mcpImportEnvironmentMissing' | 'mcpImportDisabled' | 'mcpImportIgnoredOptions'
-  | 'mcpAddFormTitle' | 'mcpAddFormHint'
+  | 'mcpAddFormTitle' | 'mcpAddFormHint' | 'mcpEditFormTitle' | 'mcpEditFormHint'
 
 /** English copy. */
 export const en: Record<McpSettingsLocaleKey, string> = {
@@ -35,9 +36,12 @@ export const en: Record<McpSettingsLocaleKey, string> = {
   mcpUnavailable: 'The MCP settings service is unavailable.',
   mcpEmpty: 'No MCP servers are configured.',
   mcpAddServer: 'Add server',
+  mcpEdit: 'Edit',
   mcpRemove: 'Remove',
   mcpCancel: 'Cancel',
+  mcpCloseDialog: 'Close dialog',
   mcpAdd: 'Add',
+  mcpApplyEdit: 'Apply changes',
   mcpServerName: 'Server name',
   mcpServerNameHint: 'Stable namespace for tool names (mcp__<name>__<tool>); letters, digits, _ and -.',
   mcpTransport: 'Transport',
@@ -47,6 +51,8 @@ export const en: Record<McpSettingsLocaleKey, string> = {
   mcpCommandHint: 'Executable that starts the server, e.g. npx.',
   mcpUrl: 'URL',
   mcpUrlHint: 'MCP endpoint URL; the server must already be running.',
+  mcpTimeout: 'Tool call timeout (ms)',
+  mcpTimeoutHint: 'Positive whole number; 60000 by default.',
   mcpArgs: 'Arguments',
   mcpArgsHint: 'One argument per input; spaces inside an argument are kept.',
   mcpArgRow: 'Argument',
@@ -102,6 +108,8 @@ export const en: Record<McpSettingsLocaleKey, string> = {
   mcpImportIgnoredOptions: 'Imported; Codex-only tool policy/startup options were ignored',
   mcpAddFormTitle: 'New MCP server',
   mcpAddFormHint: 'Choose a local stdio process or a Streamable HTTP endpoint.',
+  mcpEditFormTitle: 'Edit MCP server',
+  mcpEditFormHint: 'Masked values stay unchanged. Enter a new value when changing a key, or remove its row.',
 }
 
 /** Simplified Chinese copy. */
@@ -119,9 +127,12 @@ export const zh: Record<McpSettingsLocaleKey, string> = {
   mcpUnavailable: 'MCP 设置服务当前不可用。',
   mcpEmpty: '尚未配置任何 MCP 服务器。',
   mcpAddServer: '添加服务器',
+  mcpEdit: '编辑',
   mcpRemove: '移除',
   mcpCancel: '取消',
+  mcpCloseDialog: '关闭弹窗',
   mcpAdd: '添加',
+  mcpApplyEdit: '应用修改',
   mcpServerName: '服务器名称',
   mcpServerNameHint: '工具名的稳定命名空间（mcp__<名称>__<工具>）；仅限字母、数字、_ 和 -。',
   mcpTransport: '传输方式',
@@ -131,6 +142,8 @@ export const zh: Record<McpSettingsLocaleKey, string> = {
   mcpCommandHint: '启动服务器的可执行文件，例如 npx。',
   mcpUrl: '地址',
   mcpUrlHint: 'MCP 端点 URL；该服务器必须已在运行。',
+  mcpTimeout: '工具调用超时（毫秒）',
+  mcpTimeoutHint: '填写正整数；默认 60000。',
   mcpArgs: '参数',
   mcpArgsHint: '每个输入框填写一个参数；参数内部允许空格。',
   mcpArgRow: '参数',
@@ -186,4 +199,6 @@ export const zh: Record<McpSettingsLocaleKey, string> = {
   mcpImportIgnoredOptions: '已导入；Codex 专属的工具策略或启动选项已忽略',
   mcpAddFormTitle: '新建 MCP 服务器',
   mcpAddFormHint: '选择本地 stdio 进程或 Streamable HTTP 端点。',
+  mcpEditFormTitle: '编辑 MCP 服务器',
+  mcpEditFormHint: '掩码值保持原样；修改变量或请求头名称时需输入新值，也可移除该行。',
 }

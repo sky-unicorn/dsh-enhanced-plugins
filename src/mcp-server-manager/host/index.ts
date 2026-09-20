@@ -26,7 +26,7 @@ import { assertMcpConfigValid } from './validation.js'
 
 export type {
   McpConfigView, McpImportIssue, McpImportIssueCode, McpImportOutcome, McpImportRequest,
-  McpImportSource, McpImportSummary, McpMutateOutcome, McpMutateRequest, McpMutateWireOp,
+  McpImportSource, McpImportSummary, McpMutateOutcome, McpMutateRequest, McpMutateWireOp, McpServerFieldOp,
   McpWireHttpServer, McpWireServer, McpWireStdioServer,
 } from './types.js'
 export {
@@ -84,5 +84,5 @@ export function apply(ctx: Context, config: McpConfig): void {
     new McpConfigRemote(sctx)
   })
 
-  ctx.effect(() => () => { void manager.dispose() }, 'mcp-manager.servers')
+  ctx.effect(() => () => manager.dispose(), 'mcp-manager.servers')
 }

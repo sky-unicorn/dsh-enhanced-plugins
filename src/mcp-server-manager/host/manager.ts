@@ -44,6 +44,10 @@ interface MountedServer {
 export class McpServerManager {
   /** Live server fibers keyed by `serverName`. */
   private readonly handles = new Map<string, MountedServer>()
+  /** Per-name transition chains; a replacement starts only after old disposal. */
+  private readonly transitions = new Map<string, Promise<void>>()
+  private desired = new Map<string, ServerDefinition>()
+  private stopped = false
 
   /**
    * @param ctx - plugin context; each server mounts a child fiber through it.
@@ -58,42 +62,43 @@ export class McpServerManager {
    * @param next - the currently authoritative config.
    */
   reconcile(next: Config): void {
-    const { logger } = this.ctx
-
-    // Remove servers no longer present.
-    for (const [serverName, handle] of [...this.handles.entries()]) {
-      if (Object.hasOwn(next.servers, serverName)) continue
-      void handle.dispose()
-      this.handles.delete(serverName)
+    if (this.stopped) return
+    this.desired = new Map(Object.entries(next.servers))
+    const names = new Set([...this.desired.keys(), ...this.handles.keys(), ...this.transitions.keys()])
+    for (const serverName of names) {
+      const preceding = this.transitions.get(serverName) ?? Promise.resolve()
+      const transition = preceding.then(() => this.syncServer(serverName)).catch(error => {
+        this.ctx.logger.error(`mcp-manager: server "${serverName}" transition failed: ${String(error)}`)
+      })
+      this.transitions.set(serverName, transition)
+      void transition.then(() => {
+        if (this.transitions.get(serverName) === transition) this.transitions.delete(serverName)
+      })
     }
+  }
 
-    // Start new servers and restart changed ones.
-    for (const [serverName, def] of Object.entries(next.servers)) {
-      const previous = this.handles.get(serverName)
-      if (previous !== undefined && jsonEqual(previous.def, def)) continue
-      if (previous !== undefined) {
-        void previous.dispose()
-        this.handles.delete(serverName)
-      }
-      try {
-        const fiber = this.ctx.plugin(mcpClient, toMcpClientConfig(serverName, def))
-        // Do not await: a slow initial connection must not block the
-        // reconcile loop or the settings change that triggered it. Attach a
-        // catch so a failed startup (with `failOnStartupError: false` this is
-        // already contained, but a config error would reject) is logged
-        // rather than surfacing as an unhandled rejection.
-        void Promise.resolve(fiber).catch(error => {
-          logger.error(`mcp-manager: server "${serverName}" refused: ${String(error)}`)
-        })
-        this.handles.set(serverName, {
-          dispose: () => fiber.dispose(),
-          def,
-        })
-      } catch (error) {
-        // A synchronous throw (e.g. duplicate `serverName` reservation) is
-        // logged here; the entry is left unset so a later reconcile retries.
-        logger.error(`mcp-manager: server "${serverName}" refused: ${String(error)}`)
-      }
+  /** Reconcile one namespace after its preceding disposal has settled. */
+  private async syncServer(serverName: string): Promise<void> {
+    if (this.stopped) return
+    const previous = this.handles.get(serverName)
+    const requested = this.desired.get(serverName)
+    if (previous !== undefined && requested !== undefined && jsonEqual(previous.def, requested)) return
+    if (previous !== undefined) {
+      this.handles.delete(serverName)
+      await previous.dispose()
+    }
+    if (this.stopped) return
+    const latest = this.desired.get(serverName)
+    if (latest === undefined) return
+    try {
+      const fiber = this.ctx.plugin(mcpClient, toMcpClientConfig(serverName, latest))
+      // Connection startup remains asynchronous; only disposal is serialized.
+      void Promise.resolve(fiber).catch(error => {
+        this.ctx.logger.error(`mcp-manager: server "${serverName}" refused: ${String(error)}`)
+      })
+      this.handles.set(serverName, { dispose: () => fiber.dispose(), def: latest })
+    } catch (error) {
+      this.ctx.logger.error(`mcp-manager: server "${serverName}" refused: ${String(error)}`)
     }
   }
 
@@ -102,8 +107,12 @@ export class McpServerManager {
    * @returns settlement after every handle has quiesced.
    */
   async dispose(): Promise<void> {
+    this.stopped = true
+    this.desired.clear()
+    await Promise.allSettled([...this.transitions.values()])
     await Promise.allSettled([...this.handles.values()].map(handle => handle.dispose()))
     this.handles.clear()
+    this.transitions.clear()
   }
 }
 

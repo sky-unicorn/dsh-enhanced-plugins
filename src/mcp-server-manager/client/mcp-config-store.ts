@@ -72,15 +72,26 @@ const IMPORT_ISSUE_CODES: ReadonlySet<string> = new Set<McpImportIssueCode>([
   'unsupported-auth', 'environment-missing', 'disabled', 'ignored-options',
 ])
 
-/** One path edit the `mcpConfig/mutate` wire accepts (the settings path-op shape). */
-export interface McpWireOp {
-  /** The edit to perform. */
-  op: 'set' | 'unset'
-  /** Dotted path inside the `mcp` section, starting at a field name. */
-  path: string[]
-  /** The value a `set` writes. */
-  value?: unknown
-}
+/** One field edit relative to an existing server; the Host applies it to the unmasked record. */
+export type McpServerFieldOp =
+  | { op: 'set'; path: string[]; value: unknown }
+  | { op: 'unset'; path: string[] }
+
+/** One edit the `mcpConfig/mutate` wire accepts. */
+export type McpWireOp =
+  | { op: 'set'; path: string[]; value: McpServer }
+  | { op: 'unset'; path: string[] }
+  | {
+    op: 'edit'
+    /** The existing server's name. */
+    path: string[]
+    /** The resulting name; may equal the existing name. */
+    nextName: string
+    /** Field edits applied to the Host's unmasked server. */
+    changes: McpServerFieldOp[]
+    /** Complete definition when switching transport; old transport secrets are dropped. */
+    replacement?: McpServer
+  }
 
 /** One `mcpConfig/describe` answer (the Host-owned view shape). */
 interface McpConfigView {
