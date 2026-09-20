@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugins",
-  "version": "7.2.0",
+  "version": "7.2.1",
   "description": "Aggregate and selective DeepSeek Harness enhancements, including a standalone Windows launcher companion",
   "type": "module",
   "main": "./lib/index.js",

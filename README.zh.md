@@ -29,12 +29,12 @@
 
 ## 快速开始
 
-### 7.2.0：适配 DSH 0.1.6-alpha.2
+### 7.2.1：适配 DSH 0.1.6-alpha.2
 
-- 插件 `7.2.0` 最初验证的 DSH 版本为 `0.1.6-alpha.2`，源码基线为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。继续使用远程兼容关系更新与包内回退机制。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
+- 插件 `7.2.1` 验证的 DSH 版本为 `0.1.6-alpha.2`，源码基线为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。远端表缺少当前插件或 DSH 版本时，安装器会继续查包内兼容表。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
 - MCP 与模型输入类型的配置迁移到侧栏“插件”页所属组件的配置入口；MCP 离开页面时丢弃未保存草稿，模型类型更改仍立即保存，并支持“仅图片”。独立安装和聚合安装均提供对应入口。
 - 团队监控通过新版 `mainView` 会话引用识别主会话，成员跳转使用官方 `uiWorkspace.openSession()`；侧栏独立保留的子会话不会改变主会话监控。7 个独立功能包和 Windows Launcher 使用同一发布版本与源码基线。
-- 类型检查拒绝缺少新版插件配置／会话引用接口的旧 DSH 构建产物。标签为 `7.2.0/dsh-0.1.6-alpha.2`。
+- 类型检查拒绝缺少新版插件配置／会话引用接口的旧 DSH 构建产物。
 - Launcher 减少切页、滚动和功能筛选的重复布局，切换启动方式后及时刷新按钮文案；执行日志按功能只保留最新一轮，并限制界面读取量。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
 - 源码桌面复用已绑定的 DSH checkout 和 Launcher 工具链：“启动桌面端”运行 `pnpm run start:desktop`，“构建并启动”运行 `pnpm run dev:desktop`。缺少构建产物时禁用普通启动并提示构建；源码依赖需先通过 `pnpm install --frozen-lockfile` 安装。启动过程、失败原因和退出码进入桌面日志；“停止”只结束 Launcher 拥有的命令进程树。构建并启动仍在运行时，禁止同时启动 Web 读取共享产物。旧的 `DesktopExecutable` 字段不再使用，无需选择 EXE。
@@ -302,10 +302,10 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、7 个独立功能包和 Windows Launcher 均使用 `7.2.0`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、7 个独立功能包和 Windows Launcher 均使用 `7.2.1`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
-- **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件。每次检查重新获取，不覆盖本地回退文件。有效的远程表具有优先权：未列出当前插件版本、对应 DSH 列表为空或 DSH 版本不受支持时直接停止，不回退旧声明。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
+- **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件；远端有效但没有匹配当前插件及 DSH 版本的记录时也会检查包内文件。只有两处都不支持当前 DSH 版本才拒绝安装。每次检查重新获取，不覆盖本地回退文件。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。
 - **提供方来源：** `subagent-codex`、`subagent-claude-code` 的 Loader ID 不变，改由本包的 `sub-agent/codex`、`sub-agent/claude-code` 入口转出官方提供方；独立包对应 `./codex`、`./claude-code`。这样新版 DeepSeek 请求的活动插件清单能解析其包来源，无需关闭该功能或修改 DSH。
 - **独立构建：** 各功能发布物携带自身源码和构建脚本，可在没有 sibling DSH checkout 的目录执行 `npm install --legacy-peer-deps`、`npm run prepare` 和 `npm pack`；运行时仍由匹配版本的 DSH 提供公开 peer 服务。Windows Launcher 原生重建需要 Windows 与 .NET Framework 4.x 编译器。
@@ -417,7 +417,7 @@ Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home �
 `npm run verify:edit-web` 在隔离 profile 安装编辑插件，使用本地 SSE 模型 fixture 驱动真实 Chromium/Web 组合，验证连续编辑、模型历史替换、文件与 Skill 引用预览、刷新恢复和 light/dark 截图，不需要真实模型密钥。默认验证 DSH 的 Messages 协议；设置 `DSH_VERIFY_PROTOCOL=chat-completions` 可额外验证显式选择该协议的情况。测试关闭会话日志上传，Launcher 文件也只安装到测试临时目录。它使用 DSH 构建副本中的 Playwright，需已安装对应 Chromium。`typecheck` 会拒绝 Session 声明版本不匹配、缺少 `openSkill`，或没有新版插件配置与会话引用接口的陈旧构建。Web、Desktop 验证命令均支持 `DSH_VERIFY_CHECKOUT` 指向隔离构建。
 
 
-`npm run verify:plugin-ui` 在真实 Web profile 验证 MCP 保存与草稿丢弃、仅图片模型设置、插件热启停，以及真实 Team 的监控与成员跳转，并检查 light/dark 和 system 配色切换。设置 `DSH_VERIFY_AGGREGATE=1` 验证聚合包；默认验证三个相关独立包的组合。发布前可将 `DSH_COMPATIBILITY_URL` 指向隔离测试服务，使验证使用待发布的兼容表；不改变生产安装器对远端撤销记录的处理。
+`npm run verify:plugin-ui` 在真实 Web profile 验证 MCP 保存与草稿丢弃、仅图片模型设置、插件热启停，以及真实 Team 的监控与成员跳转，并检查 light/dark 和 system 配色切换。设置 `DSH_VERIFY_AGGREGATE=1` 验证聚合包；默认验证三个相关独立包的组合。发布前可将 `DSH_COMPATIBILITY_URL` 指向隔离测试服务，使验证使用待发布的兼容表；远端没有匹配记录时改用包内表。
 
 DSH `0.1.6-alpha.2` 的实际配置入口是 `plugins.row.config`／`plugins.bundle.config`；在线设置卡片 cookbook 仍可能展示旧 `settings.plugin.item`，本版本以已验证提交的源码和类型为准。
 

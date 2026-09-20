@@ -100,29 +100,34 @@ function Get-RemoteCompatibilityDocument {
 function Resolve-DshCompatibility {
   param(
     [Parameter(Mandatory = $true)][string] $RepositoryRoot,
-    [Parameter(Mandatory = $true)][string] $PluginVersion
+    [Parameter(Mandatory = $true)][string] $PluginVersion,
+    [Parameter(Mandatory = $true)][string] $DshVersion
   )
   $url = 'https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/master/dsh-compatibility.json'
   if (-not [string]::IsNullOrWhiteSpace($env:DSH_COMPATIBILITY_URL)) { $url = $env:DSH_COMPATIBILITY_URL }
   try {
     $document = Get-RemoteCompatibilityDocument $url
-    Write-Host 'Compatibility source: remote (latest compatibility document).'
+    $remoteRelease = @($document.releases | Where-Object { $_.pluginVersion -ceq $PluginVersion })
+    if ($remoteRelease.Count -eq 1 -and
+        @($remoteRelease[0].dsh | Where-Object { $_.version -ceq $DshVersion }).Count -eq 1) {
+      Write-Host 'Compatibility source: remote (latest compatibility document).'
+      return $remoteRelease[0]
+    }
+    Write-Warning 'Remote compatibility document has no matching plugin/DSH version; checking bundled dsh-compatibility.json.'
   } catch {
     # Do not log the response body, URL query, credentials, or transport exception.
     Write-Warning 'Remote compatibility document is unavailable or invalid; using bundled dsh-compatibility.json.'
-    $path = Join-Path $RepositoryRoot 'dsh-compatibility.json'
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-      throw 'Bundled dsh-compatibility.json is missing. Nothing was installed or removed.'
-    }
-    $document = Get-Content -Raw -LiteralPath $path -Encoding UTF8 | ConvertFrom-Json
-    Assert-CompatibilityDocument $document
-    Write-Host 'Compatibility source: bundled dsh-compatibility.json.'
   }
-  # A valid remote document is authoritative even when it removes a release.
-  # Missing/empty support is a refusal, never a reason to restore stale support.
+  $path = Join-Path $RepositoryRoot 'dsh-compatibility.json'
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    throw 'Bundled dsh-compatibility.json is missing. Nothing was installed or removed.'
+  }
+  $document = Get-Content -Raw -LiteralPath $path -Encoding UTF8 | ConvertFrom-Json
+  Assert-CompatibilityDocument $document
+  Write-Host 'Compatibility source: bundled dsh-compatibility.json.'
   $release = @($document.releases | Where-Object { $_.pluginVersion -ceq $PluginVersion })
   if ($release.Count -ne 1 -or $release[0].dsh.Count -eq 0) {
-    throw "No supported DSH versions for plugin $PluginVersion in the selected compatibility document. Nothing was installed or removed."
+    throw "No supported DSH versions for plugin $PluginVersion in either compatibility document. Nothing was installed or removed."
   }
   return $release[0]
 }

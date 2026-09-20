@@ -46,21 +46,8 @@ if ($CheckCompatibility -and ($UninstallLauncher -or $ListFeatures)) {
 
 . (Join-Path $PSScriptRoot 'dsh-compatibility.ps1')
 
-function Assert-DshCompatibility {
-  param(
-    [Parameter(Mandatory = $true)][object] $PluginManifest,
-    [Parameter(Mandatory = $true)][string] $Checkout,
-    [Parameter(Mandatory = $true)][object[]] $Catalog,
-    [Parameter(Mandatory = $true)][object] $Compatibility
-  )
-
-  # Resolve once before builds, profile commands, service stops or companion writes.
-  $supportedVersions = @($Compatibility.dsh | ForEach-Object { $_.version })
-  foreach ($feature in $Catalog) {
-    if ($feature.Manifest.version -ne $PluginManifest.version) {
-      throw "Mixed plugin release: '$($feature.PackageName)' is $($feature.Manifest.version), expected $($PluginManifest.version). Re-extract or update the complete plugin release."
-    }
-  }
+function Get-DshSourceVersion {
+  param([Parameter(Mandatory = $true)][string] $Checkout)
   $dshManifestPath = Join-Path $Checkout 'package.json'
   if (-not (Test-Path -LiteralPath $dshManifestPath -PathType Leaf)) {
     throw "Cannot check DSH compatibility: '$dshManifestPath' is missing. Pass -DshCheckout with the DSH source directory."
@@ -72,13 +59,35 @@ function Assert-DshCompatibility {
       $null -eq $version -or $version.Value -isnot [string]) {
     throw "Cannot identify the DSH source version at '$Checkout'; expected @deepseek-ai/dsh-root."
   }
-  if ($supportedVersions -cnotcontains $version.Value) {
-    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $($supportedVersions -join ' or '), but '$Checkout' is $($version.Value). Use a supported DSH release or a matching plugin release. Nothing was installed or removed."
+  return $version.Value
+}
+
+function Assert-DshCompatibility {
+  param(
+    [Parameter(Mandatory = $true)][object] $PluginManifest,
+    [Parameter(Mandatory = $true)][string] $Checkout,
+    [Parameter(Mandatory = $true)][string] $DshVersion,
+    [Parameter(Mandatory = $true)][object[]] $Catalog,
+    [Parameter(Mandatory = $true)][object] $Compatibility
+  )
+
+  # Resolve once before builds, profile commands, service stops or companion writes.
+  $supportedVersions = @($Compatibility.dsh | ForEach-Object { $_.version })
+  foreach ($feature in $Catalog) {
+    if ($feature.Manifest.version -ne $PluginManifest.version) {
+      throw "Mixed plugin release: '$($feature.PackageName)' is $($feature.Manifest.version), expected $($PluginManifest.version). Re-extract or update the complete plugin release."
+    }
   }
-  $target = @($Compatibility.dsh | Where-Object { $_.version -ceq $version.Value })[0]
+  if ((Get-DshSourceVersion -Checkout $Checkout) -cne $DshVersion) {
+    throw 'DSH source version changed during compatibility verification. Nothing was installed or removed.'
+  }
+  if ($supportedVersions -cnotcontains $DshVersion) {
+    throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $($supportedVersions -join ' or '), but '$Checkout' is $DshVersion. Use a supported DSH release or a matching plugin release. Nothing was installed or removed."
+  }
+  $target = @($Compatibility.dsh | Where-Object { $_.version -ceq $DshVersion })[0]
   $verifiedCommits = @($target.commits)
   $expectedCommit = $verifiedCommits -join ', '
-  Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $($version.Value)."
+  Write-Host "Compatibility OK: plugin $($PluginManifest.version) -> DSH $DshVersion."
 
   $git = Get-Command -Name 'git' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($null -eq $git -or -not (Test-Path -LiteralPath (Join-Path $Checkout '.git'))) {
@@ -1193,8 +1202,9 @@ if ($ListFeatures) {
 $checkoutCandidate = if ($DshCheckout -ne '') { $DshCheckout }
   else { Join-Path $pluginRoot '..\deepseek-harness' }
 $checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
-$compatibility = Resolve-DshCompatibility -RepositoryRoot $pluginRoot -PluginVersion $pluginManifest.version
-Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -Catalog $catalog -Compatibility $compatibility
+$dshVersion = Get-DshSourceVersion -Checkout $checkout
+$compatibility = Resolve-DshCompatibility -RepositoryRoot $pluginRoot -PluginVersion $pluginManifest.version -DshVersion $dshVersion
+Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -DshVersion $dshVersion -Catalog $catalog -Compatibility $compatibility
 if ($CheckCompatibility) { return }
 
 $requestedFeatures = @(

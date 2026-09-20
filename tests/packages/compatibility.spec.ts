@@ -160,22 +160,49 @@ describe('central compatibility authority', () => {
     expect(accepted.output).toContain('Compatibility source: remote')
     const refused = await check(source, undefined, url)
     expect(refused.status).not.toBe(0)
+    expect(refused.output).toContain('Compatibility source: bundled')
     expect(refused.output).toContain('Incompatible DSH')
     expect(requests).toBe(2)
     expect(readFileSync(resolve(source.plugin, 'dsh-compatibility.json'), 'utf8')).toBe(original)
   })
 
-  it.runIf(process.platform === 'win32').each(['missing', 'empty', 'other-plugin'])('does not restore bundled support after a valid remote %s release', async (kind) => {
+  it.runIf(process.platform === 'win32').each(['missing', 'empty', 'other-plugin', 'different-dsh'])('uses bundled support when a valid remote has %s support', async (kind) => {
     const source = fixture()
     const value = table()
     if (kind === 'missing') value.releases = []
     if (kind === 'empty') value.releases[0].dsh = []
     if (kind === 'other-plugin') value.releases[0].pluginVersion = '99.0.0'
+    if (kind === 'different-dsh') value.releases[0].dsh[0].version = '0.3.0-alpha.1'
     const url = await remote((_request, response) => response.end(JSON.stringify(value)))
     const result = await check(source, undefined, url)
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain('Compatibility source: bundled')
+    expect(result.output).toContain(`Compatibility OK: plugin ${release.version} -> DSH ${baseline.version}`)
+    expect(readdirSync(source.dsh)).toEqual(['package.json'])
+  })
+
+  it.runIf(process.platform === 'win32')('rejects when neither compatibility table supports the DSH version', async () => {
+    const source = fixture('99.0.0')
+    const url = await remote((_request, response) => response.end(JSON.stringify(table('0.3.0-alpha.1'))))
+    const result = await check(source, undefined, url)
     expect(result.status).not.toBe(0)
-    expect(result.output).toContain('No supported DSH versions')
-    expect(result.output).not.toContain('Compatibility source: bundled')
+    expect(result.output).toContain('Compatibility source: bundled')
+    expect(result.output).toContain('Incompatible DSH')
+    expect(result.output).toContain('Nothing was installed or removed')
+    expect(existsSync(resolve(source.plugin, 'lib'))).toBe(false)
+  })
+
+  it.runIf(process.platform === 'win32')('rejects a DSH version changed while fetching remote support', async () => {
+    const source = fixture()
+    const url = await remote((_request, response) => {
+      writeFileSync(resolve(source.dsh, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-root', version: '99.0.0' }))
+      response.end(JSON.stringify(table(baseline.version)))
+    })
+    const result = await check(source, undefined, url)
+    expect(result.status).not.toBe(0)
+    expect(result.output).toContain('DSH source version changed during compatibility verification')
+    expect(result.output).toContain('Nothing was installed or removed')
+    expect(existsSync(resolve(source.plugin, 'lib'))).toBe(false)
   })
 
   it.runIf(process.platform === 'win32').each([404, 500, 'invalid-json', 'invalid-schema', 'oversize'])('falls back for remote failure %s', async (kind) => {
