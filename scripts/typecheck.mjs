@@ -1,5 +1,5 @@
 /** Check against the chosen built DSH checkout; never silently validate against stale Session declarations. */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -13,6 +13,17 @@ const built = formatVersion(resolve(dsh, 'packages/core/session/lib/types/types.
 if (source !== '3' || source !== built) throw new Error(`DSH Session declarations are stale or incompatible (source=${source}, built=${built}); build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.`)
 const chatOwner = readFileSync(resolve(dsh, 'packages/client/ui-chat/lib/types/client/contract/slots.d.ts'), 'utf8')
 if (!chatOwner.includes('openSkill:')) throw new Error('DSH Chat declarations predate sent-reference previews; build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.')
+const requiredContracts = [
+  ['packages/client/ui-plugin-manager/lib/types/client/slot-contract.d.ts', "'plugins.row.config'"],
+  ['packages/api/session-controller/lib/types/client/contract/sessions.d.ts', 'retain(target:'],
+  ['packages/client/ui-workspace/lib/types/client/navigation.d.ts', 'openSession(target:'],
+]
+for (const [relative, signature] of requiredContracts) {
+  const path = resolve(dsh, relative)
+  if (!existsSync(path) || !readFileSync(path, 'utf8').includes(signature)) {
+    throw new Error(`DSH declarations predate the 0.1.6-alpha.2 plugin/session APIs: ${relative}; build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.`)
+  }
+}
 const scratch = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-typecheck-'))
 try {
   for (const name of ['tsconfig.json', 'tsconfig.client.json']) {

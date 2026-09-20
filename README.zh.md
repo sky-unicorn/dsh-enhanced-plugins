@@ -19,8 +19,8 @@
 | [Windows Launcher](#1-windows-launcher) | `windows-launcher` | `dsh-enhanced-windows-launcher` | Windows 开始菜单 | 用托盘控制 Web、Headless、Profile、源码构建与诊断 |
 | [桌面提示与宠物](#2-桌面提示与宠物) | `notification` | `dsh-enhanced-notification` | Windows；设置 → 桌面宠物 | 任务提示音、自定义 WAV 音效库和原生动态桌宠 |
 | [插件社区](#3-插件社区) | `plugin-market` | `dsh-enhanced-plugin-market` | Web；设置 → 插件社区 | 搜索、安全预检、安装和卸载社区插件 |
-| [MCP 服务器管理](#4-mcp-服务器管理) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web；设置 → 插件 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
-| [pi-ai 模型请求类型](#5-pi-ai-模型请求类型) | `model-input-types` | `dsh-enhanced-model-input-types` | Web；设置 → 插件 | 声明模型接受纯文本还是图片请求 |
+| [MCP 服务器管理](#4-mcp-服务器管理) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web；侧栏插件 → 所属包 → 组件配置 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
+| [pi-ai 模型请求类型](#5-pi-ai-模型请求类型) | `model-input-types` | `dsh-enhanced-model-input-types` | Web；侧栏插件 → 所属包 → 组件配置 | 声明模型接受纯文本还是图片请求 |
 | [编辑上一条消息](#6-编辑上一条消息) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web；最后一条用户消息 | 修改该轮内容并在当前会话重新生成 |
 | [产品子智能体](#7-产品子智能体) | `sub-agent` | `dsh-enhanced-sub-agent` | Web；设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
 | [官方团队监控](#8-官方团队监控) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web；当前对话输入框右侧团队图标 | 按角色查看执行中／历史子会话，跳转原生详情，以及 Team 任务依赖和邮箱计数 |
@@ -29,10 +29,12 @@
 
 ## 快速开始
 
-### 7.1.1 启动方式与兼容范围
+### 7.2.0：适配 DSH 0.1.6-alpha.2
 
-- 插件 `7.1.1` 最初验证的 DSH 版本为 `0.1.6-alpha.1`，源码基线为 `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`。7.1.1 新增远程兼容关系更新与包内回退机制。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
-- 本版本适配 DSH 当前的发送图标与串行 `agent/created` 生命周期，编辑、重新发送和已发送引用预览继续在原会话内完成。7 个独立功能包和 Windows Launcher 使用同一发布版本与源码基线。
+- 插件 `7.2.0` 最初验证的 DSH 版本为 `0.1.6-alpha.2`，源码基线为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。继续使用远程兼容关系更新与包内回退机制。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
+- MCP 与模型输入类型的配置迁移到侧栏“插件”页所属组件的配置入口；MCP 离开页面时丢弃未保存草稿，模型类型更改仍立即保存，并支持“仅图片”。独立安装和聚合安装均提供对应入口。
+- 团队监控通过新版 `mainView` 会话引用识别主会话，成员跳转使用官方 `uiWorkspace.openSession()`；侧栏独立保留的子会话不会改变主会话监控。7 个独立功能包和 Windows Launcher 使用同一发布版本与源码基线。
+- 类型检查拒绝缺少新版插件配置／会话引用接口的旧 DSH 构建产物。标签为 `7.2.0/dsh-0.1.6-alpha.2`。
 - Launcher 减少切页、滚动和功能筛选的重复布局，切换启动方式后及时刷新按钮文案；执行日志按功能只保留最新一轮，并限制界面读取量。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
 - 源码桌面复用已绑定的 DSH checkout 和 Launcher 工具链：“启动桌面端”运行 `pnpm run start:desktop`，“构建并启动”运行 `pnpm run dev:desktop`。缺少构建产物时禁用普通启动并提示构建；源码依赖需先通过 `pnpm install --frozen-lockfile` 安装。启动过程、失败原因和退出码进入桌面日志；“停止”只结束 Launcher 拥有的命令进程树。构建并启动仍在运行时，禁止同时启动 Web 读取共享产物。旧的 `DesktopExecutable` 字段不再使用，无需选择 EXE。
@@ -43,7 +45,7 @@
 
 - Node.js 22.19.x，或 Node.js 24 及更高版本。
 - 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
-- 支持的 DSH 源码基线为 [`0.1.6-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/0d1f50007f9bca3f52b06e1c3074fa14d5fb0720)，后续验证通过的版本可追加到 [`dsh-compatibility.json`](dsh-compatibility.json)，无需发布新的插件代码。
+- 支持的 DSH 源码基线为 [`0.1.6-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/ddefc45fbc7f8e46dd73185e68295696d1297887)，后续验证通过的版本可追加到 [`dsh-compatibility.json`](dsh-compatibility.json)，无需发布新的插件代码。
 - 此版本 DSH 的 Session 文件锁已不再依赖 `fs-ext`。原生构建要求以目标 checkout 为准；Launcher 自身使用系统 .NET Framework 的 `csc.exe`。不要跳过依赖安装脚本。
 - Windows Launcher、原生提示音和桌面宠物需要带 Windows PowerShell 5.1 的完整 Windows 桌面版本，即 Windows 10 1607 或更高版本，或 Windows 11。所需系统能力在 Home、Pro、Education / Pro Education 与 Enterprise 上相同；Windows S 模式、IoT / 精简版本以及 Windows 10 1507、1511 不在这一基线内。已经超出微软生命周期的 Windows 功能更新只能尽力兼容，因为所需 Node.js 工具链不保证支持已停止维护的操作系统。安装器不依赖某一个特定的 `tar.exe`；其余功能可跨平台使用。
 
@@ -222,7 +224,7 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 ### 4. MCP 服务器管理
 
-`mcp-server-manager` · **设置 → 插件 → 插件配置 → MCP 服务器**
+`mcp-server-manager` · **侧栏插件 → dsh-enhanced-mcp-server-manager → 配置 mcp-manager**
 
 ![MCP 服务器管理](assets/readme/mcp-server-manager.png)
 
@@ -233,17 +235,17 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 浏览器读取已有服务器时会掩码环境变量与请求头；未修改的机密不会从脱敏快照重建或覆盖。
 
-草稿绑定开始编辑时的配置版本。其他页面或外部编辑更新配置后，旧草稿保存会被拒绝，不会删除对方新增的服务器；请放弃草稿、查看最新配置后重新编辑。连接中断时会退出保存状态并保留草稿，写入失败后重新读取 Host 配置；较早的读取响应不会覆盖较新的刷新结果。
+草稿绑定开始编辑时的配置版本。其他页面或外部编辑更新配置后，旧草稿保存会被拒绝，不会删除对方新增的服务器；请离开页面丢弃草稿，再重新打开、查看最新配置后编辑。只有点击保存才提交 MCP 草稿。连接中断时会退出保存状态并保留草稿，写入失败后重新读取 Host 配置；较早的读取响应不会覆盖较新的刷新结果。
 
 ### 5. pi-ai 模型请求类型
 
-`model-input-types` · **设置 → 插件 → 插件配置 → pi-ai 模型请求类型**
+`model-input-types` · **侧栏插件 → dsh-enhanced-model-input-types → 配置 model-input-types**
 
 ![pi-ai 模型请求类型](assets/readme/model-input-types.png)
 
-先在 DSH“模型”页或 `settings.yaml` 中添加 pi-ai 模型覆盖，再为每个模型选择“提供方默认”“仅文本”或“文本与图片”；选择会立即保存。
+先在 DSH“模型”页或 `settings.yaml` 中添加 pi-ai 模型覆盖，再为每个模型选择“提供方默认”“仅文本”“仅图片”或“文本与图片”；选择会立即保存。
 
-只有官方 `llm-pi-ai` settings namespace 可用时才显示此卡片。它保存的是能力声明，不会探测实际端点；声明“文本与图片”前请确认提供方确实接受图片请求。
+聚合安装时，在 `dsh-enhanced-plugins` 包的 `ui-enhanced-plugins` 行打开模型配置，MCP 配置仍在该包的 `mcp-manager` 行。官方 `llm-pi-ai` settings namespace 不可用时，配置页显示服务不可用。它保存的是能力声明，不会探测实际端点；声明“文本与图片”前请确认提供方确实接受图片请求。
 
 ### 6. 编辑上一条消息
 
@@ -291,7 +293,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 - Agent Teams 面板跟随当前队长或 roster 成员会话，显示成员状态、任务依赖/负责人/可领取状态、写入范围重叠提示和待投递消息数量。点击任务查看详情，点击成员打开官方子代理会话。
 - Host 读取官方 `ctx.agentTeams`；冷历史由官方 Agent Teams 运行时注册的 `agentTeam` 投影和公开 `ctx.sessionProjections.restore()` 回放。日志通过不提交恢复的 `sessionQuery.observeSession()` 读取，不激活 Agent，也不创建第二份团队状态。
 - 只轮询当前会话（展开时 1.5 秒、收起时 5 秒）；隐藏页面或断线后暂停。后续启动的成员和状态变化会自动刷新，但不会自动打开面板。点击图标、外部区域或 Escape 可收起。切换会话、重连和请求失败不会把旧数据显示为实时状态。
-- 监控插件**不会启用 Agent Teams 或 workflow**，不注册模型工具，不创建/唤醒/中断成员，不编辑任务或调度工作。查看标准工作流无需实验性 Team 包；要查看 Agent Teams 的实时或历史状态，请按[官方 Team 文档](https://github.com/deepseek-ai/deepseek-harness/tree/0d1f50007f9bca3f52b06e1c3074fa14d5fb0720/packages/experimental/agent-team)单独启用实验性运行时，使其拥有并注册投影。
+- 监控插件**不会启用 Agent Teams 或 workflow**，不注册模型工具，不创建/唤醒/中断成员，不编辑任务或调度工作。查看标准工作流无需实验性 Team 包；要查看 Agent Teams 的实时或历史状态，请按[官方 Team 文档](https://github.com/deepseek-ai/deepseek-harness/tree/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/experimental/agent-team)单独启用实验性运行时，使其拥有并注册投影。
 - 使用兼容表中已验证的 DSH 源码 ABI。实验包不由本插件打包或从 npm 获取；Agent Teams 历史回放依赖运行 profile 中已挂载的官方运行时及其投影。成员运行状态不等于任务完成状态：“未驻留”不是“已完成”，任务状态仍依赖模型更新。监控不向浏览器传输邮箱正文或 provider 错误原文。最多显示 256 个成员 / 1,000 个任务，超限时明确提示，汇总仍包含全部记录。
 - 工作流最多显示 100 次运行、合计 256 条成员记录，汇总保持完整。未记录结束的冷历史不会冒充实时运行；原步骤或轮次已关闭时标记中断。监控只读取公开记录，不读取／执行工作流脚本，普通子代理不会被伪装成实验性 Team。
 - 原生子会话目录来自公开的 `subagents.listDescendants`，通过非写入的 `sessionPersistence.inspect()` 获取自身标题与轮次结果。实际 Agent 的运行／空闲状态优先，不能用“仍驻留”冒充“正在执行”。历史筛选包含当前未运行的会话，不表示全部成功。目录最多展示 256 条、优先运行中的 Agent；超限时显示已展示／总数，筛选计数只针对已展示条目。目录不可用不会影响已有 Team／工作流记录的查看。
@@ -300,7 +302,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、7 个独立功能包和 Windows Launcher 均使用 `7.1.1`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、7 个独立功能包和 Windows Launcher 均使用 `7.2.0`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件。每次检查重新获取，不覆盖本地回退文件。有效的远程表具有优先权：未列出当前插件版本、对应 DSH 列表为空或 DSH 版本不受支持时直接停止，不回退旧声明。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
@@ -412,7 +414,12 @@ Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home �
 
 浏览器 bundle 使用 CSS Modules，并且只消费 DSH 的 `--dsw-alias-*` 语义主题 token，会自动跟随 light、dark 与 system 外观。插件架构与公开扩展点可参考 [DSH 插件开发文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 和 [架构参考](https://deepseek-harness.github.io/deepseek-harness/reference/)。
 
-`npm run verify:edit-web` 在隔离 profile 安装编辑插件，使用本地 SSE 模型 fixture 驱动真实 Chromium/Web 组合，验证连续编辑、模型历史替换、文件与 Skill 引用预览、刷新恢复和 light/dark 截图，不需要真实模型密钥。默认验证 DSH 的 Messages 协议；设置 `DSH_VERIFY_PROTOCOL=chat-completions` 可额外验证显式选择该协议的情况。测试关闭会话日志上传，Launcher 文件也只安装到测试临时目录。它使用 DSH 构建副本中的 Playwright，需已安装对应 Chromium。`typecheck` 会拒绝 Session 声明版本不匹配或缺少 `openSkill` 的陈旧构建。Web、Desktop 验证命令均支持 `DSH_VERIFY_CHECKOUT` 指向隔离构建。
+`npm run verify:edit-web` 在隔离 profile 安装编辑插件，使用本地 SSE 模型 fixture 驱动真实 Chromium/Web 组合，验证连续编辑、模型历史替换、文件与 Skill 引用预览、刷新恢复和 light/dark 截图，不需要真实模型密钥。默认验证 DSH 的 Messages 协议；设置 `DSH_VERIFY_PROTOCOL=chat-completions` 可额外验证显式选择该协议的情况。测试关闭会话日志上传，Launcher 文件也只安装到测试临时目录。它使用 DSH 构建副本中的 Playwright，需已安装对应 Chromium。`typecheck` 会拒绝 Session 声明版本不匹配、缺少 `openSkill`，或没有新版插件配置与会话引用接口的陈旧构建。Web、Desktop 验证命令均支持 `DSH_VERIFY_CHECKOUT` 指向隔离构建。
+
+
+`npm run verify:plugin-ui` 在真实 Web profile 验证 MCP 保存与草稿丢弃、仅图片模型设置、插件热启停，以及真实 Team 的监控与成员跳转，并检查 light/dark 和 system 配色切换。设置 `DSH_VERIFY_AGGREGATE=1` 验证聚合包；默认验证三个相关独立包的组合。发布前可将 `DSH_COMPATIBILITY_URL` 指向隔离测试服务，使验证使用待发布的兼容表；不改变生产安装器对远端撤销记录的处理。
+
+DSH `0.1.6-alpha.2` 的实际配置入口是 `plugins.row.config`／`plugins.bundle.config`；在线设置卡片 cookbook 仍可能展示旧 `settings.plugin.item`，本版本以已验证提交的源码和类型为准。
 
 ## License
 

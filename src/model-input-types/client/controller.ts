@@ -17,7 +17,7 @@ export const PI_AI_SETTINGS_NS = 'llm-pi-ai'
 type ModelRecord = Record<string, SettingsNamespaceView['value']>
 
 /** Curated request capability exposed by this plugin. */
-export type ModelType = 'default' | 'text' | 'multimodal'
+export type ModelType = 'default' | 'text' | 'image' | 'multimodal'
 
 /** One configured model row rendered by the card. */
 export interface ModelRequestTypeRow {
@@ -79,7 +79,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /** Narrow a DOM or caller value to a supported curated choice. */
 export function isModelType(value: unknown): value is ModelType {
-  return value === 'default' || value === 'text' || value === 'multimodal'
+  return value === 'default' || value === 'text' || value === 'image' || value === 'multimodal'
 }
 
 /** Read a profile's modalities as the curated request-type choice. */
@@ -89,13 +89,13 @@ export function modelTypeOf(model: Readonly<Record<string, unknown>>): ModelType
   if (!Array.isArray(input) || input.some(modality => modality !== 'text' && modality !== 'image')) {
     throw new Error('llm-pi-ai model input must contain only text or image modalities')
   }
-  return input.includes('image') ? 'multimodal' : 'text'
+  return input.includes('image') ? input.includes('text') ? 'multimodal' : 'image' : 'text'
 }
 
 /** Translate one curated choice to the official profile field. */
 export function inputFor(type: ModelType): readonly string[] | undefined {
   if (type === 'default') return undefined
-  return type === 'multimodal' ? ['text', 'image'] : ['text']
+  return type === 'multimodal' ? ['text', 'image'] : [type]
 }
 
 /** Read one provider's raw model array from a descriptor layer. */

@@ -4,11 +4,13 @@ Read-only Host adapter and Web panel for the DSH versions validated in the repos
 
 只读 Host 适配器与 Web 面板；支持范围统一维护在仓库的 `dsh-compatibility.json`，源码安装器在安装前读取最新对应关系。
 The session-owned icon appears in the composer's model/context group when workflow, Agent Teams or native child-session records exist. Click to open; switching sessions closes and clears it.
+The main Conversation is identified by the public `mainView` reference source; independent sidebar chats do not change this monitor. Member navigation uses `uiWorkspace.openSession()` after refreshing the native parent catalog.
 Standard workflow monitoring needs no experimental Team runtime. Agent Teams itself must be enabled separately in the DSH source profile.
 Historical reads require the public `sessionQuery` service supplied by the standard Web profile. Its public `observeSession()` API preserves fork boundaries and balances interrupted logs in memory. The monitor releases every observation and waits for cancelled reads on unload. Team history rejected by the official projection is shown as incompatible; the monitor does not migrate it.
 This bundle never enables it, creates agents, adds model tools, changes tasks, or schedules work.
 
 只读 Host 适配器与 Web 面板。当前对话存在工作流、Agent Teams 或原生子代理会话时，在输入框右侧模型／上下文同组显示团队图标；点击才展开，切换会话立即关闭并清空。
+通过公开的 `mainView` 引用来源识别主对话，侧栏独立打开的子会话不会切换监控对象；刷新原生父级目录后，通过 `uiWorkspace.openSession()` 打开成员。
 标准工作流无需实验性 Team 运行时；Agent Teams 请单独在 DSH 源码 profile 中启用。本插件不会自动启用、组队或调度。
 历史读取需要标准 Web profile 提供的公开 `sessionQuery` 服务。公开 `observeSession()` API 保留 fork 继承边界，仅在内存中配平中断日志。监控释放每次 observation，卸载时等待取消中的读取结束。官方投影拒绝的 Team 历史显示为不兼容，监控不迁移日志。
 

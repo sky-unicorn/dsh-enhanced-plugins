@@ -10,10 +10,10 @@ import {
   Button, IconCheckOutline14, IconCodeOutline16, IconDownloadOutline16,
   IconGlobeOutline14, IconPlusOutline16, IconTrashOutline16, IconWarningOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-// Type-only: loads the `settings.plugin.item` SlotMap declaration the props
+// Type-only: loads the `plugins.row.config` SlotMap declaration the props
 // below name; cross-package collaboration goes through the slot, never a
 // value import (client bundle purity gate).
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { McpCardShell } from './McpCardShell.tsx'
 import {
   isValidHttpUrl, SERVER_NAME_PATTERN,
@@ -27,7 +27,7 @@ const HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
 
 /** Props the renderer binds for the MCP card. */
 export type McpCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.row.config'>
   & PropsLocale<'settings.mcp'>
   & InjectFace<McpCardFace>
 
@@ -39,13 +39,12 @@ export type McpCardProps =
 export function McpCard(props: McpCardProps) {
   const { t } = props
   const state = props.useMcpCard(snapshot => snapshot)
+  if (props.view === 'summary') return t('mcpDescription')
   const disabled = !state.writable
   const importDisabled = disabled || state.dirty || state.form !== null || state.saving || state.importing
   return (
     <McpCardShell
       t={t}
-      titleKey="mcpTitle"
-      descriptionKey="mcpDescription"
       state={state}
       onSave={props.save}
       onDiscard={props.discard}

@@ -14,6 +14,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['tests/mcp-server-manager/**/*.spec.ts'],
+    include: ['tests/mcp-server-manager/**/*.spec.ts', 'tests/mcp-server-manager/**/*.spec.tsx'],
   },
 })

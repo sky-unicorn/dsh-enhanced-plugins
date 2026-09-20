@@ -1,78 +1,7 @@
-/* pi-ai request-type card, aligned with the shipped Settings plugin cards. */
-
-.card {
-  list-style: none;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-3);
-  transition: border-color .16s, background .16s;
-}
-
-.card:hover {
-  border-color: var(--dsw-alias-label-dimmed);
-}
-
-.cardOpen {
-  border-color: var(--dsw-alias-label-dimmed);
-  background: var(--dsw-alias-bg-layer-2);
-}
-
-.header {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  appearance: none;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.header:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: -2px;
-}
-
-.headText {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.name {
-  color: var(--dsw-alias-label-primary);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.description {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.chevron {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  transition: transform .16s;
-}
-
-.chevronOpen {
-  transform: rotate(180deg);
-}
-
+/* Model configuration on the bundle row page. */
 .body {
-  margin: 0 16px;
-  padding: 12px 0 8px;
-  border-top: 1px solid var(--dsw-alias-border-l2);
+  display: flex;
+  flex-direction: column;
 }
 
 .warning,
@@ -254,15 +183,6 @@
 }
 
 @media (max-width: 620px) {
-  .header {
-    align-items: flex-start;
-    padding: 13px 14px;
-  }
-
-  .body {
-    margin: 0 14px;
-  }
-
   .model {
     align-items: stretch;
     flex-direction: column;
@@ -275,12 +195,5 @@
 
   .select {
     width: min(100%, 220px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .card,
-  .chevron {
-    transition: none;
   }
 }

@@ -19,8 +19,8 @@ The installer only needs the stable “feature ID.” Every feature also has a s
 | [Windows Launcher](#1-windows-launcher) | `windows-launcher` | `dsh-enhanced-windows-launcher` | Windows Start menu | Tray controls for Web, Headless, profiles, source builds, and diagnostics |
 | [Desktop alerts and pet](#2-desktop-alerts-and-pet) | `notification` | `dsh-enhanced-notification` | Windows; Settings → Desktop Pet | Task sounds, a custom WAV library, and a native animated pet |
 | [Plugin Community](#3-plugin-community) | `plugin-market` | `dsh-enhanced-plugin-market` | Web; Settings → Plugin Community | Search, safely preflight, install, and uninstall community plugins |
-| [MCP server manager](#4-mcp-server-manager) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web; Settings → Plugins | Manage stdio / Streamable HTTP servers and import local configuration |
-| [pi-ai model request types](#5-pi-ai-model-request-types) | `model-input-types` | `dsh-enhanced-model-input-types` | Web; Settings → Plugins | Declare whether a model accepts text-only or image requests |
+| [MCP server manager](#4-mcp-server-manager) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web; Sidebar Plugins → bundle → row configuration | Manage stdio / Streamable HTTP servers and import local configuration |
+| [pi-ai model request types](#5-pi-ai-model-request-types) | `model-input-types` | `dsh-enhanced-model-input-types` | Web; Sidebar Plugins → bundle → row configuration | Declare whether a model accepts text-only or image requests |
 | [Edit last message](#6-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
 | [Product subagents](#7-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
 | [Official Team monitor](#8-official-team-monitor) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web; team icon on the current conversation composer | Role-grouped running/history child sessions, native details, Team dependencies and mailbox counts |
@@ -29,11 +29,11 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 ## Quick start
 
-### 7.1.1 launch modes and compatibility
+### 7.2.0: DSH 0.1.6-alpha.2 compatibility
 
-Plugin `7.1.1` was validated against DSH `0.1.6-alpha.1` at source commit `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`. Current supported pairings are maintained in [`dsh-compatibility.json`](dsh-compatibility.json). Version 7.1.1 adds remote compatibility updates with a bundled fallback.
+Plugin `7.2.0` was validated against DSH `0.1.6-alpha.2` at source commit `ddefc45fbc7f8e46dd73185e68295696d1297887`. Current supported pairings are maintained in [`dsh-compatibility.json`](dsh-compatibility.json). Remote compatibility updates retain their bundled fallback.
 
-This release adapts the inline editor to DSH's current send icon and serial `agent/created` lifecycle. Editing, resending, and sent-reference previews remain in the same conversation. All seven standalone bundles and Windows Launcher share this release and source baseline.
+MCP and model input configuration now open from their bundle rows on the sidebar Plugins page, for both standalone and aggregate installations. MCP discards unsaved drafts when its page closes; model choices still save immediately and now include Images only. Team Monitor follows the main Conversation through `mainView` references and opens members through `uiWorkspace.openSession()`, independently of sidebar-retained children. All seven bundles and Windows Launcher share this release. Typecheck rejects DSH artifacts missing the new configuration and session-reference APIs. The Git tag is `7.2.0/dsh-0.1.6-alpha.2`.
 
 This release reduces repeated Launcher layout during navigation, scrolling, and feature filtering, and refreshes button labels when launch mode changes. Each function retains its latest execution log, with bounded reads for the UI.
 
@@ -47,7 +47,7 @@ Recovered inbox edits retain replacement semantics. Missing or stale edit target
 
 - Node.js 22.19.x, or Node.js 24 and later.
 - A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
-- Supported DSH source baseline: [`0.1.6-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/0d1f50007f9bca3f52b06e1c3074fa14d5fb0720). Additional validated versions can be listed in [`dsh-compatibility.json`](dsh-compatibility.json) without a plugin code release.
+- Supported DSH source baseline: [`0.1.6-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/ddefc45fbc7f8e46dd73185e68295696d1297887). Additional validated versions can be listed in [`dsh-compatibility.json`](dsh-compatibility.json) without a plugin code release.
 - This DSH version no longer requires `fs-ext` for Session locking. Follow the target checkout’s native build requirements; Launcher uses the system .NET Framework `csc.exe`. Do not skip dependency install scripts.
 - Windows Launcher, native sounds, and the desktop pet require a full Windows desktop edition with Windows PowerShell 5.1: Windows 10 version 1607 or later, or Windows 11. The required OS capabilities are the same on Home, Pro, Education / Pro Education, and Enterprise; Windows in S mode, IoT / reduced-footprint editions, and Windows 10 versions 1507 and 1511 are outside this baseline. Windows feature updates outside Microsoft's lifecycle are best-effort because the required Node.js toolchain does not guarantee end-of-life operating systems. The installer does not depend on a particular `tar.exe`. The remaining features are cross-platform.
 
@@ -226,7 +226,7 @@ The page displays index generation time. An index older than 24 hours receives a
 
 ### 4. MCP server manager
 
-`mcp-server-manager` · **Settings → Plugins → Plugin configuration → MCP Servers**
+`mcp-server-manager` · **Sidebar Plugins → dsh-enhanced-mcp-server-manager → Configure mcp-manager**
 
 ![MCP server manager](assets/readme/mcp-server-manager.png)
 
@@ -237,17 +237,17 @@ The page displays index generation time. An index older than 24 hours receives a
 
 Environment and header values are masked when existing servers reach the browser. Unchanged secrets are not reconstructed from, or overwritten by, redacted snapshots.
 
-Drafts retain the configuration revision at the start of editing. If another page or external editor changes the configuration, saving an older draft is refused without deleting the other editor's new servers; discard the draft, review the latest configuration, and edit again. Interrupted saves leave the saving state and retain the draft. Failed writes re-read Host configuration, and older read responses cannot overwrite newer refresh results.
+Drafts retain the configuration revision at the start of editing. If another page or external editor changes the configuration, saving an older draft is refused without deleting the other editor's new servers; leave the page to discard the draft, then reopen it, review the latest configuration, and edit again. Only Save commits staged MCP changes. Interrupted saves leave the saving state and retain the draft. Failed writes re-read Host configuration, and older read responses cannot overwrite newer refresh results.
 
 ### 5. pi-ai model request types
 
-`model-input-types` · **Settings → Plugins → Plugin configuration → pi-ai model request types**
+`model-input-types` · **Sidebar Plugins → dsh-enhanced-model-input-types → Configure model-input-types**
 
 ![pi-ai model request type settings](assets/readme/model-input-types.png)
 
-Add pi-ai model overrides on the DSH Models page or in `settings.yaml`, then choose Provider default, Text only, or Text and images for each model. Changes save immediately.
+Add pi-ai model overrides on the DSH Models page or in `settings.yaml`, then choose Provider default, Text only, Images only, or Text and images for each model. Changes save immediately.
 
-The card appears only when the official `llm-pi-ai` settings namespace is available. It stores a capability declaration and does not probe the endpoint; verify that the provider truly accepts images before declaring Text and images.
+With the aggregate bundle, configure models on its `ui-enhanced-plugins` row and MCP on its `mcp-manager` row. An unavailable official `llm-pi-ai` settings namespace is reported on the configuration page. It stores a capability declaration and does not probe the endpoint; verify that the provider truly accepts images before declaring Text and images.
 
 ### 6. Edit last message
 
@@ -295,7 +295,7 @@ Both toggles default to off. Writes use path-addressed operations and settings r
 - The Agent Teams view follows the selected Lead or roster-member session. It shows member status, task dependencies/owners/readiness, advisory write-scope overlaps, and queued mailbox counts. Select a task for details; select a member to open its official subagent transcript.
 - The Host reads the official `ctx.agentTeams` service. For cold history, the official Agent Teams runtime owns and registers the `agentTeam` projection, which the monitor replays through public `ctx.sessionProjections.restore()`. Logs come from read-only `sessionQuery.observeSession()` observations; no Agent is activated and no second team state is created.
 - Only the current conversation is polled (1.5 seconds open / 5 seconds collapsed); hidden pages and disconnected Hosts pause polling. New members and state changes refresh automatically without opening the panel. Click the icon, outside the panel, or press Escape to close. Failed/old replies cannot appear as live state after a session switch or reconnect.
-- The monitor **does not enable Agent Teams or workflow**, register model tools, create/wake/interrupt members, edit tasks, or schedule work. Standard workflow monitoring needs no experimental Team package. To inspect live or historical Agent Teams state, enable that runtime separately following its [Team documentation](https://github.com/deepseek-ai/deepseek-harness/tree/0d1f50007f9bca3f52b06e1c3074fa14d5fb0720/packages/experimental/agent-team), so it owns and registers the projection.
+- The monitor **does not enable Agent Teams or workflow**, register model tools, create/wake/interrupt members, edit tasks, or schedule work. Standard workflow monitoring needs no experimental Team package. To inspect live or historical Agent Teams state, enable that runtime separately following its [Team documentation](https://github.com/deepseek-ai/deepseek-harness/tree/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/experimental/agent-team), so it owns and registers the projection.
 - Uses the source ABIs validated by the compatibility table. This plugin neither bundles the experimental package nor fetches it from npm; Agent Teams history replay requires the official runtime and its projection to be mounted in the active profile. Runtime status and task completion are independent: `inactive` does not mean `completed`, and tasks depend on model-reported updates. Mail bodies and raw provider errors are never sent by the monitor. Views cap at 256 members / 1,000 tasks with explicit truncation and complete totals.
 - Workflow views cap at 100 runs / 256 total member rows with complete totals. Unfinished cold records are never presented as live work; a closed enclosing step/turn marks an unfinished run interrupted. The monitor reads public records, never reads/executes workflow scripts, and never presents ordinary subagents as an experimental Team.
 - Native discovery uses public `subagents.listDescendants`; read-only `sessionQuery.observeSession()` supplies own titles and turn outcomes. Exact Agent running/idle state takes precedence; residency alone is not execution. History means currently non-running, not necessarily successful. At most 256 child rows are inspected/displayed, prioritizing executing Agents; truncation shows displayed/total counts and filters count displayed rows only. Catalog failures do not hide existing Team/workflow data.
@@ -304,7 +304,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all seven standalone bundles, and Windows Launcher use `7.1.1`.
+- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all seven standalone bundles, and Windows Launcher use `7.2.0`.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** before building, stopping services, or changing a profile, the installer and Launcher updater fetch the compatibility file from this repository’s GitHub `master` branch. A failed request, an eight-second download timeout, or malformed/oversized data falls back to the bundled file with a warning. Every check fetches again; it does not overwrite the local fallback. A valid remote table is authoritative: an omitted plugin version, an empty DSH list, or an unsupported DSH version stops installation instead of falling back. Mixed package versions also stop installation. Commits belong to individual DSH versions; an unlisted commit, local tracked changes, or no Git metadata produces an unverified-source warning.
@@ -416,7 +416,12 @@ Set `DSH_VERIFY_CHECKOUT` to a prepared copy of the verified DSH source commit w
 
 Browser bundles use CSS Modules and consume only DSH `--dsw-alias-*` semantic theme tokens, so they follow light, dark, and system appearance automatically. See the [DSH plugin development guide](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) and [architecture reference](https://deepseek-harness.github.io/deepseek-harness/reference/) for public extension points.
 
-`npm run verify:edit-web` installs the editor in an isolated profile and drives Chromium against the real Web composition with a local SSE model fixture. It checks repeated edits, request-history replacement, file and Skill reference previews, reload, and light/dark screenshots without a real model key. The default run exercises DSH's Messages protocol; set `DSH_VERIFY_PROTOCOL=chat-completions` to verify that explicit protocol as well. The fixture disables session-log upload and keeps Launcher files inside its temporary home. It uses Playwright from the built DSH checkout and requires its Chromium browser. `typecheck` rejects mismatched Session declarations or stale Chat declarations without `openSkill`. Web and Desktop verification commands accept `DSH_VERIFY_CHECKOUT` for an isolated build.
+`npm run verify:edit-web` installs the editor in an isolated profile and drives Chromium against the real Web composition with a local SSE model fixture. It checks repeated edits, request-history replacement, file and Skill reference previews, reload, and light/dark screenshots without a real model key. The default run exercises DSH's Messages protocol; set `DSH_VERIFY_PROTOCOL=chat-completions` to verify that explicit protocol as well. The fixture disables session-log upload and keeps Launcher files inside its temporary home. It uses Playwright from the built DSH checkout and requires its Chromium browser. `typecheck` rejects mismatched Session declarations, stale Chat declarations without `openSkill`, and builds missing the new plugin-configuration and session-reference APIs. Web and Desktop verification commands accept `DSH_VERIFY_CHECKOUT` for an isolated build.
+
+
+`npm run verify:plugin-ui` checks MCP saves and discarded drafts, image-only model settings, live plugin disable/enable, and real Team monitoring and member navigation in an assembled Web profile, including light/dark and system theme changes. Set `DSH_VERIFY_AGGREGATE=1` for the aggregate bundle; the default tests the three affected standalone bundles together. Before publication, `DSH_COMPATIBILITY_URL` can select an isolated test server serving the pending compatibility table; production remote-revocation behavior is unchanged.
+
+The validated DSH `0.1.6-alpha.2` source uses `plugins.row.config` / `plugins.bundle.config`; the online settings-card cookbook may still show `settings.plugin.item`. This release follows the tested source and type declarations.
 
 ## License
 

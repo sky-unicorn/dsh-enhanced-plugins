@@ -9,13 +9,13 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import { MonitorController } from './controller.ts'
 import { MonitorControl, type MonitorInjected } from './Panel.tsx'
 import { en, zh, NS, type MonitorKey } from './locales.ts'
-import { openMemberSession } from './navigation.ts'
+import { mainSessionId, openMemberSession } from './navigation.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'agent-team-monitor': MonitorKey }
 }
 
-export const inject = ['connection', 'sessions', 'slots', 'locale']
+export const inject = ['connection', 'sessions', 'uiWorkspace', 'slots', 'locale']
 
 /** Add a session-owned composer control; all subscriptions and requests belong to this Client fiber. */
 export function apply(ctx: ClientContext): void {
@@ -25,7 +25,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'team monitor: dictionaries')
   ctx.effect(() => {
     const select = () => {
-      const current = ctx.sessions.list.getSnapshot().current
+      const current = mainSessionId(ctx.sessions)
       if (current !== controller.store.getSnapshot().sessionId) selectionEpoch++
       controller.select(current)
     }
@@ -43,8 +43,8 @@ export function apply(ctx: ClientContext): void {
     refresh: () => { if (controller.store.getSnapshot().sessionId === sessionId) void controller.refresh() },
     async openMember(teamId, memberId) {
       const epoch = selectionEpoch
-      await openMemberSession(ctx.sessions, teamId, memberId,
-        () => selectionEpoch === epoch && ctx.sessions.list.getSnapshot().current === sessionId)
+      await openMemberSession(ctx.sessions, ctx.uiWorkspace, teamId, memberId,
+        () => selectionEpoch === epoch && mainSessionId(ctx.sessions) === sessionId)
     },
   })
   ctx.slots.inject('conversation.input.right', () => ctx.slots.register({

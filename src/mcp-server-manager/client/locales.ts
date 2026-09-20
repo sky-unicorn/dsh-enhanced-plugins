@@ -3,7 +3,7 @@
 /** Locale keys this card renders. */
 export type McpSettingsLocaleKey =
   | 'expand' | 'collapse' | 'save' | 'saving' | 'discard' | 'unsaved' | 'saveFailed' | 'readOnly'
-  | 'mcpTitle' | 'mcpDescription' | 'mcpEmpty' | 'mcpAddServer' | 'mcpRemove' | 'mcpCancel' | 'mcpAdd'
+  | 'mcpTitle' | 'mcpDescription' | 'mcpUnavailable' | 'mcpEmpty' | 'mcpAddServer' | 'mcpRemove' | 'mcpCancel' | 'mcpAdd'
   | 'mcpServerName' | 'mcpServerNameHint' | 'mcpTransport' | 'mcpTransportStdio' | 'mcpTransportHttp'
   | 'mcpCommand' | 'mcpCommandHint' | 'mcpUrl' | 'mcpUrlHint'
   | 'mcpArgs' | 'mcpArgsHint' | 'mcpArgRow' | 'mcpArgPlaceholder' | 'mcpAddArg' | 'mcpCwd' | 'mcpCwdHint'
@@ -32,6 +32,7 @@ export const en: Record<McpSettingsLocaleKey, string> = {
   readOnly: 'This deployment stores settings read-only.',
   mcpTitle: 'MCP servers',
   mcpDescription: 'External Model Context Protocol servers whose tools the agent can call.',
+  mcpUnavailable: 'The MCP settings service is unavailable.',
   mcpEmpty: 'No MCP servers are configured.',
   mcpAddServer: 'Add server',
   mcpRemove: 'Remove',
@@ -115,6 +116,7 @@ export const zh: Record<McpSettingsLocaleKey, string> = {
   readOnly: '本部署的设置为只读。',
   mcpTitle: 'MCP 服务器',
   mcpDescription: 'agent 可以调用其工具的外部 Model Context Protocol 服务器。',
+  mcpUnavailable: 'MCP 设置服务当前不可用。',
   mcpEmpty: '尚未配置任何 MCP 服务器。',
   mcpAddServer: '添加服务器',
   mcpRemove: '移除',

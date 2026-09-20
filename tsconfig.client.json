@@ -41,9 +41,6 @@
       "@deepseek-ai/dsh-client-ui-settings/client": [
         "../deepseek-harness/packages/client/ui-settings/lib/types/client/index.d.ts"
       ],
-      "@deepseek-ai/dsh-client-ui-settings-plugins/client": [
-        "../deepseek-harness/packages/client/ui-settings-plugins/lib/types/client/index.d.ts"
-      ],
       "@deepseek-ai/dsh-client-ui-slots": [
         "../deepseek-harness/packages/client/ui-slots/lib/types/index.d.ts"
       ],
@@ -61,6 +58,12 @@
       ],
       "@deepseek-ai/dsh-client-ui-renderer/client": [
         "../deepseek-harness/packages/client/ui-renderer/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-plugin-manager/client": [
+        "../deepseek-harness/packages/client/ui-plugin-manager/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-workspace/client": [
+        "../deepseek-harness/packages/client/ui-workspace/lib/types/client/index.d.ts"
       ]
     }
   },
@@ -82,7 +85,9 @@
     "src/plugin-market/client/**/*.tsx",
     "src/sub-agent/client/**/*.ts",
     "src/sub-agent/client/**/*.tsx",
-    "src/sub-agent/shared.ts"
+    "src/sub-agent/shared.ts",
+    "src/model-input-types/client/**/*.ts",
+    "src/model-input-types/client/**/*.tsx"
   ],
   "exclude": [
     "node_modules",

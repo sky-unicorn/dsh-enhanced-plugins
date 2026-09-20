@@ -1,11 +1,14 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ModelInputTypesCard, type ModelInputTypesCardProps } from '../../src/model-input-types/client/ModelInputTypesCard.tsx'
 import type { ModelInputTypesState } from '../../src/model-input-types/client/controller.ts'
 import { en } from '../../src/model-input-types/client/locales.ts'
 
+afterEach(cleanup)
+
 function propsOf(state: ModelInputTypesState, selectModelType = vi.fn()): ModelInputTypesCardProps {
   return {
+    view: 'page',
     t: key => en[key],
     useModelInputTypes: selector => selector(state),
     selectModelType,
@@ -29,19 +32,19 @@ describe('ModelInputTypesCard', () => {
       }],
     }, selectModelType)} />)
 
-    fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
     const select = screen.getByRole('combobox', { name: 'Model type for gateway / vision' })
     expect([...select.querySelectorAll('option')].map(option => option.textContent)).toEqual([
       en.providerDefault,
       en.textOnly,
+      en.imagesOnly,
       en.textAndImages,
     ])
     fireEvent.change(select, { target: { value: 'multimodal' } })
     expect(selectModelType).toHaveBeenCalledWith('gateway', 0, 'vision', 'multimodal')
   })
 
-  it('renders nothing while the owning namespace is unavailable', () => {
-    const { container } = render(<ModelInputTypesCard {...propsOf({
+  it('reports when the owning namespace is unavailable', () => {
+    render(<ModelInputTypesCard {...propsOf({
       available: false,
       writable: false,
       loading: false,
@@ -50,6 +53,6 @@ describe('ModelInputTypesCard', () => {
       saved: false,
       providers: [],
     })} />)
-    expect(container.innerHTML).toBe('')
+    expect(screen.getByRole('status').textContent).toBe(en.unavailable)
   })
 })

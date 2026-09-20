@@ -1,7 +1,6 @@
 /**
  * MCP servers settings card, browser half. Registers one card into the
- * Plugins section's `settings.plugin.item` slot - a slot declared by
- * `ui-settings-plugins`, which stays mounted in the shipped Web composition,
+ * bundle row's `plugins.row.config` slot - declared by the Plugins page,
  * so this package contributes its card without touching that package.
  *
  * Reads and writes go through the MCP manager's `mcpConfig` Remote on the
@@ -12,9 +11,9 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: the `settings.plugin.item` SlotMap declaration and the client
+// Type-only: the `plugins.row.config` SlotMap declaration and the client
 // runtime's Context merges.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the ctx.remote Context merge and the forwarded-event key face.
@@ -54,6 +53,18 @@ export const inject = ['slots', 'locale', 'connection', 'remote']
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
+  mount(ctx, 'dsh-enhanced-mcp-server-manager#mcp-manager')
+}
+
+/** Compose this feature under the bundle that owns its Loader row.
+ * @param bundleName - installed bundle package name.
+ * @returns Client plugin whose configuration registration follows its fiber lifetime.
+ */
+export function createBundleClient(bundleName: string) {
+  return { inject, apply: (ctx: ClientContext) => mount(ctx, `${bundleName}#mcp-manager`) }
+}
+
+function mount(ctx: ClientContext, configKey: string): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'mcp-server-manager: card dictionary')
 
   const { rpc } = ctx.get('connection') as ConnectionHandle
@@ -71,10 +82,10 @@ export function apply(ctx: ClientContext): void {
   }), 'mcp-server-manager: document invalidation')
   ctx.effect(() => ctx.on('connection/reset', () => { void store.refresh() }), 'mcp-server-manager: connection invalidation')
 
-  ctx.slots.inject('settings.plugin.item', function* () {
+  ctx.slots.inject('plugins.row.config', function* () {
     yield ctx.slots.register({
-      name: 'settings.plugin.item',
-      key: 'mcp',
+      name: 'plugins.row.config',
+      key: configKey,
       locale: NS,
       inject: () => controller.inject(),
     }, McpCard)

@@ -122,10 +122,13 @@ describe('selective feature packages', () => {
         ...process.env,
         DSH_HOME: whatIfHome,
         DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(whatIfHome, 'launcher'),
+        // Test this checkout's release before its compatibility document is published.
+        DSH_COMPATIBILITY_URL: 'http://127.0.0.1:1/compatibility.json',
       }
       const selected = spawnSync('powershell.exe', [
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
         '-Features', 'notification,mcp-server-manager', '-WhatIf',
+        ...(process.env.DSH_VERIFY_CHECKOUT ? ['-DshCheckout', process.env.DSH_VERIFY_CHECKOUT] : []),
       ], { cwd: root, encoding: 'utf8', env })
       expect(selected.status, `${selected.stdout}\n${selected.stderr}`).toBe(0)
       expect(selected.stdout).toContain("feature set 'mcp-server-manager,notification,windows-launcher'")
@@ -133,6 +136,7 @@ describe('selective feature packages', () => {
       const none = spawnSync('powershell.exe', [
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
         '-Features', 'none', '-WhatIf',
+        ...(process.env.DSH_VERIFY_CHECKOUT ? ['-DshCheckout', process.env.DSH_VERIFY_CHECKOUT] : []),
       ], { cwd: root, encoding: 'utf8', env })
       expect(none.status, `${none.stdout}\n${none.stderr}`).toBe(0)
       expect(none.stdout).toContain("feature set 'none (+required windows-launcher)'")
@@ -239,7 +243,8 @@ describe('selective feature packages', () => {
     const retired = spawnSync('powershell.exe', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
       '-Features', 'referenced-file', '-WhatIf',
-    ], { cwd: root, encoding: 'utf8' })
+      ...(process.env.DSH_VERIFY_CHECKOUT ? ['-DshCheckout', process.env.DSH_VERIFY_CHECKOUT] : []),
+    ], { cwd: root, encoding: 'utf8', env: { ...process.env, DSH_COMPATIBILITY_URL: 'http://127.0.0.1:1/compatibility.json' } })
     expect(retired.status).not.toBe(0)
     expect(`${retired.stdout}\n${retired.stderr}`).toContain("Feature 'referenced-file' is retired and cannot be installed")
     expect(`${retired.stdout}\n${retired.stderr}`).toContain('Official DSH now supports @ workspace file references')

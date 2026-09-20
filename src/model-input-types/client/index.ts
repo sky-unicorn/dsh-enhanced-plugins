@@ -3,7 +3,7 @@
 // Type-only Context merges for locale, remote events, and the plugin-card slot.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { ModelInputTypesCard } from './ModelInputTypesCard.tsx'
@@ -33,6 +33,19 @@ export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.settin
 
 /** Register the card and bind its Settings transport to this child fiber. */
 export function apply(ctx: ClientContext): void {
+  mount(ctx, 'dsh-enhanced-model-input-types#model-input-types')
+}
+
+/** Compose the configuration under its standalone or aggregate Loader row.
+ * @param bundleName - installed bundle package name.
+ * @param rowId - configuration owner's stable Loader entry id.
+ * @returns Client plugin whose registration and settings reads follow its fiber lifetime.
+ */
+export function createBundleClient(bundleName: string, rowId: string) {
+  return { inject, apply: (ctx: ClientContext) => mount(ctx, `${bundleName}#${rowId}`) }
+}
+
+function mount(ctx: ClientContext, configKey: string): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'model-input-types: card dictionary')
 
   const controller = new ModelInputTypesController(ctx.remote)
@@ -51,9 +64,9 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'model-input-types: settings invalidations')
 
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: PI_AI_SETTINGS_NS,
+  ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
+    name: 'plugins.row.config',
+    key: configKey,
     locale: NS,
     inject: () => controller.inject(),
   }, ModelInputTypesCard))

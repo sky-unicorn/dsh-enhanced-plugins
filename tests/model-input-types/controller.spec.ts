@@ -32,6 +32,7 @@ describe('pi-ai model request-type projection', () => {
           { id: 'default' },
           { id: 'plain', input: ['text'] },
           { id: 'vision', name: 'Vision', input: ['text', 'image'] },
+          { id: 'image-only', input: ['image'] },
         ],
       },
     }))).toEqual([{
@@ -41,6 +42,7 @@ describe('pi-ai model request-type projection', () => {
         { id: 'default', name: 'default', type: 'default' },
         { id: 'plain', name: 'plain', type: 'text' },
         { id: 'vision', name: 'Vision', type: 'multimodal' },
+        { id: 'image-only', name: 'image-only', type: 'image' },
       ],
     }])
   })
@@ -60,6 +62,10 @@ describe('pi-ai model request-type projection', () => {
     ])
     expect(modelsWithType(source, 'gateway', 0, 'vision', 'default')).toEqual([
       { id: 'vision', compat: { preserved: true } },
+      { id: 'other', input: ['text', 'image'], maxTokens: 8192 },
+    ])
+    expect(modelsWithType(source, 'gateway', 0, 'vision', 'image')).toEqual([
+      { id: 'vision', input: ['image'], compat: { preserved: true } },
       { id: 'other', input: ['text', 'image'], maxTokens: 8192 },
     ])
   })

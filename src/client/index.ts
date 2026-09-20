@@ -13,8 +13,8 @@ export const inject: string[] = []
 /** Mount each browser capability as an independent child fiber. */
 export function apply(ctx: ClientContext): void {
   ctx.plugin(editLastMessage)
-  ctx.plugin(mcpServerManager)
-  ctx.plugin(modelInputTypes)
+  ctx.plugin(mcpServerManager.createBundleClient('dsh-enhanced-plugins'))
+  ctx.plugin(modelInputTypes.createBundleClient('dsh-enhanced-plugins', 'ui-enhanced-plugins'))
   ctx.plugin(notification)
   ctx.plugin(pluginMarket)
   ctx.plugin(subAgent)
