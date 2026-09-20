@@ -1,21 +1,33 @@
-# Official Agent Teams monitor / 官方团队监控
+# Execution monitor / 执行过程监控
+
+The primary view branches from the dispatching parent into member progress cards and joins recorded callbacks back to that parent. Each card shows Dispatch → Execute → Return → Receive, current work, latest-turn step/tool counts and elapsed time. Click a member for its internal swimlane and step/tool details, or click an actual dispatch, progress message or callback for its recorded content. Standard single-agent sessions show execution lanes without Agent Teams.
+
+主视图展示“主智能体派发 → 每个队员的进度 → 结果回调 → 父会话接收”，嵌套派发独立分组。队员卡片显示当前操作、最新轮次的步骤／工具完成数与耗时；点击进入内部执行泳道，继续查看步骤／工具详情及原生会话。派发、进度消息、回调记录也可单独点击。普通单智能体会话直接展示执行泳道，无需官方团队插件。
+
+Progress counts do not predict total task size. Completion callbacks require a workflow end event or a parent-recorded settlement notice; progress messages are distinct, and receipt is not approval. One-shot children without durable callback evidence explicitly show no return record. Up to 1,000 recent collaboration events are retained with truncation indicated.
+
+进度计数不预测任务总量。只有工作流结束事件或父会话收到的完成通知才算完成回调；进度消息单独展示，收到结果不表示验收通过。一次性队员若没有持久化回调记录，明确显示无回传记录。协作事件最多展示最近 1,000 条并提示截断。
+
+Arrows represent recorded start order, not inferred dependencies or a proportional time axis. Native catalog ancestry and actual workflow dispatch events provide child links; future plans and hidden reasoning are never invented. Each lane shows up to 120 ongoing/recent nodes with explicit truncation; earlier events remain in native transcripts. Detail reads validate the descendant address, release observations and cancel with the fiber. Payloads are bounded to 6,000 characters per field and common credential fields are redacted. System prompts, reasoning, private tool metadata and raw provider exceptions are not separately read.
+
+连线表示实际开始顺序，不猜测依赖，也不按时间比例排列。父子链接来自原生目录及已记录的工作流派发事件；不会编造未来计划或内部思考。每条泳道最多展示 120 个执行中／最近节点并提示截断，更早记录仍可在原生会话查看。详情请求验证子会话地址、释放 observation 并随插件卸载取消；每个文本字段最多 6,000 字符，对常见凭据字段脱敏。不额外读取系统提示、reasoning、工具私有 meta 或 provider 异常原文。
 
 Read-only Host adapter and Web panel for the DSH versions validated in the repository’s `dsh-compatibility.json`. The source installer resolves the latest table before installation.
 
 只读 Host 适配器与 Web 面板；支持范围统一维护在仓库的 `dsh-compatibility.json`，源码安装器在安装前读取最新对应关系。
-The session-owned icon appears in the composer's model/context group when workflow, Agent Teams or native child-session records exist. Click to open; switching sessions closes and clears it.
+The session-owned icon appears in the composer's model/context group when execution, workflow, Agent Teams or native child-session records exist. Click to open; switching sessions closes and clears it.
 The main Conversation is identified by the public `mainView` reference source; independent sidebar chats do not change this monitor. Member navigation uses `uiWorkspace.openSession()` after refreshing the native parent catalog.
 Standard workflow monitoring needs no experimental Team runtime. Agent Teams itself must be enabled separately in the DSH source profile.
 Historical reads require the public `sessionQuery` service supplied by the standard Web profile. Its public `observeSession()` API preserves fork boundaries and balances interrupted logs in memory. The monitor releases every observation and waits for cancelled reads on unload. Team history rejected by the official projection is shown as incompatible; the monitor does not migrate it.
 This bundle never enables it, creates agents, adds model tools, changes tasks, or schedules work.
 
-只读 Host 适配器与 Web 面板。当前对话存在工作流、Agent Teams 或原生子代理会话时，在输入框右侧模型／上下文同组显示团队图标；点击才展开，切换会话立即关闭并清空。
+只读 Host 适配器与 Web 面板。当前对话存在执行、工作流、Agent Teams 或原生子代理记录时，在输入框右侧模型／上下文同组显示监控图标；点击才展开，切换会话立即关闭并清空。
 通过公开的 `mainView` 引用来源识别主对话，侧栏独立打开的子会话不会切换监控对象；刷新原生父级目录后，通过 `uiWorkspace.openSession()` 打开成员。
 标准工作流无需实验性 Team 运行时；Agent Teams 请单独在 DSH 源码 profile 中启用。本插件不会自动启用、组队或调度。
 历史读取需要标准 Web profile 提供的公开 `sessionQuery` 服务。公开 `observeSession()` API 保留 fork 继承边界，仅在内存中配平中断日志。监控释放每次 observation，卸载时等待取消中的读取结束。官方投影拒绝的 Team 历史显示为不兼容，监控不迁移日志。
 
 Live members come from `ctx.agentTeams`; historical roster/tasks/mailbox counts are replayed through public `ctx.sessionProjections.restore()` using the `agentTeam` projection owned and registered by the official runtime.
-No private source imports or workspace-local state files. Mail bodies and provider errors are not sent to the browser.
+No private source imports or workspace-local state files. Team summaries exclude mailbox bodies; node details expose bounded model-facing text and tool payloads only on explicit selection.
 Workflow members/phases/outcomes come from the current session's own public `tool-workflow/*` events, separate from the experimental task board. Only actual starts count; script plans, dependencies and mailboxes are never invented. Cold unfinished work is not reported as live or completed.
 An unavailable storage or unsupported log is shown explicitly once activity has been detected. An inactive member is not a completed task.
 The view is bounded to 256 members and 1,000 tasks; totals remain complete.
@@ -24,10 +36,14 @@ Role groups retain distinct native child-session IDs, including nested descendan
 角色分组保留每个独立子会话 ID，包含嵌套子会话和同名角色的多次执行。支持全部／正在执行／历史会话筛选，并通过重新核对的父子地址进入 DSH 原生详情。缺失标签不猜测角色；目录最多展示 256 条并提示截断，筛选计数对应已展示条目。冷会话只读检查、不唤醒；空闲／未驻留不代表完成。
 
 实时成员来自官方服务，历史通过官方运行时拥有的 `agentTeam` 投影和公开 `ctx.sessionProjections.restore()` 从 Session 日志回放。
-不读取私有源码，不建立额外团队持久化文件，不向浏览器发送邮箱正文或 provider 错误原文。
+不读取私有源码，不建立额外团队持久化文件；团队汇总不发送邮箱正文，仅在明确选择节点时读取有长度限制的公开文本与工具调用内容。
 任务状态依赖模型更新；“未驻留”不等于“已完成”。
 工作流从当前会话自己的公开事件读取成员、阶段和结果，与实验性任务板分开展示；不把计划中的角色算成队员，不推测依赖或邮箱。冷历史未结束的运行不会冒充实时或完成。
 工作流最多显示 100 次运行与合计 256 条成员记录，汇总完整；仅轮询当前会话（展开 1.5 秒／收起 5 秒），隐藏页面或断线暂停。
 
 The build uses shared repository source when present; packaged source under `src/` supports isolated `npm run prepare` with the package's esbuild development dependency.
 发布包含可独立构建的源码与构建脚本，不需要 sibling DSH checkout 才能 prepare。
+
+Validated against local DSH `ddefc45fbc7f8e46dd73185e68295696d1297887` (`0.1.6-alpha.2`). `npm run verify:execution-web` exercises the real assembled Web app in temporary profiles; `DSH_VERIFY_AGGREGATE=1` selects aggregate verification. The installation identity remains `agent-team-monitor` / `dsh-enhanced-agent-team-monitor`.
+
+以本地 DSH `ddefc45fbc7f8e46dd73185e68295696d1297887`（`0.1.6-alpha.2`）核对接口。`npm run verify:execution-web` 在临时 profile 验证真实 Web 页面，`DSH_VERIFY_AGGREGATE=1` 验证聚合安装。安装标识仍为 `agent-team-monitor` / `dsh-enhanced-agent-team-monitor`。

@@ -16,7 +16,8 @@ function props(): MonitorPanelProps {
 it('renders statuses and dependencies, and only navigates after an explicit click', () => {
   const p = props()
   render(<MonitorPanel {...p} />)
-  expect(screen.getByText('Running')).toBeTruthy()
+  fireEvent.click(screen.getByText(en.tasks, { selector: 'summary' }))
+  expect(screen.getAllByText('Running').length).toBeGreaterThan(0)
   expect(screen.getByText('Build monitor')).toBeTruthy()
   expect(p.openMember).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: /Open member transcript: researcher/ }))

@@ -10,6 +10,7 @@ import { MonitorController } from './controller.ts'
 import { MonitorControl, type MonitorInjected } from './Panel.tsx'
 import { en, zh, NS, type MonitorKey } from './locales.ts'
 import { mainSessionId, openMemberSession } from './navigation.ts'
+import { parseExecutionDetail } from './parse.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'agent-team-monitor': MonitorKey }
@@ -41,6 +42,13 @@ export function apply(ctx: ClientContext): void {
     hooks: { teamMonitor: controller.store },
     setOpen: open => { if (controller.store.getSnapshot().sessionId === sessionId) controller.setOpen(open) },
     refresh: () => { if (controller.store.getSnapshot().sessionId === sessionId) void controller.refresh() },
+    async inspectNode(rootId, targetId, seq, signal) {
+      const epoch = selectionEpoch
+      const result = await connection.rpc.call('/api', 'agentTeamMonitor/detail', { args: { request: { rootId, sessionId: targetId, seq } } }, signal)
+      signal.throwIfAborted()
+      if (epoch !== selectionEpoch || mainSessionId(ctx.sessions) !== sessionId || !result.ok) throw new Error('Execution detail unavailable')
+      return parseExecutionDetail(result.value, targetId, seq)
+    },
     async openMember(teamId, memberId) {
       const epoch = selectionEpoch
       await openMemberSession(ctx.sessions, ctx.uiWorkspace, teamId, memberId,

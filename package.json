@@ -119,6 +119,7 @@
     "verify:compat": "node scripts/verify-dsh-compatibility.mjs",
     "verify:edit-web": "node scripts/verify-edit-web.mjs",
     "verify:plugin-ui": "node scripts/verify-plugin-ui.mjs",
+    "verify:execution-web": "node scripts/verify-execution-web.mjs",
     "verify:pack": "node scripts/verify-packed-features.mjs",
     "prepare": "npm run build",
     "verify:desktop-host": "node scripts/verify-desktop-host.mjs",

@@ -2,6 +2,8 @@ import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { SubagentDescendantListEntry } from '@deepseek-ai/dsh-subagent'
 import type { ChildSessionStatus, MonitorCatalog, MonitorChildSession, MonitorSnapshot } from '../shared.js'
 import { describeTeam, type MonitorReads } from './snapshot.js'
+import { describeExecution } from './execution.js'
+import { describeCooperation, type CooperationLog } from './cooperation.js'
 
 /** Native discovery owns classification and ancestry; the monitor never scans arbitrary directories. */
 export interface CatalogReads extends MonitorReads {
@@ -86,6 +88,7 @@ export async function describeCatalog(reads: CatalogReads, scopeId: SessionId, s
         // residency alone never proves running, and cold outcomes come from logs.
         const live = reads.agent(entry.id)
         row.status = live?.status ?? recordedStatus(own, entry.activity === 'running')
+        row.execution = describeExecution(inspected.events, inspected.inheritedEventCount, live === undefined ? entry.activity === 'running' : live.status === 'running')
         row.navigable = true
       } catch {
         signal.throwIfAborted()
@@ -100,13 +103,35 @@ export async function describeCatalog(reads: CatalogReads, scopeId: SessionId, s
 
 /** One selected conversation's Team/workflow view plus its native child-session catalog. */
 export async function describeMonitor(reads: CatalogReads, sessionId: SessionId, signal: AbortSignal): Promise<MonitorSnapshot> {
-  const snapshot = await describeTeam(reads, sessionId, signal)
+  // A request-local cache shares the same observation between Team, catalog and
+  // execution readers, without retaining sessions or payloads across requests.
+  const cache = new Map<SessionId, ReturnType<MonitorReads['inspect']>>()
+  const source = reads
+  reads = { ...source, inspect: (id, abort) => {
+    let read = cache.get(id)
+    if (!read) { read = source.inspect(id, abort); cache.set(id, read) }
+    return read
+  } }
+  let snapshot = await describeTeam(reads, sessionId, signal)
   if (snapshot.kind === 'unavailable' && snapshot.reason === 'no-session') return snapshot
   const scopeId = (snapshot.kind === 'team' ? snapshot.teamId : sessionId) as SessionId
   const catalog = await describeCatalog(reads, scopeId, signal)
-  if (catalog === undefined) return snapshot
-  if (snapshot.kind === 'unavailable' && snapshot.reason === 'not-team' && catalog.sessions.length > 0) {
-    return { protocol: snapshot.protocol, sessionId, enabled: snapshot.enabled, kind: 'agents', catalog,
+  try {
+    const root = await reads.inspect(scopeId, signal)
+    if (root) snapshot = { ...snapshot, execution: describeExecution(root.events, root.inheritedEventCount, reads.agent(scopeId)?.status === 'running') }
+  } catch { signal.throwIfAborted() }
+  const allowedIds = new Set([scopeId, ...(catalog?.sessions.filter(row => row.navigable).map(row => row.id) ?? [])])
+  const logs: CooperationLog[] = []
+  for (const [id, pending] of cache) {
+    if (!allowedIds.has(id)) continue
+    try {
+      const inspected = await pending
+      if (inspected && inspected.meta.id === id) logs.push({ sessionId: id, events: inspected.events, inherited: inspected.inheritedEventCount })
+    } catch { signal.throwIfAborted() }
+  }
+  snapshot = { ...snapshot, cooperation: describeCooperation(logs, allowedIds) }
+  if (snapshot.kind === 'unavailable' && snapshot.reason === 'not-team' && ((catalog?.sessions.length ?? 0) > 0 || (snapshot.execution?.total ?? 0) > 0)) {
+    return { ...snapshot, kind: 'agents', catalog,
       source: reads.agent(sessionId) === undefined ? 'persisted' : 'live' }
   }
   return { ...snapshot, catalog }

@@ -1,5 +1,5 @@
-/** Read-only wire contract. No mailbox bodies or provider error payloads cross this boundary. */
-export const MONITOR_PROTOCOL = 3 as const
+/** Read-only wire contract. Overview metadata and explicitly requested node payloads are separate. */
+export const MONITOR_PROTOCOL = 4 as const
 export type MemberStatus = 'running' | 'idle' | 'inactive' | 'provisioning' | 'failed'
 export type TaskStatus = 'pending' | 'in_progress' | 'completed'
 
@@ -67,6 +67,70 @@ export interface MonitorChildSession {
   updatedAt?: number
   navigable: boolean
   diagnostic?: 'corrupt' | 'unsupported' | 'unavailable'
+  execution?: ExecutionTrace
+}
+
+/** Recorded execution, independent of Team task-board state. IDs are session-local event sequences. */
+export type ExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'blocked' | 'limited' | 'unknown'
+export interface ExecutionNode {
+  seq: number
+  kind: 'turn' | 'step' | 'tool' | 'attempt' | 'dispatch'
+  turn: number
+  step?: number
+  name?: string
+  childId?: string
+  status: ExecutionStatus
+  startedAt: number
+  endedAt?: number
+  callId?: string
+}
+export interface ExecutionTrace {
+  nodes: ExecutionNode[]
+  total: number
+  truncated: boolean
+  progress?: ExecutionProgress
+}
+/** Latest own turn, counted before the display window is truncated; no estimated total. */
+export interface ExecutionProgress {
+  turn: number
+  status: ExecutionStatus
+  startedAt: number
+  endedAt?: number
+  steps: number
+  completedSteps: number
+  failedSteps: number
+  tools: number
+  completedTools: number
+  failedTools: number
+  current?: { seq: number; kind: 'step' | 'tool'; name?: string }
+}
+/** Cross-session evidence; receipt means recorded by the recipient, not semantic acceptance. */
+export interface CooperationEvent {
+  id: string
+  kind: 'dispatch' | 'return' | 'message'
+  source: 'catalog' | 'workflow' | 'settlement' | 'agent' | 'team'
+  fromId: string
+  toId: string
+  sessionId: string
+  seq: number
+  time: number
+  delivery: 'queued' | 'recorded'
+  phase?: string
+  outcome?: ExecutionStatus
+}
+export interface CooperationActivity {
+  events: CooperationEvent[]
+  total: number
+  truncated: boolean
+}
+/** Payloads are loaded only for the selected event, never copied into overview polling. */
+export interface ExecutionDetail {
+  protocol: typeof MONITOR_PROTOCOL
+  sessionId: string
+  seq: number
+  input: string
+  output: string
+  truncated: boolean
 }
 export interface MonitorCatalog {
   scopeId: string
@@ -84,6 +148,8 @@ export type MonitorSnapshot = {
   sessionId: string
   enabled: boolean
   catalog?: MonitorCatalog
+  execution?: ExecutionTrace
+  cooperation?: CooperationActivity
 } & ({ kind: 'unavailable'; reason: UnavailableReason } | {
   kind: 'agents'
   source: 'live' | 'persisted'

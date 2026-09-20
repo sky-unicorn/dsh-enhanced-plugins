@@ -73,7 +73,7 @@ export class MonitorController {
       this.store.update(state => {
         state.snapshot = snapshot
         state.failed = false
-        if (snapshot.kind !== 'unavailable' || (snapshot.catalog?.sessions.length ?? 0) > 0) state.detected = true
+        if (snapshot.kind !== 'unavailable' || (snapshot.catalog?.sessions.length ?? 0) > 0 || (snapshot.execution?.total ?? 0) > 0) state.detected = true
         else if (snapshot.reason === 'not-team' || snapshot.reason === 'no-session') {
           state.detected = false
           state.open = false

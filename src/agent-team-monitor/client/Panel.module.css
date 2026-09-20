@@ -15,7 +15,7 @@
 .trigger:hover, .iconButton:hover, .memberLink:hover, .dependency:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .panel {
   position: fixed; left: var(--monitor-left, 12px); bottom: var(--monitor-bottom, 100px); z-index: 100;
-  box-sizing: border-box; width: min(440px, calc(100vw - 24px)); max-height: min(620px, var(--monitor-height, 65dvh));
+  box-sizing: border-box; width: min(1120px, calc(100vw - 24px)); max-height: min(780px, var(--monitor-height, 75dvh));
   display: flex; flex-direction: column; pointer-events: auto; overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l3); border-radius: 14px;
   background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary);

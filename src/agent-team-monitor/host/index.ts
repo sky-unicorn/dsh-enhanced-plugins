@@ -8,6 +8,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { describeMonitor, type CatalogReads } from './catalog.js'
 import { teamProjectionState } from './snapshot.js'
 import type { MonitorSnapshot } from '../shared.js'
+import { describeExecutionDetail } from './detail.js'
 
 export const name = 'agent-team-monitor'
 export const inject = ['agents', 'sessions']
@@ -16,7 +17,7 @@ export const inject = ['agents', 'sessions']
 export class AgentTeamMonitorRemote extends TypertRemoteService {
   private readonly reads: CatalogReads
   private readonly lifetime = new AbortController()
-  private readonly pending = new Set<Promise<MonitorSnapshot>>()
+  private readonly pending = new Set<Promise<unknown>>()
 
   constructor(ctx: Context) {
     super(ctx, 'agentTeamMonitor')
@@ -74,6 +75,17 @@ export class AgentTeamMonitorRemote extends TypertRemoteService {
       name: 'describe', static: false, private: false,
       addInitializer: initializer => initializer.call(this),
     } as ClassMethodDecoratorContext<AgentTeamMonitorRemote, typeof this.describe>)
+    Remote('detail')(this.detail, {
+      name: 'detail', static: false, private: false,
+      addInitializer: initializer => initializer.call(this),
+    } as ClassMethodDecoratorContext<AgentTeamMonitorRemote, typeof this.detail>)
+  }
+
+  /** Load one event's bounded presentation payload inside this fiber's lifetime. */
+  async detail(request: unknown, signal: AbortSignal) {
+    const pending = describeExecutionDetail(this.reads, request, AbortSignal.any([signal, this.lifetime.signal]))
+    this.pending.add(pending)
+    try { return await pending } finally { this.pending.delete(pending) }
   }
 
   /** Inspect one selected root/roster child. This method cannot mutate or activate a Team. */

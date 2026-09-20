@@ -4,7 +4,8 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { IconUserOutline16, IconChecklistOutline14, IconCloseOutline16, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MonitorState } from './controller.ts'
-import type { MonitorTask, TeamSnapshot, WorkflowActivity } from '../shared.ts'
+import type { MonitorTask, TeamSnapshot, WorkflowActivity, ExecutionDetail } from '../shared.ts'
+import { ExecutionFlow } from './ExecutionFlow.tsx'
 import { layoutTasks } from './graph.ts'
 import { RoleSessions } from './RoleSessions.tsx'
 import { NS } from './locales.ts'
@@ -15,6 +16,7 @@ export interface MonitorInjected {
   setOpen(open: boolean): void
   refresh(): void
   openMember(teamId: string, memberId: string): Promise<void>
+  inspectNode?(rootId: string, sessionId: string, seq: number, signal: AbortSignal): Promise<ExecutionDetail>
 }
 type ViewProps = InjectFace<MonitorInjected> & PropsLocale<typeof NS>
 export type MonitorControlProps = PropsRuntime<'conversation.input.right'> & ViewProps
@@ -35,7 +37,7 @@ export function MonitorControl(props: MonitorControlProps) {
     const place = () => {
       const rect = trigger.current?.getBoundingClientRect()
       if (rect === undefined) return
-      const width = Math.min(440, window.innerWidth - 24)
+      const width = Math.min(1120, window.innerWidth - 24)
       setPosition({ '--monitor-left': `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`,
         '--monitor-bottom': `${Math.max(12, window.innerHeight - rect.top + 8)}px`,
         '--monitor-height': `${Math.max(100, rect.top - 20)}px` } as CSSProperties)
@@ -190,7 +192,7 @@ function TeamBody({ snapshot, t, openMember }: { snapshot: TeamSnapshot; t: View
 }
 
 /** Non-modal dialog rendered by its session's composer, never a global shell overlay. */
-export function MonitorPanel({ useTeamMonitor, sessionId, panelId, close, style, refresh, openMember, t }: MonitorPanelProps) {
+export function MonitorPanel({ useTeamMonitor, sessionId, panelId, close, style, refresh, openMember, inspectNode, t }: MonitorPanelProps) {
   const state = useTeamMonitor(value => value)
   const snapshot = sessionId === state.sessionId ? state.snapshot : undefined
   if (!state.open || !state.detected || sessionId !== state.sessionId) return null
@@ -209,8 +211,9 @@ export function MonitorPanel({ useTeamMonitor, sessionId, panelId, close, style,
       <button type="button" className={css.iconButton} onClick={close} aria-label={t('close')} title={t('close')}><IconCloseOutline16 /></button>
     </header>
     <div className={css.body} aria-busy={state.loading && snapshot === undefined}>
-      {snapshot !== undefined && <RoleSessions key={`${sessionId}:${snapshot.catalog?.scopeId ?? ''}`} snapshot={snapshot} openMember={openMember} t={t} />}
-      {snapshot?.kind === 'team' && <TeamBody key={snapshot.teamId} snapshot={snapshot} t={t} openMember={openMember} />}
+      {snapshot !== undefined && <ExecutionFlow key={`execution:${sessionId}`} snapshot={snapshot} openMember={openMember} inspectNode={inspectNode} t={t} />}
+      {snapshot !== undefined && <details className={css.domainDetails}><summary>{t('roleSessions')}</summary><RoleSessions key={`${sessionId}:${snapshot.catalog?.scopeId ?? ''}`} snapshot={snapshot} openMember={openMember} t={t} /></details>}
+      {snapshot?.kind === 'team' && <details className={css.domainDetails}><summary>{t('tasks')}</summary><TeamBody key={snapshot.teamId} snapshot={snapshot} t={t} openMember={openMember} /></details>}
       {(snapshot?.kind === 'team' || snapshot?.kind === 'workflow') && snapshot.workflows !== undefined
         && (snapshot.catalog?.sessions.length ? <details className={css.domainDetails}>
           <summary>{t('workflowDetails')}</summary>

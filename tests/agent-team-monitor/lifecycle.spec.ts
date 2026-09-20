@@ -44,7 +44,7 @@ describe('monitor Host fiber', () => {
     } finally { await ctx.fiber.dispose() }
   })
 
-  it('waits for an in-flight observation to release when unloaded', async () => {
+  it.each(['describe', 'detail'] as const)('waits for an in-flight %s observation to release when unloaded', async method => {
     const ctx = new Context()
     const release = vi.fn()
     let readSignal: AbortSignal | undefined
@@ -62,7 +62,7 @@ describe('monitor Host fiber', () => {
     const fiber = await ctx.plugin(Host)
     try {
       const remote = ctx.get('agentTeamMonitor') as Host.AgentTeamMonitorRemote
-      const outcome = remote.describe({ sessionId: meta.id }, new AbortController().signal)
+      const outcome = remote[method]({ rootId: meta.id, sessionId: meta.id, seq: 0 }, new AbortController().signal)
         .then(() => 'resolved', () => 'cancelled')
       await vi.waitFor(() => expect(readSignal).toBeDefined())
       await fiber.dispose()
@@ -72,7 +72,7 @@ describe('monitor Host fiber', () => {
     } finally { await ctx.fiber.dispose() }
   })
 
-  it('registers only one read-only method, rejects invalid wire data, and unloads cleanly', async () => {
+  it('registers only read-only methods, rejects invalid wire data, and unloads cleanly', async () => {
     const ctx = new Context()
     const dependencies = ctx.plugin({ apply(scope: Context) {
       scope.reflect.provide('agents', { get: () => undefined })
@@ -86,7 +86,8 @@ describe('monitor Host fiber', () => {
     const fiber = ctx.plugin(Host)
     await fiber.await()
     const remote = ctx.get('agentTeamMonitor') as Host.AgentTeamMonitorRemote
-    expect(remoteMethods(remote).map(method => method.method)).toEqual(['describe'])
+    expect(remoteMethods(remote).map(method => method.method)).toEqual(['describe', 'detail'])
+    await expect(remote.detail({ rootId: '', sessionId: meta.id, seq: 0 }, new AbortController().signal)).rejects.toThrow(/Invalid execution address/)
     await expect(remote.describe({ sessionId: '' }, new AbortController().signal)).rejects.toThrow(/invalid sessionId/)
     await expect(remote.describe({ sessionId: meta.id }, new AbortController().signal)).resolves.toMatchObject({ enabled: false, reason: 'not-team' })
     await fiber.dispose()

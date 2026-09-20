@@ -1,4 +1,4 @@
-import { MONITOR_PROTOCOL, type MonitorSnapshot } from '../shared.ts'
+import { MONITOR_PROTOCOL, type MonitorSnapshot, type ExecutionDetail } from '../shared.ts'
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -6,6 +6,55 @@ function record(value: unknown): value is Record<string, unknown> {
 function integer(value: unknown, minimum = 0): boolean { return Number.isSafeInteger(value) && (value as number) >= minimum }
 function strings(value: unknown): boolean { return Array.isArray(value) && value.every(item => typeof item === 'string') }
 function oneOf(value: unknown, values: readonly string[]): boolean { return typeof value === 'string' && values.includes(value) }
+function execution(value: unknown): boolean {
+  if (!record(value) || !Array.isArray(value.nodes) || value.nodes.length > 120 || !integer(value.total)
+    || (value.total as number) < value.nodes.length || typeof value.truncated !== 'boolean') return false
+  let lastSeq = -1
+  for (const node of value.nodes) {
+    if (!record(node) || !integer(node.seq) || (node.seq as number) <= lastSeq || !integer(node.turn)
+      || !oneOf(node.kind, ['turn', 'step', 'tool', 'attempt', 'dispatch'])
+      || !oneOf(node.status, ['running', 'completed', 'failed', 'cancelled', 'interrupted', 'blocked', 'limited', 'unknown'])
+      || !integer(node.startedAt) || (node.endedAt !== undefined && !integer(node.endedAt, node.startedAt as number))
+      || (node.step !== undefined && !integer(node.step))
+      || ['name', 'childId', 'callId'].some(key => node[key] !== undefined && typeof node[key] !== 'string')) return false
+    lastSeq = node.seq as number
+  }
+  if (value.progress !== undefined) {
+    const p = value.progress
+    if (!record(p) || !integer(p.turn) || !integer(p.startedAt)
+      || !oneOf(p.status, ['running', 'completed', 'failed', 'cancelled', 'interrupted', 'blocked', 'limited', 'unknown'])
+      || (p.endedAt !== undefined && !integer(p.endedAt, p.startedAt as number))
+      || !['steps', 'completedSteps', 'failedSteps', 'tools', 'completedTools', 'failedTools'].every(key => integer(p[key]))
+      || (p.completedSteps as number) + (p.failedSteps as number) > (p.steps as number)
+      || (p.completedTools as number) + (p.failedTools as number) > (p.tools as number)) return false
+    if (p.current !== undefined && (!record(p.current) || !integer(p.current.seq) || !oneOf(p.current.kind, ['step', 'tool'])
+      || (p.current.name !== undefined && typeof p.current.name !== 'string'))) return false
+  }
+  return true
+}
+
+function cooperation(value: unknown, ids: ReadonlySet<string>): boolean {
+  if (!record(value) || !integer(value.total) || !Array.isArray(value.events) || value.events.length > 1000
+    || (value.total as number) < value.events.length || typeof value.truncated !== 'boolean') return false
+  const keys = new Set<string>()
+  for (const row of value.events) {
+    if (!record(row) || typeof row.id !== 'string' || keys.has(row.id) || !integer(row.seq) || !integer(row.time)
+      || !['sessionId', 'fromId', 'toId'].every(key => typeof row[key] === 'string' && ids.has(row[key] as string))
+      || row.fromId === row.toId || !oneOf(row.kind, ['dispatch', 'return', 'message'])
+      || !oneOf(row.source, ['catalog', 'workflow', 'settlement', 'agent', 'team']) || !oneOf(row.delivery, ['queued', 'recorded'])
+      || (row.phase !== undefined && typeof row.phase !== 'string')
+      || (row.outcome !== undefined && !oneOf(row.outcome, ['running', 'completed', 'failed', 'cancelled', 'interrupted', 'blocked', 'limited', 'unknown']))) return false
+    keys.add(row.id)
+  }
+  return true
+}
+
+export function parseExecutionDetail(value: unknown, sessionId: string, seq: number): ExecutionDetail {
+  if (!record(value) || value.protocol !== MONITOR_PROTOCOL || value.sessionId !== sessionId || value.seq !== seq
+    || typeof value.input !== 'string' || value.input.length > 6000 || typeof value.output !== 'string' || value.output.length > 6000
+    || typeof value.truncated !== 'boolean') throw new TypeError('Invalid execution detail')
+  return value as unknown as ExecutionDetail
+}
 function catalog(value: unknown, scopeId: string): boolean {
   if (!record(value) || value.scopeId !== scopeId || !oneOf(value.state, ['ready', 'unavailable'])
     || !integer(value.total) || typeof value.truncated !== 'boolean' || !Array.isArray(value.sessions)
@@ -20,7 +69,8 @@ function catalog(value: unknown, scopeId: string): boolean {
       || (row.mode !== undefined && !oneOf(row.mode, ['one-shot', 'continuable']))
       || (row.diagnostic !== undefined && (!oneOf(row.diagnostic, ['corrupt', 'unsupported', 'unavailable']) || row.navigable))
       || (row.label !== undefined && typeof row.label !== 'string') || (row.title !== undefined && typeof row.title !== 'string')
-      || (row.createdAt !== undefined && !integer(row.createdAt)) || (row.updatedAt !== undefined && !integer(row.updatedAt))) return false
+      || (row.createdAt !== undefined && !integer(row.createdAt)) || (row.updatedAt !== undefined && !integer(row.updatedAt))
+      || (row.execution !== undefined && !execution(row.execution))) return false
     ids.add(row.id)
   }
   return true
@@ -55,10 +105,14 @@ export function parseSnapshot(value: unknown, sessionId: string): MonitorSnapsho
   if (!record(value) || value.protocol !== MONITOR_PROTOCOL || value.sessionId !== sessionId
     || typeof value.enabled !== 'boolean') return fail()
   if (value.catalog !== undefined && !catalog(value.catalog, value.kind === 'team' && typeof value.teamId === 'string' ? value.teamId : sessionId)) return fail()
+  if (value.execution !== undefined && !execution(value.execution)) return fail()
+  const scopeId = value.kind === 'team' && typeof value.teamId === 'string' ? value.teamId : sessionId
+  const ids = new Set([scopeId, ...((value.catalog as { sessions: { id: string }[] } | undefined)?.sessions.map(row => row.id) ?? [])])
+  if (value.cooperation !== undefined && !cooperation(value.cooperation, ids)) return fail()
   if (value.kind === 'unavailable') {
     if (!oneOf(value.reason, ['no-session', 'not-team', 'incompatible', 'storage-unavailable'])) return fail()
   } else if (value.kind === 'agents') {
-    if (!oneOf(value.source, ['live', 'persisted']) || value.catalog === undefined) return fail()
+    if (!oneOf(value.source, ['live', 'persisted']) || (value.catalog === undefined && value.execution === undefined)) return fail()
   } else if (value.kind === 'workflow') {
     if (!oneOf(value.source, ['live', 'persisted']) || !workflow(value.workflows)) return fail()
   } else if (value.kind === 'team') {

@@ -255,12 +255,14 @@ try {
   if (!mcpOnly) {
     for (const scheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme: scheme })
-      await page.getByRole('button', { name: 'Show team monitor', exact: true }).click()
+      await page.getByRole('button', { name: 'Show execution monitor', exact: true }).click()
+      await page.locator('summary').filter({ hasText: /^Tasks$/ }).click()
       await page.getByText('Inspect configuration', { exact: true }).first().waitFor()
       await page.screenshot({ path: resolve(home, `monitor-${scheme}.png`), fullPage: true })
-      await page.getByRole('button', { name: 'Collapse team monitor', exact: true }).click()
+      await page.getByRole('button', { name: 'Collapse execution monitor', exact: true }).click()
     }
-    await page.getByRole('button', { name: 'Show team monitor', exact: true }).click()
+    await page.getByRole('button', { name: 'Show execution monitor', exact: true }).click()
+    await page.locator('summary').filter({ hasText: /^Roles & child sessions$/ }).click()
     await page.getByRole('button', { name: /^Open session details:/ }).first().click()
     await page.locator('[data-composer-input]').waitFor({ timeout: 15_000 })
   }

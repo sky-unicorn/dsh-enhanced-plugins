@@ -1,7 +1,7 @@
 {
   "name": "dsh-enhanced-agent-team-monitor",
   "version": "7.2.4",
-  "description": "Per-conversation Web monitor for DSH Agent Teams and workflow members",
+  "description": "Per-conversation execution flows and drill-down for DSH agents and teammates",
   "type": "module",
   "main": "./lib/agent-team-monitor/host/index.js",
   "exports": {
@@ -39,7 +39,10 @@
         "src/agent-team-monitor/host/index.ts",
         "src/agent-team-monitor/host/snapshot.ts",
         "src/agent-team-monitor/host/workflow.ts",
-        "src/agent-team-monitor/host/catalog.ts"
+        "src/agent-team-monitor/host/catalog.ts",
+        "src/agent-team-monitor/host/execution.ts",
+        "src/agent-team-monitor/host/cooperation.ts",
+        "src/agent-team-monitor/host/detail.ts"
       ]
     },
     "manager": {
@@ -49,12 +52,12 @@
       "order": 65,
       "category": "conversation",
       "name": {
-        "zh-CN": "官方团队监控",
-        "en-US": "Official Team Monitor"
+        "zh-CN": "执行过程监控",
+        "en-US": "Execution Monitor"
       },
       "description": {
-        "zh-CN": "按会话查看 DSH 工作流成员与官方 Agent Teams 任务、依赖和历史。",
-        "en-US": "Inspect per-conversation workflow members and official Agent Teams tasks, dependencies and history."
+        "zh-CN": "查看主智能体及队员的执行流程、实时状态和节点详情。",
+        "en-US": "Inspect agent and teammate execution flows, live states and node details."
       }
     }
   },
