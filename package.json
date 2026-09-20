@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugins",
-  "version": "7.2.3",
+  "version": "7.2.4",
   "description": "Aggregate and selective DeepSeek Harness enhancements, including a standalone Windows launcher companion",
   "type": "module",
   "main": "./lib/index.js",
@@ -38,7 +38,8 @@
         "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-plugin-manager",
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-ui-workspace"
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-layout"
       ]
     }
   },
@@ -123,7 +124,8 @@
     "verify:desktop-host": "node scripts/verify-desktop-host.mjs",
     "verify:desktop-launcher": "node scripts/verify-desktop-launcher.mjs",
     "verify:desktop-source": "node scripts/verify-desktop-source.mjs",
-    "sync:compatibility": "node scripts/sync-dsh-compatibility.mjs"
+    "sync:compatibility": "node scripts/sync-dsh-compatibility.mjs",
+    "verify:market-web": "node scripts/verify-market-web.mjs"
   },
   "keywords": [
     "dsh",
@@ -179,7 +181,8 @@
     "@deepseek-ai/dsh-client-ui-session": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-store": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-plugin-manager": "0.1.6-alpha.2",
-    "@deepseek-ai/dsh-client-ui-workspace": "0.1.6-alpha.2"
+    "@deepseek-ai/dsh-client-ui-workspace": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.6-alpha.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",

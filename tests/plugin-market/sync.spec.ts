@@ -9,13 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, type Config, type MarketSyncStatus } from '../../src/plugin-market/index.ts'
 
 const config: Config = {
-  profile: 'web',
   topic: 'dsh-plugin',
   channelUrl: 'https://market.example.test/plugins-cache.json',
   pageSize: 12,
-  operationTimeoutMs: 120000,
-  githubTokenEnv: 'GITHUB_TOKEN',
-  cliPath: '',
 }
 
 function channel() {

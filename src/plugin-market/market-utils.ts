@@ -1,4 +1,4 @@
-/** Pure catalog and install-source helpers shared by the Host implementation and tests. */
+/** Pure catalog metadata helpers shared by the Host implementation and tests. */
 
 const PACKAGE_PART_PATTERN = /^[a-z0-9._~-]+$/
 
@@ -64,83 +64,4 @@ export function dshBundleEvidence(value: unknown): DshBundleEvidence | undefined
   const patch = (bundle as { readonly patch?: unknown }).patch
   if (typeof patch !== 'string' || !safeBundlePatch(patch)) return undefined
   return { packageName: manifest.name, bundlePatch: patch.trim() }
-}
-
-/** Whether installation would execute package-owned lifecycle code. */
-export function hasInstallLifecycleScripts(value: unknown, source: 'npm' | 'github'): boolean {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const scripts = (value as { readonly scripts?: unknown }).scripts
-  if (scripts === null || typeof scripts !== 'object' || Array.isArray(scripts)) return false
-  const keys = source === 'github'
-    ? ['preinstall', 'install', 'postinstall', 'prepare']
-    : ['preinstall', 'install', 'postinstall']
-  return keys.some(key => typeof (scripts as Record<string, unknown>)[key] === 'string')
-}
-
-function packageNameFromRegistrySpec(spec: string): string | undefined {
-  if (validPackageName(spec)) return spec
-  const versionSeparator = spec.startsWith('@')
-    ? spec.indexOf('@', spec.indexOf('/') + 1)
-    : spec.indexOf('@')
-  if (versionSeparator <= 0) return undefined
-  const packageName = spec.slice(0, versionSeparator)
-  return isPackageName(packageName) ? packageName : undefined
-}
-
-function packageNameFromDshAdd(command: string): string | undefined {
-  const match = /^(?:pnpm\s+)?dsh\s+plugin\s+--profile\s+\S+\s+add\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/.exec(command.trim())
-  const spec = match?.[1] ?? match?.[2] ?? match?.[3]
-  return spec === undefined ? undefined : packageNameFromRegistrySpec(spec)
-}
-
-/**
- * Read only simple registry package specs from catalog install guidance.
- * Arbitrary README commands, flags, paths, URLs, and shell syntax are ignored.
- */
-export function npmPackageCandidates(commands: readonly string[], declaredName?: unknown): string[] {
-  const candidates = commands.map(packageNameFromDshAdd)
-  if (isPackageName(declaredName)) candidates.push(declaredName)
-  return [...new Set(candidates.filter((value): value is string => value !== undefined))]
-}
-
-function repositoryUrl(value: unknown): string | undefined {
-  if (typeof value === 'string') return value
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const url = (value as { readonly url?: unknown }).url
-  return typeof url === 'string' ? url : undefined
-}
-
-/** Require npm metadata to point back to the catalog's GitHub repository. */
-export function npmRepositoryMatches(value: unknown, fullName: string): boolean {
-  const url = repositoryUrl(value)?.trim()
-  if (url === undefined) return false
-  const shorthand = /^github:([^/\s]+\/[^#\s]+?)(?:\.git)?(?:#.*)?$/i.exec(url)
-  if (shorthand?.[1]?.toLocaleLowerCase() === fullName.toLocaleLowerCase()) return true
-  const github = /github\.com[/:]([^/\s]+)\/([^/#\s]+?)(?:\.git)?(?:[#/]|$)/i.exec(url)
-  return github !== null
-    && `${github[1]}/${github[2]}`.toLocaleLowerCase() === fullName.toLocaleLowerCase()
-}
-
-/** Minimal installed manifest shape used to correlate npm packages with catalog repositories. */
-export interface InstalledPackageManifest {
-  readonly repository?: unknown
-}
-
-/**
- * Find the installed dependency that represents one catalog repository.
- * Accept caller-vetted catalog package names, while retaining GitHub-spec
- * and package-manifest correlation for repositories whose package name differs.
- */
-export function findInstalledPackageName(
-  fullName: string,
-  unambiguousPackageCandidates: readonly string[],
-  dependencies: Readonly<Record<string, string>>,
-  manifests: ReadonlyMap<string, InstalledPackageManifest>,
-): string | undefined {
-  const normalizedCandidates = new Set(unambiguousPackageCandidates.map(value => value.toLocaleLowerCase()))
-  const normalizedFullName = fullName.toLocaleLowerCase()
-  return Object.entries(dependencies).find(([name, spec]) =>
-    normalizedCandidates.has(name.toLocaleLowerCase())
-    || spec.toLocaleLowerCase().includes(normalizedFullName)
-    || npmRepositoryMatches(manifests.get(name)?.repository, fullName))?.[0]
 }

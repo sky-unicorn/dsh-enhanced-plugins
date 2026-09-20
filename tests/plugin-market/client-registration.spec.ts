@@ -22,6 +22,8 @@ describe('plugin community client registration', () => {
         register: vi.fn(() => () => {}),
         bind: vi.fn(() => (key: string) => key === 'nav' ? '插件社区' : key),
       },
+      remote: { pluginManager: {} },
+      layout: { selectPanel: vi.fn() },
       slots: {
         inject: vi.fn((name: string, setup: () => () => void) => {
           injectedSlot = name

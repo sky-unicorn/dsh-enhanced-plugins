@@ -4,11 +4,9 @@ import { Config, type Config as PluginConfig } from '../../src/plugin-market/ind
 describe('plugin market configuration', () => {
   it('provides bounded defaults', () => {
     expect(Config({} as PluginConfig)).toMatchObject({
-      profile: 'web',
       topic: 'dsh-plugin',
       channelUrl: 'https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/market-index/plugins-cache.json',
       pageSize: 12,
-      operationTimeoutMs: 120000,
     })
   })
 

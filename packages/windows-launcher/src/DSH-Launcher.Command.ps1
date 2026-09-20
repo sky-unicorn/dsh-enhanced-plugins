@@ -180,6 +180,7 @@ $dsh = $null
 $script:requestLogWriter = $null
 $originalDirectory = (Get-Location).Path
 $originalPnpmVerifyDeps = [Environment]::GetEnvironmentVariable('pnpm_config_verify_deps_before_run', 'Process')
+$proxyEnvironmentBefore = @{}
 $buildStage = '环境检查'
 try {
   if ($mode -in @('build', 'desktop', 'web', 'profile')) {
@@ -204,6 +205,24 @@ try {
     throw "Working directory does not exist: $workingDirectory"
   }
   Set-Location -LiteralPath $workingDirectory
+  if ($mode -in @('web', 'profile', 'headless', 'desktop')) {
+    $proxyFallback = Get-DshSystemProxyEnvironment
+    foreach ($key in $proxyFallback.environment.Keys) {
+      $proxyEnvironmentBefore[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+      [Environment]::SetEnvironmentVariable($key, [string]$proxyFallback.environment[$key], 'Process')
+    }
+    $proxyMessage = switch ($proxyFallback.reason) {
+      'windows-system' { 'Launcher: using the Windows HTTP/HTTPS proxy for this DSH process; bypass follows DSH NO_PROXY rules.' }
+      'explicit-environment' { 'Launcher: preserving explicit proxy environment for DSH.' }
+      'explicit-home-env' { 'Launcher: leaving proxy configuration to the DSH home .env file.' }
+      'automatic-policy' { 'Launcher: Windows PAC/WPAD requires explicit HTTP_PROXY/HTTPS_PROXY configuration for DSH.' }
+      'unsupported-policy' { 'Launcher: Windows proxy policy requires explicit HTTP_PROXY/HTTPS_PROXY configuration for DSH.' }
+      'unavailable' { 'Launcher: proxy discovery unavailable; leaving DSH networking unchanged.' }
+      default { 'Launcher: no Windows manual proxy found; leaving DSH networking unchanged.' }
+    }
+    if ($null -ne $script:requestLogWriter) { Write-RequestLog ($proxyMessage + [Environment]::NewLine) }
+    else { Write-Host $proxyMessage }
+  }
   switch ($mode) {
     'desktop' {
       $manifest = Get-Content -Raw -LiteralPath (Join-Path $workingDirectory 'package.json') -Encoding UTF8 | ConvertFrom-Json
@@ -426,6 +445,9 @@ try {
   Write-BuildOutcome $false 1 ($buildStage + '失败：' + $_.Exception.Message)
   exit 1
 } finally {
+  foreach ($key in $proxyEnvironmentBefore.Keys) {
+    [Environment]::SetEnvironmentVariable($key, $proxyEnvironmentBefore[$key], 'Process')
+  }
   if ($null -ne $script:requestLogWriter) { $script:requestLogWriter.Dispose() }
   if ($mode -in @('build', 'desktop')) {
     [Environment]::SetEnvironmentVariable('pnpm_config_verify_deps_before_run', $originalPnpmVerifyDeps, 'Process')

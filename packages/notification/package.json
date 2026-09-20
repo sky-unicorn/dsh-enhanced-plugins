@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-notification",
-  "version": "7.2.3",
+  "version": "7.2.4",
   "description": "Selective DSH bundle for desktop notifications and the DeepSeek pet",
   "type": "module",
   "main": "./lib/notification/host/index.js",

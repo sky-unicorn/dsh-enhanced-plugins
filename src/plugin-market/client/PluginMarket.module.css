@@ -45,57 +45,6 @@
   line-height: 20px;
 }
 
-.tabs {
-  display: flex;
-  align-items: flex-end;
-  gap: 22px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
-  margin-top: 2px;
-}
-
-.tab {
-  position: relative;
-  border: 0;
-  padding: 7px 1px 9px;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  cursor: pointer;
-}
-
-.tab:hover,
-.tab[data-active='true'] {
-  color: var(--dsw-alias-label-primary);
-}
-
-.tab[data-active='true']::after,
-.tab:focus-visible::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--dsw-alias-label-primary);
-  content: '';
-}
-
-.tab:focus-visible {
-  border-radius: 2px;
-  outline: 2px solid var(--dsw-alias-state-business-primary);
-  outline-offset: 2px;
-  color: var(--dsw-alias-label-primary);
-}
-
-.catalogPanel {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 14px;
-}
-
 .headerActions {
   display: flex;
   flex: none;
@@ -108,7 +57,7 @@
   min-height: 32px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   padding: 5px 12px;
   background: var(--dsw-alias-bg-layer-1);
@@ -120,35 +69,16 @@
   cursor: pointer;
 }
 
-.configure[data-primary='true'] {
-  border-color: var(--dsw-alias-state-business-primary);
-  background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-primary-foreground);
-}
-
 .configure:disabled {
   cursor: wait;
   opacity: .55;
-}
-
-.configure:hover:not(:disabled),
-.failure button:hover,
-.pagination button:hover:not(:disabled),
-.dialogActions button:hover:not(:disabled),
-.dialog > header button:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.configure[data-primary='true']:hover:not(:disabled) {
-  background: var(--dsw-alias-state-business-primary);
-  opacity: .86;
 }
 
 .meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   margin: 0;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   padding: 10px 12px;
   background: var(--dsw-alias-bg-layer-3);
@@ -168,10 +98,6 @@
 
 .metaItem:last-child {
   padding-right: 0;
-}
-
-.metaItem + .metaItem {
-  border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
 .meta dt,
@@ -205,16 +131,6 @@
   line-height: 18px;
 }
 
-.syncProgress {
-  margin: 0;
-  border-radius: 8px;
-  padding: 9px 11px;
-  background: var(--dsw-alias-state-business-tertiary);
-  color: var(--dsw-alias-state-business-primary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
 .notice {
   background: var(--dsw-alias-state-success-tertiary);
   color: var(--dsw-alias-state-success-primary);
@@ -226,7 +142,7 @@
 }
 
 .indexWarning {
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-label-secondary);
 }
@@ -237,12 +153,11 @@
   gap: 10px;
   color: var(--dsw-alias-state-error-primary);
   font-size: 12px;
+  line-height: 18px;
 }
 
-.failure button,
-.card button,
-.manualAction {
-  border: 1px solid var(--dsw-alias-border-l2);
+.failure button, .card button {
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 7px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -258,7 +173,7 @@
   box-sizing: border-box;
   width: 100%;
   height: 36px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   padding: 0 12px;
   outline: none;
@@ -266,6 +181,7 @@
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 13px;
+  line-height: 20px;
 }
 
 .search input::placeholder {
@@ -293,7 +209,7 @@
   min-height: 176px;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   padding: 14px;
   background: var(--dsw-alias-bg-layer-3);
@@ -379,11 +295,6 @@
   line-height: 17px;
 }
 
-.installPlan[data-kind='npm'] {
-  background: var(--dsw-alias-state-success-tertiary);
-  color: var(--dsw-alias-state-success-primary);
-}
-
 .card footer {
   display: flex;
   align-items: center;
@@ -398,178 +309,18 @@
   padding: 5px 10px;
 }
 
-.manualAction {
-  padding: 5px 10px;
-  text-decoration: none;
-}
-
-.manualAction:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.card button:not([data-installed='true']) {
+.card button {
   border-color: var(--dsw-alias-state-business-primary);
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-label-primary-foreground);
 }
 
-.card button[data-installed='true']:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.card button:not([data-installed='true']):hover:not(:disabled) {
+.card button:hover:not(:disabled) {
   opacity: .86;
 }
 
 .card button:disabled {
   cursor: wait;
-  opacity: .55;
-}
-
-.card button[data-readonly='true']:disabled {
-  cursor: default;
-  opacity: 1;
-}
-
-.card button:focus-visible,
-.manualAction:focus-visible,
-.failure button:focus-visible,
-.configure:focus-visible,
-.dialog button:focus-visible,
-.tokenField input:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
-  outline-offset: 2px;
-}
-
-.backdrop {
-  position: fixed;
-  z-index: 1000;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: var(--dsw-alias-bg-mask-1);
-}
-
-.dialog {
-  box-sizing: border-box;
-  width: min(480px, 100%);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  padding: 18px;
-  background: var(--dsw-alias-bg-layer-3);
-  color: var(--dsw-alias-label-primary);
-}
-
-.dialog > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.dialog h3,
-.dialog p {
-  margin: 0;
-}
-
-.dialog h3 {
-  font-size: 15px;
-  line-height: 22px;
-}
-
-.dialog > header button {
-  border: 0;
-  padding: 3px 7px;
-  background: var(--dsw-alias-bg-layer-3);
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.dialog > p {
-  margin-top: 8px;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.dialog > .dialogError {
-  margin-top: 10px;
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.credentialState {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 10px;
-  margin-top: 15px;
-  border-radius: 8px;
-  padding: 10px;
-  background: var(--dsw-alias-bg-layer-1);
-  font-size: 12px;
-}
-
-.credentialState code {
-  overflow-wrap: anywhere;
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--ds-font-family-code);
-  text-align: right;
-}
-
-.credentialState small {
-  grid-column: 1 / -1;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.tokenField {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 14px;
-  font-size: 12px;
-}
-
-.tokenField input {
-  height: 36px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  padding: 0 10px;
-  outline: none;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-family: var(--ds-font-family-code);
-}
-
-.dialogActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.dialogActions button {
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 7px;
-  padding: 7px 12px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.dialogActions button[data-primary='true'] {
-  border-color: var(--dsw-alias-state-business-primary);
-  background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-primary-foreground);
-}
-
-.dialogActions button:disabled,
-.tokenField input:disabled {
-  cursor: not-allowed;
   opacity: .55;
 }
 
@@ -580,10 +331,11 @@
   gap: 10px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
+  line-height: 18px;
 }
 
 .pagination button {
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 7px;
   padding: 5px 10px;
   background: var(--dsw-alias-bg-layer-1);
@@ -612,16 +364,17 @@
   white-space: nowrap;
 }
 
-@media (max-width: 680px) {
-  .header { flex-direction: column; }
-  .headerIntro { max-width: none; }
-  .headerActions { width: 100%; }
-  .configure { flex: 1; }
-  .meta { grid-template-columns: minmax(0, 1fr); gap: 9px; }
-  .metaItem,
-  .metaItem:first-child,
-  .metaItem:last-child { padding: 0; }
-  .metaItem + .metaItem { border-left: 0; border-top: 1px solid var(--dsw-alias-border-l2); padding-top: 9px; }
-  .grid { grid-template-columns: minmax(0, 1fr); }
-  .pagination { flex-wrap: wrap; }
+
+.diagnostic { overflow: auto; max-height: 240px; white-space: pre; font-size: 12px; line-height: 18px; }
+.installPlan { overflow-wrap: anywhere; }
+.card footer { line-height: 17px; }
+.configure:focus-visible, .card button:focus-visible, .pagination button:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px;
 }
+@media (max-width: 640px) {
+  .header { flex-direction: column; gap: 12px; }
+  .headerActions { flex-wrap: wrap; }
+  .grid { grid-template-columns: 1fr; }
+}
+
+.configure:hover:not(:disabled), .pagination button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }

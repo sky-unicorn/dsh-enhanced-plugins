@@ -2,11 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   compareByStars,
   dshBundleEvidence,
-  findInstalledPackageName,
-  hasInstallLifecycleScripts,
-  isPackageName,
-  npmPackageCandidates,
-  npmRepositoryMatches,
 } from '../../src/plugin-market/market-utils.ts'
 
 describe('market catalog helpers', () => {
@@ -22,12 +17,6 @@ describe('market catalog helpers', () => {
     expect(dshBundleEvidence({ name: 'absolute-patch', dsh: { bundle: { patch: 'C:\\outside.yml' } } })).toBeUndefined()
   })
 
-  it('detects package lifecycle scripts that require an explicit build decision', () => {
-    expect(hasInstallLifecycleScripts({ scripts: { prepare: 'npm run build' } }, 'github')).toBe(true)
-    expect(hasInstallLifecycleScripts({ scripts: { prepare: 'npm run build' } }, 'npm')).toBe(false)
-    expect(hasInstallLifecycleScripts({ scripts: { postinstall: 'node setup.js' } }, 'npm')).toBe(true)
-  })
-
   it('orders higher star counts before lower ones with deterministic ties', () => {
     const entries = [
       { fullName: 'z/older', stars: 5, updatedAt: '2026-01-01T00:00:00Z' },
@@ -38,48 +27,4 @@ describe('market catalog helpers', () => {
       .toEqual(['b/popular', 'a/newer', 'z/older'])
   })
 
-  it('extracts only simple npm specs from dsh add guidance', () => {
-    expect(npmPackageCandidates([
-      'dsh plugin --profile web add @example/plugin',
-      'pnpm dsh plugin --profile web add "plain-plugin@1.2.3"',
-      'dsh plugin --profile web add github:owner/repo',
-      'dsh plugin --profile web add ./source-directory',
-      'dsh plugin --profile web add -w link:/source-directory',
-      'git clone https://github.com/owner/repo.git',
-    ], 'declared-plugin')).toEqual(['@example/plugin', 'plain-plugin', 'declared-plugin'])
-  })
-
-  it('requires an npm package to identify the same GitHub repository', () => {
-    expect(npmRepositoryMatches(
-      { type: 'git', url: 'git+https://github.com/Owner/Repo.git' },
-      'owner/repo',
-    )).toBe(true)
-    expect(npmRepositoryMatches('github:owner/repo', 'owner/repo')).toBe(true)
-    expect(npmRepositoryMatches('https://github.com/other/repo', 'owner/repo')).toBe(false)
-    expect(npmRepositoryMatches(undefined, 'owner/repo')).toBe(false)
-  })
-
-  it('correlates installed catalog entries by package name, GitHub spec, or manifest repository', () => {
-    const dependencies = {
-      'declared-plugin': '1.2.3',
-      'git-plugin': 'github:owner/git-repo#abc123',
-      'renamed-plugin': '4.5.6',
-    }
-    const manifests = new Map([
-      ['renamed-plugin', { repository: 'https://github.com/owner/manifest-repo.git' }],
-    ])
-
-    expect(findInstalledPackageName('owner/declared-repo', ['declared-plugin'], dependencies, manifests))
-      .toBe('declared-plugin')
-    expect(findInstalledPackageName('owner/git-repo', [], dependencies, manifests)).toBe('git-plugin')
-    expect(findInstalledPackageName('owner/manifest-repo', [], dependencies, manifests)).toBe('renamed-plugin')
-    expect(findInstalledPackageName('owner/not-installed', [], dependencies, manifests)).toBeUndefined()
-  })
-
-  it('rejects package names that could escape the profile node_modules directory', () => {
-    expect(isPackageName('normal-package')).toBe(true)
-    expect(isPackageName('@scope/package')).toBe(true)
-    expect(isPackageName('..')).toBe(false)
-    expect(isPackageName('@scope/..')).toBe(false)
-  })
 })

@@ -18,7 +18,7 @@
 | --- | --- | --- | --- | --- |
 | [Windows Launcher](#1-windows-launcher) | `windows-launcher` | `dsh-enhanced-windows-launcher` | Windows 开始菜单 | 用托盘控制 Web、Headless、Profile、源码构建与诊断 |
 | [桌面提示与宠物](#2-桌面提示与宠物) | `notification` | `dsh-enhanced-notification` | Windows；设置 → 桌面宠物 | 任务提示音、自定义 WAV 音效库和原生动态桌宠 |
-| [插件社区](#3-插件社区) | `plugin-market` | `dsh-enhanced-plugin-market` | Web；设置 → 插件社区 | 搜索、安全预检、安装和卸载社区插件 |
+| [插件社区](#3-插件社区) | `plugin-market` | `dsh-enhanced-plugin-market` | Web；设置 → 插件社区 | 浏览社区插件，通过 DSH 原生管理器安装 |
 | [MCP 服务器管理](#4-mcp-服务器管理) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web；侧栏插件 → 所属包 → 组件配置 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
 | [编辑上一条消息](#5-编辑上一条消息) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web；最后一条用户消息 | 修改该轮内容并在当前会话重新生成 |
 | [产品子智能体](#6-产品子智能体) | `sub-agent` | `dsh-enhanced-sub-agent` | Web；设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
@@ -27,6 +27,12 @@
 聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 7 项；选择功能时只安装对应独立包或 Companion。
 
 ## 快速开始
+
+### 7.2.4：原生插件安装与系统代理
+
+- 插件社区直接调用 DSH 原生插件管理器安装，不再自行预检、维护安装记录或执行卸载；构建授权和安装结果由 DSH 决定。
+- Windows Launcher 在没有显式代理配置时自动传递系统手动 HTTP/HTTPS 代理，修复索引同步直连超时。更新 Launcher 并重启 DSH 后生效。
+- 聚合包、6 个独立功能包及 Windows Launcher 统一为 `7.2.4`；兼容 DSH `0.1.6-alpha.2`，验证基线仍为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。
 
 ### 7.2.3：适配 DSH 0.1.6-alpha.2
 
@@ -148,6 +154,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
   每次启动 Web（含托盘、重启、登录自动启动）都会检测 nvm-windows。已安装时，从绑定的 DSH checkout 或可识别的 npm DSH shim 读取元数据：Node 按 `.nvmrc`、`.node-version`、`volta.node`、`engines.node` 选择，并始终满足 `engines.node`，自动模式使用 NVM 已安装的最高匹配版本，手动模式只使用已保存的版本。包管理器优先读取 `packageManager`/`devEngines.packageManager`，再参考 Volta、engines 和锁文件；锁文件只标识工具种类或 Yarn 主版本系列，不被当作精确版本。缺少的包管理器在首次启动时下载到 Launcher 的 `sandbox` 目录，后续复用；声明冲突会明确报错。
 
   沙盒直接用所选 Node 调用同一个 DSH CLI，仅隔离该服务的 PATH、npm/Yarn 全局安装目录及 npm/Yarn/Corepack 缓存，不执行 `nvm use`，不修改系统 Node、NVM 链接或 DSH 源码。pnpm 保留用户／项目配置及原有 store 位置，以复用源码和 Profile 已安装的依赖。Launcher 和候选安装器只清理由旧版本传入、且位于 Launcher 沙盒内的存储覆盖；安装器退出时恢复调用方环境。这是工具链的进程级隔离，不是文件或网络权限沙箱。未检测到 NVM 时保留原启动方式；NVM 中缺少匹配 Node、项目声明无效或下载失败时停止启动并显示原因，Node 需先用 `nvm install` 安装。无法识别的自定义启动器需重新绑定 DSH 源码。DSH 源码构建和插件源码操作复用概览的 Node 选择与沙盒，包括 DSH 声明的 pnpm 和该 Node 内置的 npm。DSH 拉取后会在清理前重新检测，构建检测不要求依赖或 CLI 产物已存在。插件操作在 npm ci、构建、停止 DSH 或安装 Profile 前校验候选源码的 Node/npm 要求；不兼容时直接报错，不另选 Node。构建／更新日志记录所选运行环境。未检测到 NVM 时，自动模式仍使用系统工具链；已保存的手动选择会报错，直到恢复 NVM 或切回自动。Headless、其他 Profile 沿用原有流程。
+- **网络代理：** Launcher 启动 Web、Profile、Headless 或 Desktop 时，优先保留已继承的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`；DSH home `.env` 中已声明这些变量时也不覆盖。没有显式配置时，读取 Windows 当前用户启用的手动 HTTP/HTTPS 代理，仅传入本次 DSH 进程及其子进程。日志只记录代理来源，不记录地址或凭据；不会修改系统环境、注册表或 `.env`。代理开关变化后需要重新启动 DSH。绕过规则仍由 DSH 的 `NO_PROXY` 与内置 loopback 直连策略决定，不导入 Windows 的通配符绕过列表。PAC/WPAD、仅 SOCKS 或只配置单个协议的代理不能直接映射为 DSH 的固定代理策略，需在 DSH home `.env` 中显式配置 HTTP/HTTPS 代理。
 - **源码维护：** “更新源码并构建”对绑定的 DSH checkout 执行 `git pull --ff-only`，成功后依次运行 `pnpm run clean`、`pnpm install --frozen-lockfile`、`pnpm run build`。拉取 HTTP(S) 远端前，Launcher 会按远端 URL 解析当前 Windows 系统代理；若系统为该地址选择了代理，则仅通过 Git 的单次命令配置应用到本次拉取，命令结束（包括失败）后自动失效，不会写入或覆盖仓库、用户或系统级 Git 代理设置。SSH 远端不使用这项 HTTP(S) 代理发现。“仅构建”直接使用当前本地源码，跳过 Git 更新，仍执行这三个 pnpm 步骤；无 Git 时，“更新源码并构建”也可经确认跳过拉取。操作期间两个构建按钮均禁用，避免重复启动。清理前会检查 checkout 是否具备 clean/build 脚本和锁文件，以及 pnpm 是否可用。任一步失败即停止后续步骤，锁文件错误不会降级为非冻结安装。Git 进度和 pnpm 警告不会被误判为失败，操作以真实退出码为准。页面会区分拉取、清理、依赖安装、构建与环境错误，放大的日志文字和“打开日志目录”入口便于排查；完整 UTF-8 输出、命令引擎错误及最终结果保存在 `logs/dsh-build.log`，刷新或重新进入页面不会丢失。运行前请先停止使用此 checkout 的 DSH：清理会删除现有构建产物，后续步骤失败时旧产物不会恢复。本操作不会自动停止或重启 DSH，请在构建成功后手动启动服务。
 
   源码操作进程会临时设置 `pnpm_config_verify_deps_before_run=false`，防止 pnpm 的[脚本前自动安装](https://pnpm.io/settings/build#verifydepsbeforerun)在明确的冻结安装步骤前改写锁文件；不会修改仓库或全局 pnpm 配置。
@@ -210,18 +217,20 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 ![插件社区页面](assets/readme/plugin-community.png)
 
-1. 首次打开使用内置快照；“同步最新索引”通过 ETag 获取 GitHub Actions 每 6 小时发布的校验快照，短暂的 429/502/503/504 会自动重试。
-2. 可按仓库名、包名、描述或 topic 搜索；安装前先实时预检仓库身份、commit 和发布结构。
-3. 只有身份匹配且不含安装生命周期脚本的 npm bundle 才提供“一键安装”。可验证的无构建源码 bundle 可在确认后固定 commit 安装；其他情况只显示安装说明。
-4. 安装与卸载作为可取消后台任务执行；完成后验证目标 profile、bundle patch 和组合，失败自动回滚。
-5. “已安装”页会区分市场管理的插件和外部管理的插件；只有前者可以从此页卸载。
+1. 浏览、搜索社区插件；目录使用内置快照，可同步 GitHub Actions 发布的最新索引。
+2. 点击“通过 DSH 安装”直接将卡片显示的 GitHub 仓库来源交给当前 profile 的 `pluginManager.installBundle()`，不再实时预检 GitHub/npm，也不自行判断是否可安装。
+3. DSH 负责包安装、bundle 校验、构建脚本授权、失败恢复和启用。市场展示其返回的结果；只有 DSH 返回待授权脚本时，才提供“允许这些脚本并重试”。
+4. “管理已安装插件”打开 DSH 原生插件页，由该页面负责查看安装状态、启停和卸载。市场不再维护独立安装记录或“已安装”筛选。
+5. 安装目标跟随当前运行的 profile。旧版 `profile`、`cliPath`、`operationTimeoutMs` 和 `githubTokenEnv` 配置不再参与市场操作；已有插件和凭据不会被删除。
 
 <details>
 <summary><strong>索引发布、网络代理与凭据</strong></summary>
 
 索引由 [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) 生成到 `market-index` 分支：完整枚举 topic，只重新验证新增或变化的仓库；异常缩水或生成失败不会覆盖上次结果。插件市场自身是内置的已验证渠道贡献，即使远程镜像尚未收录也会出现，后续不会重复。
 
-内置快照和自动索引同步都不需要 GitHub Token。Host 下载使用 这两个受支持 DSH 版本安装的全局传输，遵循其代理校验、直连和 `NO_PROXY` 规则。`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 与 `NO_PROXY` 可在启动环境或 `$DSH_HOME/.env` 中设置；插件市场不再自行创建或关闭代理 dispatcher。安装预检若遇到 GitHub API 限流，可在“配置”中保存只读、短有效期的 Fine-grained Token；Token 只发送到本机 DSH Host，并由 credentials 服务保存。
+内置快照和自动索引同步不需要 GitHub Token，因此已移除市场的 Token 配置入口。索引下载沿用 DSH 的全局传输及代理规则；通过本项目 Windows Launcher 启动时，没有显式配置便自动传递系统手动 HTTP/HTTPS 代理；插件安装使用 DSH 插件管理器自己的包管理环境。市场提供索引仓库的 `github:owner/repo` 来源，不猜测同名 npm 包是否已发布。目录收录校验用于索引质量，不能保证插件在当前环境安装成功。
+
+本实现按本地 DSH `ddefc45f` 的公开 Remote 接口验证。在线发布教程主要描述 CLI 路径；浏览器使用当前版本的 `pluginManager`，不复制原生 UI 的私有组件或状态。
 
 页面会显示索引生成时间；超过 24 小时未更新时明确提示，同时继续保留上次可用快照。
 
@@ -299,7 +308,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.3`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.4`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件；远端有效但没有匹配当前插件及 DSH 版本的记录时也会检查包内文件。只有两处都不支持当前 DSH 版本才拒绝安装。每次检查重新获取，不覆盖本地回退文件。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
@@ -355,15 +364,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 
 | 字段 | 默认值 | 作用 |
 | --- | --- | --- |
-| `profile` | `web` | 安装和卸载目标 profile |
 | `topic` | `dsh-plugin` | 已校验渠道文档必须匹配的 topic |
 | `channelUrl` | `market-index` 分支 HTTPS 快照 | “同步最新索引”使用的发布地址 |
 | `pageSize` | `12` | 每页插件数 |
-| `operationTimeoutMs` | `120000` | 安装和卸载超时 |
-| `githubTokenEnv` | `GITHUB_TOKEN` | credentials 引用名 |
-| `cliPath` | 空 | 可选 DSH 可执行文件绝对路径 |
 
-内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读引导快照，也是自动索引首次运行的增量校验种子。缓存、ETag、后台任务和安装记录由 Host 管理并保存到 DSH home。插件社区不会解析 README 中的 shell 命令，也不会启用 `dangerouslyAllowAllBuilds`。
+内置 [`assets/plugins-cache.json`](assets/plugins-cache.json) 是只读引导快照，也是自动索引首次运行的增量校验种子。市场 Host 只管理目录缓存、ETag 与索引同步任务，缓存文件保存在 DSH home；安装状态由 DSH 插件管理器负责。插件社区不会解析 README 中的 shell 命令，也不会启用 `dangerouslyAllowAllBuilds`。
 
 </details>
 

@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugin-market",
-  "version": "7.2.3",
+  "version": "7.2.4",
   "description": "Selective DSH bundle for the plugin community",
   "type": "module",
   "main": "./lib/plugin-market/index.js",
@@ -20,7 +20,10 @@
         "@deepseek-ai/dsh-client-ui-primitives",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-slots"
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
       ]
     }
   },
@@ -41,8 +44,8 @@
         "en-US": "Plugin Community"
       },
       "description": {
-        "zh-CN": "浏览、预检并管理 DSH 社区插件。",
-        "en-US": "Browse, preflight, and manage DSH community plugins."
+        "zh-CN": "浏览 DSH 社区插件，通过 DSH 插件管理器安装。",
+        "en-US": "Discover community plugins and install them through the DSH plugin manager."
       }
     }
   },
@@ -70,13 +73,14 @@
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-settings": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.6-alpha.2",
-    "@deepseek-ai/dsh-credentials": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-host-webserver": "0.1.6-alpha.2",
-    "@deepseek-ai/dsh-subprocess": "0.1.6-alpha.2",
     "@deepseek-ai/schemastery": ">=3.18.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "@deepseek-ai/dsh-client-ui-renderer": "0.1.6-alpha.2"
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-api-remotes": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.1.6-alpha.2"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

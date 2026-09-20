@@ -18,7 +18,7 @@ The installer only needs the stable “feature ID.” Every feature also has a s
 | --- | --- | --- | --- | --- |
 | [Windows Launcher](#1-windows-launcher) | `windows-launcher` | `dsh-enhanced-windows-launcher` | Windows Start menu | Tray controls for Web, Headless, profiles, source builds, and diagnostics |
 | [Desktop alerts and pet](#2-desktop-alerts-and-pet) | `notification` | `dsh-enhanced-notification` | Windows; Settings → Desktop Pet | Task sounds, a custom WAV library, and a native animated pet |
-| [Plugin Community](#3-plugin-community) | `plugin-market` | `dsh-enhanced-plugin-market` | Web; Settings → Plugin Community | Search, safely preflight, install, and uninstall community plugins |
+| [Plugin Community](#3-plugin-community) | `plugin-market` | `dsh-enhanced-plugin-market` | Web; Settings → Plugin Community | Discover community plugins and install through the DSH manager |
 | [MCP server manager](#4-mcp-server-manager) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web; Sidebar Plugins → bundle → row configuration | Manage stdio / Streamable HTTP servers and import local configuration |
 | [Edit last message](#5-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
 | [Product subagents](#6-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
@@ -27,6 +27,12 @@ The installer only needs the stable “feature ID.” Every feature also has a s
 The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed installs now express “all” as every independent Profile package plus the required global Launcher, so any one Profile feature can later be removed without changing the others.
 
 ## Quick start
+
+### 7.2.4: native plugin installation and system proxy support
+
+- Plugin Community installs directly through the native DSH plugin manager, without its own preflight, installation records, or removal flow. DSH owns build approval and installation outcomes.
+- Windows Launcher supplies the system's manual HTTP/HTTPS proxy when no explicit proxy is configured, fixing direct-connection timeouts during index synchronization. Update Launcher and restart DSH to apply this change.
+- The aggregate, all six standalone bundles, and Windows Launcher use `7.2.4`, supporting DSH `0.1.6-alpha.2` at the verified baseline `ddefc45fbc7f8e46dd73185e68295696d1297887`.
 
 ### 7.2.3: DSH 0.1.6-alpha.2 compatibility
 
@@ -149,6 +155,7 @@ A Windows control center outside the Cordis plugin tree for local DSH users who 
   Every Web start, including tray, restart, and login startup, detects nvm-windows. When installed, Launcher reads the bound DSH checkout or a recognizable npm DSH shim. Node selection follows `.nvmrc`, `.node-version`, `volta.node`, then `engines.node`, always respecting `engines.node`, and chooses the highest matching installed NVM version in Automatic mode; manual mode uses only the saved version. Manager selection prefers `packageManager`/`devEngines.packageManager`, then Volta, engines, and lockfiles. Lockfiles identify the tool or Yarn generation, not an exact version. Missing manager versions download into Launcher's `sandbox` directory on first start and are reused; conflicting declarations produce an error.
 
   Sandbox mode invokes the same DSH CLI directly with the selected Node, isolating the service PATH, npm/Yarn global install directories, and npm/Yarn/Corepack caches without running `nvm use` or changing system Node, NVM links, or DSH source. pnpm retains its user/project store configuration and normal store location so existing source and profile dependencies can be reused. Launcher and the candidate installer clear only storage overrides inside the Launcher sandbox inherited from older versions; the installer restores its caller environment on exit. This is process-level toolchain isolation, not a file or network permission sandbox. Without NVM, the original launch path remains intact. Missing compatible Node, invalid declarations, or download failures stop startup with an explanation; install missing Node with `nvm install`. Unrecognized custom launchers need a DSH source binding. DSH source builds and plugin source operations reuse the Overview Node selection and sandbox, including the declared DSH pnpm and npm bundled with that Node. After a DSH pull, detection runs again before clean; build detection does not require installed dependencies or CLI artifacts. Plugin operations validate the candidate source Node/npm requirements before npm ci, building, stopping DSH, or installing profiles; incompatible requirements fail instead of selecting a different Node. Build/update logs record the selected runtime. Without NVM, Automatic mode retains the system toolchain; a saved manual selection reports an error until NVM is restored or Automatic is selected. Headless and other profiles retain their existing flows.
+- **Network proxy:** When launching Web, Profile, Headless, or Desktop, Launcher preserves inherited `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY`, and defers to declarations in the DSH home `.env`. Without explicit configuration it reads the current Windows user’s enabled manual HTTP/HTTPS proxy and passes it only to this DSH process and its children. Logs identify the source without addresses or credentials; system environment, registry settings, and `.env` remain untouched. Restart DSH after changing the proxy. Bypass still follows DSH’s `NO_PROXY` and built-in loopback rules; Windows wildcard bypass lists are not imported. PAC/WPAD, SOCKS-only, and single-protocol settings cannot be translated into DSH’s fixed proxy policy; configure HTTP/HTTPS proxy variables explicitly in the DSH home `.env` for those cases.
 - **Source maintenance:** **Update Source and Build** (更新源码并构建) runs `git pull --ff-only` against the bound DSH checkout, then `pnpm run clean`, `pnpm install --frozen-lockfile`, and `pnpm run build` in order. Before pulling an HTTP(S) remote, Launcher resolves the current Windows system proxy for that remote URL. When Windows selects a proxy, Launcher applies it through a command-scoped Git setting for this pull only; the setting expires after success or failure and never writes or overwrites repository, user, or system Git proxy configuration. SSH remotes do not use this HTTP(S) proxy discovery. **Build Only** (仅构建) uses the current local source, skipping Git updates while still running all three pnpm steps. Without Git, Update Source and Build can also skip the pull after confirmation. Both build buttons stay disabled during an operation to prevent duplicate runs. Before cleaning, Launcher checks the checkout for clean/build scripts and a lockfile, and verifies that pnpm is available. Any failed step stops the remaining steps; lockfile errors never fall back to an unfrozen install. Git progress and pnpm warnings are not treated as failures: the real exit code determines the outcome. The page distinguishes pull, clean, dependency-install, build, and environment failures, with larger log text and an Open Log Folder action. Full UTF-8 output, command-engine errors, and the final outcome remain in `logs/dsh-build.log` across refreshes and page navigation. Stop DSH instances using this checkout before running: clean removes existing build artifacts, which are not restored if a later step fails. Launcher does not automatically stop or restart DSH for this action; start it manually after a successful build.
 
   The source-operation process temporarily sets `pnpm_config_verify_deps_before_run=false` so pnpm's [automatic install before scripts](https://pnpm.io/settings/build#verifydepsbeforerun) cannot change the lockfile before the explicit frozen install. This does not edit repository or global pnpm settings.
@@ -211,18 +218,20 @@ Both the resident pet and short-lived sound processes are owned by the DSH subpr
 
 ![Plugin Community page](assets/readme/plugin-community.png)
 
-1. The first visit uses a bundled snapshot. “Sync latest index” uses ETags to fetch a schema-validated snapshot published by GitHub Actions every six hours, retrying temporary 429/502/503/504 responses.
-2. Search by repository, package, description, or topic. A live preflight checks repository identity, commit, and distribution shape before installation.
-3. One-click install is offered only for matching npm bundles with no install lifecycle scripts. Verifiable build-free source bundles can be installed at a pinned commit after confirmation; every other path links to its installation guide.
-4. Install and uninstall run as cancellable background jobs. The target profile, bundle patch, and composition are verified afterward, with automatic rollback on failure.
-5. The Installed tab separates market-managed plugins from externally managed ones. Only the former can be removed from this page.
+1. Browse and search community plugins from the bundled snapshot, or sync the latest index published by GitHub Actions.
+2. “Install with DSH” passes the displayed GitHub repository source directly to the current profile’s `pluginManager.installBundle()`. The market no longer preflights GitHub/npm or decides whether a package is installable.
+3. DSH owns package installation, bundle validation, build-script approval, failure recovery, and activation. The market displays its result and offers “Allow these scripts and retry” only for pending scripts reported by DSH.
+4. “Manage installed plugins” opens the native DSH Plugins page for installed state, enablement, and removal. The market no longer owns installation records or an Installed filter.
+5. Installation follows the running profile. The old `profile`, `cliPath`, `operationTimeoutMs`, and `githubTokenEnv` options no longer affect market operations; existing plugins and credentials are left intact.
 
 <details>
 <summary><strong>Index publishing, network proxies, and credentials</strong></summary>
 
 The [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugin-index.yml) workflow publishes the `market-index` branch. It enumerates the complete topic, revalidates only new or changed repositories, and refuses to overwrite the last result after an abnormal shrink or failed build. This project is also a built-in verified channel contribution, so it remains discoverable before the remote mirror catches up and is not duplicated afterward.
 
-Neither the bundled snapshot nor automated index sync requires a GitHub token. Host downloads use the global transport installed by the supported DSH versions, including its proxy validation, direct routes, and `NO_PROXY` rules. Set `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` in the launching environment or `$DSH_HOME/.env`; the market does not install or close its own proxy dispatcher. If install preflight hits GitHub API limits, Settings can store a read-only, short-lived fine-grained token. It is sent only to the local DSH Host and stored through the credentials service.
+The bundled snapshot and index synchronization need no GitHub token, so the market’s token settings have been removed. Index downloads use DSH’s global transport and proxy rules; the Windows Launcher supplies the system’s manual HTTP/HTTPS proxy when no explicit proxy is configured; installations use the DSH manager’s package-manager environment. The market supplies `github:owner/repo` from the index rather than assuming a matching npm package has been published. Catalog validation is an index-quality check, not an installation guarantee.
+
+This implementation is verified against the public Remote interface in local DSH commit `ddefc45f`. The online publishing tutorial primarily describes the CLI path; the browser uses the current `pluginManager` without importing private native UI components or state.
 
 The page displays index generation time. An index older than 24 hours receives an explicit warning while the last usable snapshot remains available.
 
@@ -300,7 +309,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.3`.
+- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.4`.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** before building, stopping services, or changing a profile, the installer and Launcher updater fetch the compatibility file from this repository’s GitHub `master` branch. A failed request, an eight-second download timeout, or malformed/oversized data falls back to the bundled file with a warning. Every check fetches again; it does not overwrite the local fallback. The remote table takes precedence when it contains the current plugin and DSH version. If it omits either, or lists no DSH version for that plugin, the installer checks the bundled table; installation stops only when neither supports the checkout. Mixed package versions also stop installation. Commits belong to individual DSH versions; an unlisted commit, local tracked changes, or no Git metadata produces an unverified-source warning.
@@ -356,15 +365,11 @@ Six `*CustomSoundFile` / `*CustomSoundName` fields are Host-owned selection refe
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `profile` | `web` | Target profile for install and uninstall |
 | `topic` | `dsh-plugin` | Topic required by validated channel entries |
 | `channelUrl` | HTTPS snapshot on `market-index` | Publication used by Sync latest index |
 | `pageSize` | `12` | Plugins per page |
-| `operationTimeoutMs` | `120000` | Install and uninstall timeout |
-| `githubTokenEnv` | `GITHUB_TOKEN` | Credentials reference name |
-| `cliPath` | empty | Optional absolute DSH executable path |
 
-Bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is a read-only bootstrap snapshot and the incremental-validation seed for the first automated index run. The Host owns cached snapshots, ETags, background tasks, and installation records under DSH home. Plugin Community never parses shell commands out of READMEs and never enables `dangerouslyAllowAllBuilds`.
+Bundled [`assets/plugins-cache.json`](assets/plugins-cache.json) is a read-only bootstrap snapshot and the incremental-validation seed for the first automated index run. The market Host owns only catalog snapshots, ETags, and index synchronization; cache files live under DSH home. The DSH plugin manager owns installed state. Plugin Community never parses shell commands out of READMEs and never enables `dangerouslyAllowAllBuilds`.
 
 </details>
 

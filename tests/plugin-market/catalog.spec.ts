@@ -7,13 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, type Config } from '../../src/plugin-market/index.ts'
 
 const config: Config = {
-  profile: 'web',
   topic: 'dsh-plugin',
   channelUrl: 'https://market.example.test/plugins-cache.json',
   pageSize: 12,
-  operationTimeoutMs: 120000,
-  githubTokenEnv: 'GITHUB_TOKEN',
-  cliPath: '',
 }
 
 function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
@@ -61,109 +57,28 @@ describe('catalog filtering', () => {
     await rm(testHome, { recursive: true, force: true })
   })
 
-  async function writeInstallRecord(fullName: string, packageName: string): Promise<void> {
-    const directory = join(testHome, 'plugins', 'dsh-market')
-    await mkdir(directory, { recursive: true })
-    await writeFile(join(directory, 'installed-plugins.json'), JSON.stringify({
-      schemaVersion: 1,
-      entries: [{ profile: 'web', fullName, packageName, source: 'npm', installedAt: '2026-08-18T00:00:00.000Z' }],
-    }))
-  }
-
-  it('keeps the marketplace repository searchable when the mirrored snapshot predates it', async () => {
-    expect(await get(createHandler(), '/api/plugin-market/catalog?query=dsh-enhanced-plugins')).toMatchObject({
-      status: 200,
-      value: {
-        total: 1,
-        plugins: [{
-          fullName: 'sky-unicorn/dsh-enhanced-plugins',
-          packageName: 'dsh-enhanced-plugins',
-          url: 'https://github.com/sky-unicorn/dsh-enhanced-plugins',
-        }],
-      },
-    })
+  it('provides a source without reading installed state or probing GitHub/npm', async () => {
+    const fetchMock = vi.fn(() => { throw new Error('catalog must not preflight') })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await get(createHandler(), '/api/plugin-market/catalog?query=dsh-enhanced-plugins')
+    expect(result).toMatchObject({ status: 200, value: { total: 1, plugins: [{
+      fullName: 'sky-unicorn/dsh-enhanced-plugins',
+      installSpec: 'github:sky-unicorn/dsh-enhanced-plugins',
+    }] } })
+    expect(fetchMock).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
-  it('filters marketplace-installed entries before pagination', async () => {
-    const packageName = 'dsh-deepresearch'
-    const packageRoot = join(testHome, 'profiles', 'web', 'node_modules', packageName)
-    await mkdir(packageRoot, { recursive: true })
-    await writeFile(join(testHome, 'profiles', 'web', 'package.json'), JSON.stringify({
-      dependencies: { [packageName]: '1.0.0' },
-    }))
-    await writeFile(join(packageRoot, 'package.json'), JSON.stringify({
-      name: packageName,
-      repository: 'https://github.com/havingautism/dsh-deepresearch.git',
-    }))
-    await writeInstallRecord('havingautism/dsh-deepresearch', packageName)
-
-    const response = await get(createHandler(), '/api/plugin-market/catalog?filter=installed&page=1&pageSize=1')
-
-    expect(response).toMatchObject({
-      status: 200,
-      value: {
-        total: 1,
-        totalPages: 1,
-        plugins: [{ packageName, installed: true, removable: true }],
-      },
-    })
-  })
-
-  it('shows the externally managed marketplace bundle as installed but not removable', async () => {
-    const packageName = 'dsh-enhanced-plugins'
-    const packageRoot = join(testHome, 'profiles', 'web', 'node_modules', packageName)
-    await mkdir(packageRoot, { recursive: true })
-    await writeFile(join(testHome, 'profiles', 'web', 'package.json'), JSON.stringify({
-      dependencies: { [packageName]: '1.0.0' },
-    }))
-    await writeFile(join(packageRoot, 'package.json'), JSON.stringify({
-      name: packageName,
-      repository: 'https://github.com/sky-unicorn/dsh-enhanced-plugins.git',
-    }))
-
-    expect(await get(createHandler(), '/api/plugin-market/catalog?filter=installed')).toMatchObject({
-      status: 200,
-      value: {
-        total: 1,
-        plugins: [{
-          fullName: 'sky-unicorn/dsh-enhanced-plugins',
-          packageName,
-          installed: true,
-          removable: false,
-        }],
-      },
-    })
-  })
-
-  it('uses the recorded repository identity when catalog entries share one package name', async () => {
-    const packageName = 'dsh-plugin-market'
-    const packageRoot = join(testHome, 'profiles', 'web', 'node_modules', packageName)
-    await mkdir(packageRoot, { recursive: true })
-    await writeFile(join(testHome, 'profiles', 'web', 'package.json'), JSON.stringify({
-      dependencies: { [packageName]: 'link:../../../../dsh-plugin-market' },
-    }))
-    await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ name: packageName }))
-    await writeInstallRecord('TheYoungChen/dsh-plugin-market', packageName)
-
-    expect(await get(createHandler(), '/api/plugin-market/catalog?filter=installed')).toMatchObject({
-      status: 200,
-      value: {
-        total: 1,
-        plugins: [{
-          fullName: 'TheYoungChen/dsh-plugin-market',
-          packageName,
-          installed: true,
-          removable: false,
-        }],
-      },
-    })
-  })
-
-  it('rejects unknown catalog filters', async () => {
-    expect(await get(createHandler(), '/api/plugin-market/catalog?filter=unknown')).toMatchObject({
-      status: 400,
-      value: { error: { code: 'INVALID_FILTER' } },
-    })
+  it('no longer exposes marketplace install, uninstall, preflight or credential endpoints', async () => {
+    const handler = createHandler()
+    for (const path of ['install', 'uninstall', 'install-plan', 'jobs/old-id', 'config']) {
+      for (const method of ['GET', 'POST', 'DELETE']) {
+        let status = 0
+        await handler({ method, url: `/api/plugin-market/${path}`, headers: {} } as IncomingMessage,
+          { writeHead(value: number) { status = value }, end() {} } as unknown as ServerResponse)
+        expect(status).toBe(404)
+      }
+    }
   })
 
   it('does not display repositories from a legacy unverified user channel', async () => {
