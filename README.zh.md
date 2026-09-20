@@ -2,7 +2,7 @@
 
 中文 | [English](README.md)
 
-面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能套件：**7 个可独立安装的 Cordis bundle + 1 个 Windows Companion**。
+面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能套件：**6 个可独立安装的 Cordis bundle + 1 个 Windows Companion**。
 
 - 不修改 DSH 核心，只使用公开插件扩展点。
 - 可一次安装全部功能，也可只保留选中的独立功能。
@@ -20,20 +20,20 @@
 | [桌面提示与宠物](#2-桌面提示与宠物) | `notification` | `dsh-enhanced-notification` | Windows；设置 → 桌面宠物 | 任务提示音、自定义 WAV 音效库和原生动态桌宠 |
 | [插件社区](#3-插件社区) | `plugin-market` | `dsh-enhanced-plugin-market` | Web；设置 → 插件社区 | 搜索、安全预检、安装和卸载社区插件 |
 | [MCP 服务器管理](#4-mcp-服务器管理) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web；侧栏插件 → 所属包 → 组件配置 | 管理 stdio / Streamable HTTP MCP 服务器并导入本机配置 |
-| [pi-ai 模型请求类型](#5-pi-ai-模型请求类型) | `model-input-types` | `dsh-enhanced-model-input-types` | Web；侧栏插件 → 所属包 → 组件配置 | 声明模型接受纯文本还是图片请求 |
-| [编辑上一条消息](#6-编辑上一条消息) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web；最后一条用户消息 | 修改该轮内容并在当前会话重新生成 |
-| [产品子智能体](#7-产品子智能体) | `sub-agent` | `dsh-enhanced-sub-agent` | Web；设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
-| [官方团队监控](#8-官方团队监控) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web；当前对话输入框右侧团队图标 | 按角色查看执行中／历史子会话，跳转原生详情，以及 Team 任务依赖和邮箱计数 |
+| [编辑上一条消息](#5-编辑上一条消息) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web；最后一条用户消息 | 修改该轮内容并在当前会话重新生成 |
+| [产品子智能体](#6-产品子智能体) | `sub-agent` | `dsh-enhanced-sub-agent` | Web；设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
+| [官方团队监控](#7-官方团队监控) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web；当前对话输入框右侧团队图标 | 按角色查看执行中／历史子会话，跳转原生详情，以及 Team 任务依赖和邮箱计数 |
 
-聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 8 项；选择功能时只安装对应独立包或 Companion。
+聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 7 项；选择功能时只安装对应独立包或 Companion。
 
 ## 快速开始
 
-### 7.2.1：适配 DSH 0.1.6-alpha.2
+### 7.2.2：适配 DSH 0.1.6-alpha.2
 
-- 插件 `7.2.1` 验证的 DSH 版本为 `0.1.6-alpha.2`，源码基线为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。远端表缺少当前插件或 DSH 版本时，安装器会继续查包内兼容表。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
-- MCP 与模型输入类型的配置迁移到侧栏“插件”页所属组件的配置入口；MCP 离开页面时丢弃未保存草稿，模型类型更改仍立即保存，并支持“仅图片”。独立安装和聚合安装均提供对应入口。
-- 团队监控通过新版 `mainView` 会话引用识别主会话，成员跳转使用官方 `uiWorkspace.openSession()`；侧栏独立保留的子会话不会改变主会话监控。7 个独立功能包和 Windows Launcher 使用同一发布版本与源码基线。
+- 插件 `7.2.2` 验证的 DSH 版本为 `0.1.6-alpha.2`，源码基线为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。远端表缺少当前插件或 DSH 版本时，安装器会继续查包内兼容表。当前支持范围统一维护在 [`dsh-compatibility.json`](dsh-compatibility.json)。
+- `model-input-types` 已退役：官方 DSH 在“设置 → 模型 → 自定义设置 → 模型选项”中提供逐模型的“文本／图片”输入类型设置。更新安装会移除旧独立包；已有模型设置由官方设置系统保留。
+- MCP 配置位于侧栏“插件”页所属组件的配置入口；离开页面时丢弃未保存草稿。独立安装和聚合安装均提供入口。
+- 团队监控通过新版 `mainView` 会话引用识别主会话，成员跳转使用官方 `uiWorkspace.openSession()`；侧栏独立保留的子会话不会改变主会话监控。6 个独立功能包和 Windows Launcher 使用同一发布版本与源码基线。
 - 类型检查拒绝缺少新版插件配置／会话引用接口的旧 DSH 构建产物。
 - Launcher 减少切页、滚动和功能筛选的重复布局，切换启动方式后及时刷新按钮文案；执行日志按功能只保留最新一轮，并限制界面读取量。
 - Launcher 概览顶部可选择“浏览器”或“源码桌面”，选择会保存，登录自动启动也遵循此选择。旧配置默认仍为浏览器。
@@ -72,7 +72,7 @@
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-省略 `-Features` 或传入 `-Features all` 会安装 7 个**独立** Cordis 功能包和必选的 Windows Launcher，不再用根聚合包表示“全选”。Launcher 位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，默认只创建开始菜单快捷方式；需要桌面快捷方式时添加 `-CreateLauncherDesktopShortcut`。直接运行安装脚本只安装或更新程序文件，不会自动启动或打开 Launcher；从 Launcher 内执行自更新时仍会完成必要的版本重启和就绪检查。
+省略 `-Features` 或传入 `-Features all` 会安装 6 个**独立** Cordis 功能包和必选的 Windows Launcher，不再用根聚合包表示“全选”。Launcher 位于 `%LOCALAPPDATA%\DeepSeekHarness\Launcher`，默认只创建开始菜单快捷方式；需要桌面快捷方式时添加 `-CreateLauncherDesktopShortcut`。直接运行安装脚本只安装或更新程序文件，不会自动启动或打开 Launcher；从 Launcher 内执行自更新时仍会完成必要的版本重启和就绪检查。
 
 如果 DSH checkout 不在同级目录，显式指定它：
 
@@ -101,7 +101,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 | 目标 | 功能集合 |
 | --- | --- |
 | Windows 桌面体验 | `windows-launcher,notification` |
-| Agent 与模型增强 | `mcp-server-manager,model-input-types,edit-last-message,sub-agent` |
+| Agent 增强 | `mcp-server-manager,edit-last-message,sub-agent` |
 | 插件发现与集成管理 | `plugin-market,mcp-server-manager` |
 
 `-Features` 不是“额外添加列表”，而是目标 Profile **最终保留的本项目功能集合**。Windows Launcher 是全局必选组件，不需要写入列表，也不能通过功能选择卸载；`-Features none` 只清空当前 Profile 中本项目的功能包并保留 Launcher。脚本会：
@@ -237,17 +237,7 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 草稿绑定开始编辑时的配置版本。其他页面或外部编辑更新配置后，旧草稿保存会被拒绝，不会删除对方新增的服务器；请离开页面丢弃草稿，再重新打开、查看最新配置后编辑。只有点击保存才提交 MCP 草稿。连接中断时会退出保存状态并保留草稿，写入失败后重新读取 Host 配置；较早的读取响应不会覆盖较新的刷新结果。
 
-### 5. pi-ai 模型请求类型
-
-`model-input-types` · **侧栏插件 → dsh-enhanced-model-input-types → 配置 model-input-types**
-
-![pi-ai 模型请求类型](assets/readme/model-input-types.png)
-
-先在 DSH“模型”页或 `settings.yaml` 中添加 pi-ai 模型覆盖，再为每个模型选择“提供方默认”“仅文本”“仅图片”或“文本与图片”；选择会立即保存。
-
-聚合安装时，在 `dsh-enhanced-plugins` 包的 `ui-enhanced-plugins` 行打开模型配置，MCP 配置仍在该包的 `mcp-manager` 行。官方 `llm-pi-ai` settings namespace 不可用时，配置页显示服务不可用。它保存的是能力声明，不会探测实际端点；声明“文本与图片”前请确认提供方确实接受图片请求。
-
-### 6. 编辑上一条消息
+### 5. 编辑上一条消息
 
 `edit-last-message` · **当前会话最后一条可编辑的用户消息气泡**
 
@@ -270,7 +260,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 第一条命令只检查，不写文件；第二条命令将两代旧编辑标记转换为标准插件来源，并在同目录创建带时间戳的原始文件备份。截断、损坏、格式不符或检查期间发生变化的日志都会被拒绝，不会静默重写。
 
-### 7. 产品子智能体
+### 6. 产品子智能体
 
 `sub-agent` · **设置 → 子智能体**
 
@@ -280,7 +270,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 两个开关默认关闭。写入使用 path-addressed 操作和设置修订号，不会用脱敏或过期快照覆盖其他页面及外部编辑产生的新值。
 
-### 8. 官方团队监控
+### 7. 官方团队监控
 
 `agent-team-monitor` · **当前对话输入框右侧 → 团队图标**
 
@@ -302,7 +292,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、7 个独立功能包和 Windows Launcher 均使用 `7.2.1`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.2`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件；远端有效但没有匹配当前插件及 DSH 版本的记录时也会检查包内文件。只有两处都不支持当前 DSH 版本才拒绝安装。每次检查重新获取，不覆盖本地回退文件。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
@@ -311,7 +301,9 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 - **独立构建：** 各功能发布物携带自身源码和构建脚本，可在没有 sibling DSH checkout 的目录执行 `npm install --legacy-peer-deps`、`npm run prepare` 和 `npm pack`；运行时仍由匹配版本的 DSH 提供公开 peer 服务。Windows Launcher 原生重建需要 Windows 与 .NET Framework 4.x 编译器。
 - **架构边界：** Web 功能通过公开 Service、event、slot 和 settings 扩展；Windows Launcher 是独立 Companion，不进入 Cordis 插件树。
 - **文件引用已退役：** 最新官方 DSH 已原生支持 [`@` 文件引用](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference)。在输入框键入 `@`，含空格路径可键入 `@"`。旧 `referenced-file` 安装名称和 `#` 快照语法不再提供。
-- **自动清理：** `-Features referenced-file` 会被明确拒绝；正常运行安装脚本会清理历史独立包或旧版聚合包中携带的该功能。
+- **模型输入类型已退役：** 官方“设置 → 模型”页面的“模型选项”支持逐模型勾选“文本”和“图片”。`-Features model-input-types` 会被拒绝；正常运行安装脚本会清理历史独立包或替换旧聚合包，不删除用户已有模型能力设置。
+- **从 7.2.1 Launcher 迁移：** 若旧 Launcher 的目标集合仍包含 `model-input-types`，其旧版更新协调器无法识别新版功能目录。先获取新版源码，直接运行新版 `migrate-to-enhanced-plugin.ps1` 并传入当前希望保留的功能集合（例如 `-Features all`）；这一步会移除旧包并更新 Launcher，之后可恢复在 Launcher 中更新。
+- **自动清理：** `-Features referenced-file` 也会被明确拒绝；正常运行安装脚本会清理历史独立包或旧版聚合包中携带的该功能。
 
 只检查版本对应关系、不构建或安装（非同目录时追加 `-DshCheckout`）：
 
@@ -396,7 +388,7 @@ npm run pack:dry-run
 git diff --check
 ```
 
-Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home 中逐个安装 7 项功能，检查全量、多功能重选、清理和聚合包的真实 Host 启动及 Client 资源；不会修改长期 profile。该命令需要先完成 DSH 与插件构建，验证记录保存在被 Git 忽略的 `.verify-dsh-home/`。页面交互和 light/dark 视觉验证仍需在真实 Web 页面完成。
+Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home 中逐个安装 6 项功能，检查全量、多功能重选、旧模型包清理和聚合包的真实 Host 启动及 Client 资源；不会修改长期 profile。该命令需要先完成 DSH 与插件构建，验证记录保存在被 Git 忽略的 `.verify-dsh-home/`。页面交互和 light/dark 视觉验证仍需在真实 Web 页面完成。
 
 需要使用隔离构建时，可将 `DSH_VERIFY_CHECKOUT` 设置为已验证 DSH commit 的构建副本路径，再运行 `npm run typecheck`、`npm test` 或 `npm run verify:compat`。默认仍使用 sibling checkout，安装器仍会核对声明的版本。
 
@@ -417,7 +409,7 @@ Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home �
 `npm run verify:edit-web` 在隔离 profile 安装编辑插件，使用本地 SSE 模型 fixture 驱动真实 Chromium/Web 组合，验证连续编辑、模型历史替换、文件与 Skill 引用预览、刷新恢复和 light/dark 截图，不需要真实模型密钥。默认验证 DSH 的 Messages 协议；设置 `DSH_VERIFY_PROTOCOL=chat-completions` 可额外验证显式选择该协议的情况。测试关闭会话日志上传，Launcher 文件也只安装到测试临时目录。它使用 DSH 构建副本中的 Playwright，需已安装对应 Chromium。`typecheck` 会拒绝 Session 声明版本不匹配、缺少 `openSkill`，或没有新版插件配置与会话引用接口的陈旧构建。Web、Desktop 验证命令均支持 `DSH_VERIFY_CHECKOUT` 指向隔离构建。
 
 
-`npm run verify:plugin-ui` 在真实 Web profile 验证 MCP 保存与草稿丢弃、仅图片模型设置、插件热启停，以及真实 Team 的监控与成员跳转，并检查 light/dark 和 system 配色切换。设置 `DSH_VERIFY_AGGREGATE=1` 验证聚合包；默认验证三个相关独立包的组合。发布前可将 `DSH_COMPATIBILITY_URL` 指向隔离测试服务，使验证使用待发布的兼容表；远端没有匹配记录时改用包内表。
+`npm run verify:plugin-ui` 在真实 Web profile 验证 MCP 保存与草稿丢弃、插件热启停，以及真实 Team 的监控与成员跳转，并检查 light/dark 配色。设置 `DSH_VERIFY_AGGREGATE=1` 验证聚合包；默认验证两个相关独立包的组合。发布前可将 `DSH_COMPATIBILITY_URL` 指向隔离测试服务，使验证使用待发布的兼容表；远端没有匹配记录时改用包内表。
 
 DSH `0.1.6-alpha.2` 的实际配置入口是 `plugins.row.config`／`plugins.bundle.config`；在线设置卡片 cookbook 仍可能展示旧 `settings.plugin.item`，本版本以已验证提交的源码和类型为准。
 

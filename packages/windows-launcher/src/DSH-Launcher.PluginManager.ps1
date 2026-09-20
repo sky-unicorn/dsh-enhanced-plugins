@@ -343,8 +343,9 @@ function Get-Snapshot {
   $catalog = Get-Catalog $Root
   $dependencies = @(Get-ProfileDependencies $ProfileName $State)
   $profileState = Get-ProfileState $State $ProfileName
-  $desired = @((Get-OptionalProperty $profileState 'desiredFeatures' @()))
-  $known = @((Get-OptionalProperty $profileState 'knownFeatures' @()))
+  $retiredIds = @($catalog.retiredFeatures | ForEach-Object { $_.id })
+  $desired = @((Get-OptionalProperty $profileState 'desiredFeatures' @()) | Where-Object { $retiredIds -notcontains $_ })
+  $known = @((Get-OptionalProperty $profileState 'knownFeatures' @()) | Where-Object { $retiredIds -notcontains $_ })
   $managed = [bool](Get-OptionalProperty $profileState 'managed' $false)
   $aggregateInstalled = $dependencies -contains 'dsh-enhanced-plugins'
   $actual = @($catalog.features | Where-Object {
@@ -406,13 +407,19 @@ function Get-Snapshot {
 function Get-ManagementPlan {
   param([string] $Root, [string] $ProfileName, [object] $State, [object] $Request)
   $catalog = Get-Catalog $Root
-  $desired = @((Get-OptionalProperty $Request 'desiredFeatures' @()) | ForEach-Object { [string]$_ } | Select-Object -Unique)
+  $requested = @((Get-OptionalProperty $Request 'desiredFeatures' @()) | ForEach-Object { [string]$_ } | Select-Object -Unique)
   $profileFeatures = @($catalog.features | Where-Object scope -eq 'profile')
   $validIds = @($profileFeatures | ForEach-Object id)
-  $unknown = @($desired | Where-Object { $validIds -notcontains $_ })
+  $retiredIds = @($catalog.retiredFeatures | ForEach-Object { $_.id })
+  $unknown = @($requested | Where-Object { $validIds -notcontains $_ -and $retiredIds -notcontains $_ })
   if ($unknown.Count -gt 0) { throw "请求包含未知功能：$($unknown -join ', ')。" }
+  $desired = @($requested | Where-Object { $validIds -contains $_ })
   $dependencies = @(Get-ProfileDependencies $ProfileName $State)
   $actual = @($profileFeatures | Where-Object { $dependencies -contains $_.packageName } | ForEach-Object id)
+  $retiredInstalled = @($catalog.retiredFeatures | Where-Object {
+    $feature = $_
+    @($feature.packageNames | Where-Object { $dependencies -contains $_ }).Count -gt 0
+  } | ForEach-Object { $_.id })
   $aggregate = $dependencies -contains 'dsh-enhanced-plugins'
   $profileState = Get-ProfileState $State $ProfileName
   $lastAppliedRevision = [string](Get-OptionalProperty $profileState 'lastAppliedRevision' '')
@@ -421,7 +428,7 @@ function Get-ManagementPlan {
   $install = @($desired | Where-Object { $actual -notcontains $_ })
   $update = @()
   if ($revisionChanged) { $update = @($desired | Where-Object { $actual -contains $_ }) }
-  $remove = @($actual | Where-Object { $desired -notcontains $_ })
+  $remove = @( @($actual | Where-Object { $desired -notcontains $_ }) + $retiredInstalled | Select-Object -Unique )
   $launcherFeature = @($catalog.features | Where-Object { $_.id -eq 'windows-launcher' })[0]
   $candidatePath = Join-Path $launcherFeature.root 'lib\DSH-Launcher.exe'
   $candidateHash = if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
@@ -1374,8 +1381,9 @@ function Invoke-Apply {
         if ($profileProperty.Name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
           throw "安装状态包含无效 Profile 名称 '$($profileProperty.Name)'。"
         }
+        $retiredIds = @($catalog.retiredFeatures | ForEach-Object { $_.id })
         $savedDesired = @((Get-OptionalProperty $profileProperty.Value 'desiredFeatures' @()) |
-          ForEach-Object { [string]$_ } | Select-Object -Unique)
+          ForEach-Object { [string]$_ } | Where-Object { $retiredIds -notcontains $_ } | Select-Object -Unique)
         $otherDependencies = @(Get-ProfileDependencies $profileProperty.Name $State)
         $otherAggregate = $otherDependencies -contains 'dsh-enhanced-plugins'
         $otherActual = if ($otherAggregate) { @($validIds | Sort-Object) } else {
@@ -1416,13 +1424,16 @@ function Invoke-Apply {
     }
     $catalog = Get-Catalog $source
     $validIds = @($catalog.features | Where-Object scope -eq 'profile' | ForEach-Object id)
-    $unknown = @($desired | Where-Object { $validIds -notcontains $_ })
+    $retiredIds = @($catalog.retiredFeatures | ForEach-Object { $_.id })
+    $unknown = @($desired | Where-Object { $validIds -notcontains $_ -and $retiredIds -notcontains $_ })
     if ($unknown.Count -gt 0) { throw "更新后的源码已不再提供所选功能：$($unknown -join ', ')。" }
+    $desired = @($desired | Where-Object { $validIds -contains $_ })
     foreach ($targetProfile in $profileTargets) {
-      $targetUnknown = @($targetProfile.desired | Where-Object { $validIds -notcontains $_ })
+      $targetUnknown = @($targetProfile.desired | Where-Object { $validIds -notcontains $_ -and $retiredIds -notcontains $_ })
       if ($targetUnknown.Count -gt 0) {
         throw "更新后的源码已不再提供 Profile '$($targetProfile.name)' 所需功能：$($targetUnknown -join ', ')。"
       }
+      $targetProfile.desired = @($targetProfile.desired | Where-Object { $validIds -contains $_ })
     }
   } else {
     $source = New-CurrentSourceSnapshot $InitialRoot $LauncherRoot $requestId
@@ -1441,11 +1452,13 @@ function Invoke-Apply {
   $source = New-BuildWorkspace $sourceSnapshot $LauncherRoot $requestId
   $catalog = Get-Catalog $source
   $validIds = @($catalog.features | Where-Object scope -eq 'profile' | ForEach-Object id)
+  $retiredIds = @($catalog.retiredFeatures | ForEach-Object { $_.id })
   foreach ($targetProfile in $profileTargets) {
-    $targetUnknown = @($targetProfile.desired | Where-Object { $validIds -notcontains $_ })
+    $targetUnknown = @($targetProfile.desired | Where-Object { $validIds -notcontains $_ -and $retiredIds -notcontains $_ })
     if ($targetUnknown.Count -gt 0) {
       throw "候选源码已不再提供 Profile '$($targetProfile.name)' 所需功能：$($targetUnknown -join ', ')。"
     }
+    $targetProfile.desired = @($targetProfile.desired | Where-Object { $validIds -contains $_ })
   }
   $dsh = Get-OptionalProperty $State 'dsh'
   $dshCheckout = [string](Get-OptionalProperty $dsh 'checkout' '')

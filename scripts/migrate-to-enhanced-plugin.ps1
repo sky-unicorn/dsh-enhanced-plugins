@@ -211,14 +211,22 @@ function Get-ProfileConfig {
   $outputLines -join [Environment]::NewLine
 }
 
-function Test-RetiredReferencedFileConfig {
+function Test-RetiredFeatureConfig {
   param(
     [Parameter(Mandatory = $true)]
-    [string] $Config
+    [string] $Config,
+
+    [Parameter(Mandatory = $true)]
+    [object] $Feature
   )
 
-  return $Config -match '(?m)^\s*-\s+id:\s*[''"]?referenced-file[''"]?\s*$' -or
-    $Config -match '(?m)^\s*name:\s*[''"]?(?:dsh-enhanced-plugins/referenced-file|dsh-enhanced-referenced-file|dsh-referenced-file)[''"]?\s*$'
+  foreach ($id in @($Feature.LoaderIds)) {
+    if ($Config -match ('(?m)^\s*-\s+id:\s*[''"]?' + [regex]::Escape($id) + '[''"]?\s*$')) { return $true }
+  }
+  foreach ($name in @($Feature.LoaderNames)) {
+    if ($Config -match ('(?m)^\s*name:\s*[''"]?' + [regex]::Escape($name) + '[''"]?\s*$')) { return $true }
+  }
+  return $false
 }
 
 function Get-RetiredFeatureCatalog {
@@ -247,9 +255,16 @@ function Get-RetiredFeatureCatalog {
     if ($retired.notice -isnot [string] -or $retired.notice -eq '') {
       throw "Retired feature '$($retired.feature)' must declare a notice."
     }
+    $loaderIds = @($retired.loaderIds)
+    $loaderNames = @($retired.loaderNames)
+    if (@($loaderIds + $loaderNames | Where-Object { $_ -isnot [string] -or $_ -eq '' }).Count -gt 0) {
+      throw "Retired feature '$($retired.feature)' has an invalid Loader identity."
+    }
     [pscustomobject]@{
       Feature = $retired.feature
       PackageNames = $packageNames
+      LoaderIds = $loaderIds
+      LoaderNames = $loaderNames
       Notice = $retired.notice
     }
   }
@@ -1300,21 +1315,15 @@ try {
     -Executable $executable `
     -PrefixArguments $prefixArguments `
     -ProfileName $Profile
-  $installedRetiredPackages = @(
-    $retiredPackageNames | Where-Object { $installedDependencies -contains $_ }
-  )
   $installedAggregate = $installedDependencies -contains $pluginManifest.name
-  if ($installedRetiredPackages.Count -gt 0 -or (Test-RetiredReferencedFileConfig -Config $installedConfig)) {
-    Write-Warning (
-      "Detected the retired # workspace-file reference feature in profile '$Profile'. " +
-      'It will be uninstalled during this migration. Official DSH now supports @ workspace file references; ' +
-      'update DSH to the latest release before using the replacement.'
-    )
-  } elseif ($installedAggregate) {
-    Write-Host (
-      "Refreshing the installed aggregate bundle also guarantees removal of its former # file-reference contribution. " +
-      'Official DSH now supports @ workspace file references; keep DSH updated to the latest release.'
-    )
+  foreach ($retired in $retiredCatalog) {
+    $installed = @($retired.PackageNames | Where-Object { $installedDependencies -contains $_ }).Count -gt 0
+    if ($installed -or (Test-RetiredFeatureConfig -Config $installedConfig -Feature $retired)) {
+      Write-Warning "Detected retired feature '$($retired.Feature)' in profile '$Profile'. It will be removed during this migration. $($retired.Notice)"
+    }
+  }
+  if ($installedAggregate) {
+    Write-Host "Replacing the installed aggregate bundle in profile '$Profile' with the selected independent packages."
   }
 
   if ($selectedPackages.Count -gt 0) {
@@ -1397,8 +1406,10 @@ try {
     -Executable $executable `
     -PrefixArguments $prefixArguments `
     -ProfileName $Profile
-  if (Test-RetiredReferencedFileConfig -Config $finalConfig) {
-    throw "Feature migration finished with the retired # file-reference Loader entry still active in profile '$Profile'."
+  foreach ($retired in $retiredCatalog) {
+    if (Test-RetiredFeatureConfig -Config $finalConfig -Feature $retired) {
+      throw "Feature migration finished with the retired '$($retired.Feature)' Loader entry still active in profile '$Profile'."
+    }
   }
 
   if (-not $SkipLauncherInstall) {

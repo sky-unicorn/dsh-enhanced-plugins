@@ -85,9 +85,7 @@
     "src/plugin-market/client/**/*.tsx",
     "src/sub-agent/client/**/*.ts",
     "src/sub-agent/client/**/*.tsx",
-    "src/sub-agent/shared.ts",
-    "src/model-input-types/client/**/*.ts",
-    "src/model-input-types/client/**/*.tsx"
+    "src/sub-agent/shared.ts"
   ],
   "exclude": [
     "node_modules",

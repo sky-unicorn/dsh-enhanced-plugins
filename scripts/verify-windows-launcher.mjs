@@ -169,6 +169,7 @@ try {
     profiles: {
       web: {
         managed: true,
+        // Previous-release state exercises retired-feature filtering during Launcher startup.
         desiredFeatures: [
           'edit-last-message', 'mcp-server-manager', 'model-input-types',
           'notification', 'plugin-market', 'sub-agent',

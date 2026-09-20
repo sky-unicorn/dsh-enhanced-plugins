@@ -48,6 +48,8 @@ async function verify(expected, label) {
   const profile = JSON.parse(readFileSync(resolve(home, 'profiles/web/package.json'), 'utf8'))
   assert.deepEqual(Object.keys(profile.dependencies ?? {}).filter(name => allNames.includes(name)).sort(), [...expected].sort())
   assert.deepEqual(profile.dsh.profile.bundles.filter(name => allNames.includes(name)).sort(), [...expected].sort())
+  assert.ok(!Object.hasOwn(profile.dependencies ?? {}, 'dsh-enhanced-model-input-types'), 'Retired model bundle remains installed')
+  assert.ok(!profile.dsh.profile.bundles.includes('dsh-enhanced-model-input-types'), 'Retired model bundle remains active')
   const reservation = createServer()
   reservation.listen(0, '127.0.0.1')
   await once(reservation, 'listening')
@@ -114,6 +116,19 @@ install([packages[0].dshEnhanced.feature, packages[1].dshEnhanced.feature], 'res
 await verify([packages[0].name, packages[1].name], 'reselect-two')
 install(['none'], 'none', true)
 await verify([], 'none')
+// Exercise migration from a real, previously installed bundle in this isolated profile.
+const retiredModel = resolve(home, 'retired-model-input-types')
+mkdirSync(retiredModel)
+writeFileSync(resolve(retiredModel, 'package.json'), JSON.stringify({
+  name: 'dsh-enhanced-model-input-types', version: '7.2.1', type: 'module',
+  main: './index.js', exports: { '.': './index.js' },
+  dsh: { bundle: { patch: './cordis.patch.yml' } },
+}))
+writeFileSync(resolve(retiredModel, 'index.js'), 'export const name = "retired-model-anchor"; export function apply() {}\n')
+writeFileSync(resolve(retiredModel, 'cordis.patch.yml'), '- insert:\n    - id: model-input-types\n      name: dsh-enhanced-model-input-types\n')
+command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', retiredModel, '--yes'], 'retired-model-install', dsh)
+install(['none'], 'retired-model-cleanup', true)
+await verify([], 'retired-model-cleanup')
 command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', root, '--yes'], 'aggregate-install', dsh)
 await verify([manifest.name], 'aggregate')
 console.log(`Compatibility selection gate passed; report: ${resolve(home, 'report.json')}`)

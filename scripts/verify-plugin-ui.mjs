@@ -13,14 +13,14 @@ const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepsee
 const { chromium } = createRequire(resolve(dsh, 'apps/web/package.json'))('playwright')
 const scratch = resolve(root, '.verify-dsh-home')
 mkdirSync(scratch, { recursive: true })
-const home = mkdtempSync(resolve(scratch, 'plugin-ui-720-'))
+const home = mkdtempSync(resolve(scratch, 'plugin-ui-722-'))
 // A file-based fixture must not inherit this repository's dsh.client manifest.
 writeFileSync(resolve(home, 'package.json'), JSON.stringify({ name: 'enhanced-ui-fixture', private: true, type: 'module' }))
 const workspace = resolve(home, 'workspace')
 mkdirSync(workspace)
 const aggregate = process.env.DSH_VERIFY_AGGREGATE === '1'
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1',
-  DSH_UI_FIXTURE_KEY: 'local-fixture', DEEPSEEK_API_KEY: 'local-fixture',
+  DEEPSEEK_API_KEY: 'local-fixture',
   DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
   DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(home, 'launcher') }
 const cliArgs = ['--import', pathToFileURL(resolve(dsh, 'node_modules/tsx/dist/esm/index.mjs')).href,
@@ -73,16 +73,6 @@ writeFileSync(overlay, `- id: session-log-deepseek
   config: { enabled: false }
 - id: session-title-llm
   disabled: true
-- id: llm-pi-ai
-  config:
-    providers:
-      openai:
-        apiKeyEnv: DSH_UI_FIXTURE_KEY
-        models:
-          - id: fixture-vision
-            contextWindow: 32000
-            maxTokens: 1024
-            input: [image]
 - id: directory-picker
   disabled: true
 - insert:
@@ -103,7 +93,7 @@ try {
     ? spawnSync(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', root, '--yes'], { cwd: dsh, env, encoding: 'utf8', windowsHide: true, timeout: 120_000 })
     : spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', resolve(root, 'scripts/migrate-to-enhanced-plugin.ps1'), '-DshCheckout', dsh,
-      '-Features', 'mcp-server-manager,model-input-types,agent-team-monitor', '-SkipBuild', '-SkipLauncherSystemIntegration'],
+      '-Features', 'mcp-server-manager,agent-team-monitor', '-SkipBuild', '-SkipLauncherSystemIntegration'],
     { cwd: root, env, encoding: 'utf8', windowsHide: true, timeout: 120_000 })
   writeFileSync(resolve(home, 'install.log'), redact(`${install.stdout}\n${install.stderr}`))
   assert.equal(install.status, 0, `Install failed: ${home}/install.log`)
@@ -136,7 +126,6 @@ try {
   await page.getByText('UI fixture parent', { exact: true }).waitFor()
   const panel = page.locator('[data-plugin-panel]')
   const mcpBundle = aggregate ? 'dsh-enhanced-plugins' : 'dsh-enhanced-mcp-server-manager'
-  const modelBundle = aggregate ? 'dsh-enhanced-plugins' : 'dsh-enhanced-model-input-types'
   const openRow = async (bundle, row) => {
     await page.getByRole('navigation', { name: 'Global panels' }).getByRole('button', { name: 'Plugins', exact: true }).click()
     await panel.waitFor()
@@ -161,16 +150,6 @@ try {
     await panel.getByRole('button', { name: 'Add server', exact: true }).click()
     await panel.getByRole('textbox', { name: 'Server name', exact: true }).fill('unsaved-fixture')
     await page.screenshot({ path: resolve(home, `mcp-${scheme}.png`), fullPage: true })
-    await openRow(modelBundle, aggregate ? 'ui-enhanced-plugins' : 'model-input-types')
-    const input = panel.getByRole('combobox', { name: 'Model type for openai / fixture-vision' })
-    await input.waitFor()
-    await input.selectOption('image')
-    assert.equal(await input.inputValue(), 'image')
-    await input.selectOption('multimodal')
-    await panel.getByText('Model request type saved.', { exact: true }).waitFor()
-    await input.selectOption('image')
-    await panel.getByText('Model request type saved.', { exact: true }).waitFor()
-    await page.screenshot({ path: resolve(home, `models-${scheme}.png`), fullPage: true })
     await openRow(mcpBundle, 'mcp-manager')
     assert.equal(await panel.getByRole('textbox', { name: 'Server name', exact: true }).count(), 0, 'MCP draft survived leaving its page')
   }
@@ -197,8 +176,8 @@ try {
   // Let the workspace owner restore its main reference before opening another panel.
   await page.getByText('Enhanced UI parent', { exact: true }).first().click({ timeout: 30_000 })
   await page.getByText('UI fixture parent', { exact: true }).waitFor()
-  await openRow(modelBundle, aggregate ? 'ui-enhanced-plugins' : 'model-input-types')
-  assert.equal(await panel.getByRole('combobox', { name: 'Model type for openai / fixture-vision' }).inputValue(), 'image')
+  await openRow(mcpBundle, 'mcp-manager')
+  await panel.getByRole('button', { name: 'Add server', exact: true }).waitFor()
   await page.getByText('Enhanced UI parent', { exact: true }).first().click()
   for (const scheme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: scheme })
@@ -213,7 +192,7 @@ try {
   const seed = JSON.parse(readFileSync(resolve(home, 'seed.json'), 'utf8'))
   await page.locator('[data-chat-flow-key]').getByText('Inspect compatibility', { exact: true }).waitFor()
   assert.deepEqual(errors, [])
-  writeFileSync(resolve(home, 'report.json'), JSON.stringify({ aggregate, settings: true, imageOnly: true, draftDiscard: true, teamNavigation: seed, schemes: ['light', 'dark'], errors }, null, 2))
+  writeFileSync(resolve(home, 'report.json'), JSON.stringify({ aggregate, settings: true, draftDiscard: true, teamNavigation: seed, schemes: ['light', 'dark'], errors }, null, 2))
   console.log(`Plugin UI verification passed: ${home}`)
 } catch (error) {
   if (page) {

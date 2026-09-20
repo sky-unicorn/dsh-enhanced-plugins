@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-windows-launcher",
-  "version": "7.2.1",
+  "version": "7.2.2",
   "description": "Standalone Windows tray launcher and control center for DeepSeek Harness",
   "type": "module",
   "dshEnhanced": {

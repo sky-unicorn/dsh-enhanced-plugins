@@ -2,7 +2,7 @@
 
 [中文](README.zh.md) | English
 
-An enhancement suite for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness): **seven independently installable Cordis bundles plus one Windows companion**.
+An enhancement suite for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness): **six independently installable Cordis bundles plus one Windows companion**.
 
 - Does not modify DSH core; every Web feature uses public plugin extension points.
 - Installs everything in one pass or keeps only the independently packaged features you select.
@@ -20,20 +20,19 @@ The installer only needs the stable “feature ID.” Every feature also has a s
 | [Desktop alerts and pet](#2-desktop-alerts-and-pet) | `notification` | `dsh-enhanced-notification` | Windows; Settings → Desktop Pet | Task sounds, a custom WAV library, and a native animated pet |
 | [Plugin Community](#3-plugin-community) | `plugin-market` | `dsh-enhanced-plugin-market` | Web; Settings → Plugin Community | Search, safely preflight, install, and uninstall community plugins |
 | [MCP server manager](#4-mcp-server-manager) | `mcp-server-manager` | `dsh-enhanced-mcp-server-manager` | Web; Sidebar Plugins → bundle → row configuration | Manage stdio / Streamable HTTP servers and import local configuration |
-| [pi-ai model request types](#5-pi-ai-model-request-types) | `model-input-types` | `dsh-enhanced-model-input-types` | Web; Sidebar Plugins → bundle → row configuration | Declare whether a model accepts text-only or image requests |
-| [Edit last message](#6-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
-| [Product subagents](#7-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
-| [Official Team monitor](#8-official-team-monitor) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web; team icon on the current conversation composer | Role-grouped running/history child sessions, native details, Team dependencies and mailbox counts |
+| [Edit last message](#5-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
+| [Product subagents](#6-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
+| [Official Team monitor](#7-official-team-monitor) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web; team icon on the current conversation composer | Role-grouped running/history child sessions, native details, Team dependencies and mailbox counts |
 
 The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed installs now express “all” as every independent Profile package plus the required global Launcher, so any one Profile feature can later be removed without changing the others.
 
 ## Quick start
 
-### 7.2.1: DSH 0.1.6-alpha.2 compatibility
+### 7.2.2: DSH 0.1.6-alpha.2 compatibility
 
-Plugin `7.2.1` was validated against DSH `0.1.6-alpha.2` at source commit `ddefc45fbc7f8e46dd73185e68295696d1297887`. Current supported pairings are maintained in [`dsh-compatibility.json`](dsh-compatibility.json). If the remote table lacks this plugin version or DSH version, the installer checks the bundled table before refusing installation.
+Plugin `7.2.2` was validated against DSH `0.1.6-alpha.2` at source commit `ddefc45fbc7f8e46dd73185e68295696d1297887`. Current supported pairings are maintained in [`dsh-compatibility.json`](dsh-compatibility.json). If the remote table lacks this plugin version or DSH version, the installer checks the bundled table before refusing installation.
 
-MCP and model input configuration now open from their bundle rows on the sidebar Plugins page, for both standalone and aggregate installations. MCP discards unsaved drafts when its page closes; model choices still save immediately and now include Images only. Team Monitor follows the main Conversation through `mainView` references and opens members through `uiWorkspace.openSession()`, independently of sidebar-retained children. All seven bundles and Windows Launcher share this release. Typecheck rejects DSH artifacts missing the new configuration and session-reference APIs.
+The `model-input-types` feature is retired because DSH now provides per-model Text and Image controls under Settings → Models → Custom settings → Model options. An update removes the old standalone bundle while preserving model settings in DSH. MCP configuration remains on the bundle row in sidebar Plugins and discards unsaved drafts when its page closes. Team Monitor follows the main Conversation through `mainView` references and opens members through `uiWorkspace.openSession()`, independently of sidebar-retained children. All six bundles and Windows Launcher share this release. Typecheck rejects DSH artifacts missing the new configuration and session-reference APIs.
 
 This release reduces repeated Launcher layout during navigation, scrolling, and feature filtering, and refreshes button labels when launch mode changes. Each function retains its latest execution log, with bounded reads for the UI.
 
@@ -74,7 +73,7 @@ When both repositories share a parent directory, run this from the root of this 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1
 ```
 
-Omitting `-Features`, or passing `-Features all`, installs the seven **independent** Cordis packages and the required Windows Launcher; it no longer uses the root aggregate package to represent “all.” The launcher is deployed to `%LOCALAPPDATA%\DeepSeekHarness\Launcher` and creates a Start menu shortcut. Add `-CreateLauncherDesktopShortcut` if you also want a desktop shortcut. Running the installer directly only installs or updates the program files; it does not start or open Launcher. An update initiated inside Launcher still performs the required version restart and readiness check.
+Omitting `-Features`, or passing `-Features all`, installs the six **independent** Cordis packages and the required Windows Launcher; it no longer uses the root aggregate package to represent “all.” The launcher is deployed to `%LOCALAPPDATA%\DeepSeekHarness\Launcher` and creates a Start menu shortcut. Add `-CreateLauncherDesktopShortcut` if you also want a desktop shortcut. Running the installer directly only installs or updates the program files; it does not start or open Launcher. An update initiated inside Launcher still performs the required version restart and readiness check.
 
 If the DSH checkout is not a sibling, provide its location explicitly:
 
@@ -103,7 +102,7 @@ Common combinations can replace the `-Features` value in that command:
 | Goal | Feature set |
 | --- | --- |
 | Windows desktop experience | `windows-launcher,notification` |
-| Agent and model enhancements | `mcp-server-manager,model-input-types,edit-last-message,sub-agent` |
+| Agent enhancements | `mcp-server-manager,edit-last-message,sub-agent` |
 | Plugin discovery and integration management | `plugin-market,mcp-server-manager` |
 
 `-Features` is not an additive list. It describes the **final project feature set** that the target Profile should retain. Windows Launcher is a required global component: it is added by the backend, is not written in the list, and cannot be removed through feature selection. `-Features none` removes this project's Profile packages while keeping Launcher. The installer:
@@ -239,17 +238,7 @@ Environment and header values are masked when existing servers reach the browser
 
 Drafts retain the configuration revision at the start of editing. If another page or external editor changes the configuration, saving an older draft is refused without deleting the other editor's new servers; leave the page to discard the draft, then reopen it, review the latest configuration, and edit again. Only Save commits staged MCP changes. Interrupted saves leave the saving state and retain the draft. Failed writes re-read Host configuration, and older read responses cannot overwrite newer refresh results.
 
-### 5. pi-ai model request types
-
-`model-input-types` · **Sidebar Plugins → dsh-enhanced-model-input-types → Configure model-input-types**
-
-![pi-ai model request type settings](assets/readme/model-input-types.png)
-
-Add pi-ai model overrides on the DSH Models page or in `settings.yaml`, then choose Provider default, Text only, Images only, or Text and images for each model. Changes save immediately.
-
-With the aggregate bundle, configure models on its `ui-enhanced-plugins` row and MCP on its `mcp-manager` row. An unavailable official `llm-pi-ai` settings namespace is reported on the configuration page. It stores a capability declaration and does not probe the endpoint; verify that the provider truly accepts images before declaring Text and images.
-
-### 6. Edit last message
+### 5. Edit last message
 
 `edit-last-message` · **Latest editable user-message bubble in the current session**
 
@@ -272,7 +261,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 The first command is read-only. The second converts both historical marker formats to standard plugin attribution and creates a timestamped backup beside the original artifact. A truncated, corrupt, mismatched, or concurrently changed log is refused instead of being silently rewritten.
 
-### 7. Product subagents
+### 6. Product subagents
 
 `sub-agent` · **Settings → Subagents**
 
@@ -282,7 +271,7 @@ Enabling Claude Code or Codex applies immediately to every Agent preset carrying
 
 Both toggles default to off. Writes use path-addressed operations and settings revisions, so a redacted or stale snapshot cannot overwrite changes from another page or an external editor.
 
-### 8. Official Team monitor
+### 7. Official Team monitor
 
 `agent-team-monitor` · **Current conversation composer → Team icon**
 
@@ -304,7 +293,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all seven standalone bundles, and Windows Launcher use `7.2.1`.
+- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.2`.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** before building, stopping services, or changing a profile, the installer and Launcher updater fetch the compatibility file from this repository’s GitHub `master` branch. A failed request, an eight-second download timeout, or malformed/oversized data falls back to the bundled file with a warning. Every check fetches again; it does not overwrite the local fallback. The remote table takes precedence when it contains the current plugin and DSH version. If it omits either, or lists no DSH version for that plugin, the installer checks the bundled table; installation stops only when neither supports the checkout. Mixed package versions also stop installation. Commits belong to individual DSH versions; an unlisted commit, local tracked changes, or no Git metadata produces an unverified-source warning.
@@ -328,7 +317,9 @@ To declare compatibility after validating a newer DSH checkout, edit only the ro
 The default endpoint is the [GitHub raw compatibility file](https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/master/dsh-compatibility.json). `DSH_COMPATIBILITY_URL` can point to an HTTPS mirror; HTTP is accepted only for loopback test servers. The file contains data only and cannot change code, package URLs, or build commands. `-CheckCompatibility` remains read-only.
 
 - **File reference retired:** current DSH provides native [`@` file references](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference). Type `@` in the composer, or `@"` for paths containing spaces. The old `referenced-file` feature ID and `#` snapshot syntax are no longer provided.
-- **Automatic cleanup:** `-Features referenced-file` is rejected explicitly. A normal installer run removes the historical selective package or the feature carried by an older aggregate install.
+- **Model input types retired:** the official Settings → Models page lets you select Text and Image for each model. `-Features model-input-types` is rejected. A normal installer run removes the historical selective package or replaces an older aggregate bundle without deleting existing model capability settings.
+- **Migrating from Launcher 7.2.1:** if the old Launcher still has `model-input-types` selected, its update coordinator cannot resolve the new feature catalog. Obtain the new source and run its `migrate-to-enhanced-plugin.ps1` once with the final feature set you want (for example, `-Features all`). This removes the old bundle and updates Launcher; subsequent updates can run there normally.
+- **Automatic cleanup:** `-Features referenced-file` is also rejected explicitly. A normal installer run removes the historical selective package or the feature carried by an older aggregate install.
 
 ## Configuration
 
@@ -398,7 +389,7 @@ npm run pack:dry-run
 git diff --check
 ```
 
-On Windows, `npm run verify:compat` additionally installs all seven features individually into an isolated DSH home, then checks all-features, reselection, cleanup, and aggregate profiles against the real Host and Client artifacts. It requires built DSH and plugin artifacts and leaves the normal profiles untouched. Reports stay under the Git-ignored `.verify-dsh-home/`. Interactive behavior and light/dark appearance still require the real Web page.
+On Windows, `npm run verify:compat` additionally installs all six features individually into an isolated DSH home, then checks all-features, reselection, retired model bundle cleanup, and aggregate profiles against the real Host and Client artifacts. It requires built DSH and plugin artifacts and leaves the normal profiles untouched. Reports stay under the Git-ignored `.verify-dsh-home/`. Interactive behavior and light/dark appearance still require the real Web page.
 
 Set `DSH_VERIFY_CHECKOUT` to a prepared copy of the verified DSH source commit when running `npm test` or `npm run verify:compat` against an isolated build. The default remains the sibling checkout, and the installer still checks the declared version.
 
@@ -419,7 +410,7 @@ Browser bundles use CSS Modules and consume only DSH `--dsw-alias-*` semantic th
 `npm run verify:edit-web` installs the editor in an isolated profile and drives Chromium against the real Web composition with a local SSE model fixture. It checks repeated edits, request-history replacement, file and Skill reference previews, reload, and light/dark screenshots without a real model key. The default run exercises DSH's Messages protocol; set `DSH_VERIFY_PROTOCOL=chat-completions` to verify that explicit protocol as well. The fixture disables session-log upload and keeps Launcher files inside its temporary home. It uses Playwright from the built DSH checkout and requires its Chromium browser. `typecheck` rejects mismatched Session declarations, stale Chat declarations without `openSkill`, and builds missing the new plugin-configuration and session-reference APIs. Web and Desktop verification commands accept `DSH_VERIFY_CHECKOUT` for an isolated build.
 
 
-`npm run verify:plugin-ui` checks MCP saves and discarded drafts, image-only model settings, live plugin disable/enable, and real Team monitoring and member navigation in an assembled Web profile, including light/dark and system theme changes. Set `DSH_VERIFY_AGGREGATE=1` for the aggregate bundle; the default tests the three affected standalone bundles together. Before publication, `DSH_COMPATIBILITY_URL` can select an isolated test server serving the pending compatibility table; production selection checks the bundled table when valid remote data lacks a matching plugin/DSH pair.
+`npm run verify:plugin-ui` checks MCP saves and discarded drafts, live plugin disable/enable, and real Team monitoring and member navigation in an assembled Web profile, including light/dark appearance. Set `DSH_VERIFY_AGGREGATE=1` for the aggregate bundle; the default tests the two affected standalone bundles together. Before publication, `DSH_COMPATIBILITY_URL` can select an isolated test server serving the pending compatibility table; production selection checks the bundled table when valid remote data lacks a matching plugin/DSH pair.
 
 The validated DSH `0.1.6-alpha.2` source uses `plugins.row.config` / `plugins.bundle.config`; the online settings-card cookbook may still show `settings.plugin.item`. This release follows the tested source and type declarations.
 

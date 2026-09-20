@@ -73,12 +73,6 @@ const FEATURE_TARGETS = [
     clientEntry: 'src/mcp-server-manager/client/index.ts',
   },
   {
-    id: 'model-input-types',
-    directory: 'packages/model-input-types',
-    hostEntries: ['src/model-input-types/host/index.ts'],
-    clientEntry: 'src/model-input-types/client/index.ts',
-  },
-  {
     id: 'notification',
     directory: 'packages/notification',
     hostEntries: [

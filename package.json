@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugins",
-  "version": "7.2.1",
+  "version": "7.2.2",
   "description": "Aggregate and selective DeepSeek Harness enhancements, including a standalone Windows launcher companion",
   "type": "module",
   "main": "./lib/index.js",
@@ -56,7 +56,20 @@
           "dsh-enhanced-referenced-file",
           "dsh-referenced-file"
         ],
+        "loaderIds": ["referenced-file"],
+        "loaderNames": [
+          "dsh-enhanced-plugins/referenced-file",
+          "dsh-enhanced-referenced-file",
+          "dsh-referenced-file"
+        ],
         "notice": "Official DSH now supports @ workspace file references; update DSH to the latest release."
+      },
+      {
+        "feature": "model-input-types",
+        "packageNames": ["dsh-enhanced-model-input-types"],
+        "loaderIds": ["model-input-types"],
+        "loaderNames": ["dsh-enhanced-model-input-types"],
+        "notice": "Official DSH 0.1.6-alpha.2 provides model input types under Settings → Models."
       }
     ]
   },
@@ -68,7 +81,6 @@
     "assets/readme/edit-last-message.png",
     "assets/readme/agent-team-monitor.png",
     "assets/readme/mcp-server-manager.png",
-    "assets/readme/model-input-types.png",
     "assets/readme/plugin-community.png",
     "assets/readme/subagent-toggles.png",
     "assets/readme/windows-launcher.png",
@@ -89,13 +101,12 @@
     "typecheck": "node scripts/typecheck.mjs",
     "test:edit-last-message": "vitest run --config vitest.edit-last-message.config.ts",
     "test:mcp": "vitest run --config vitest.mcp.config.ts",
-    "test:model-input-types": "vitest run --config vitest.model-input-types.config.ts",
     "test:notification": "vitest run --config vitest.notification.config.ts",
     "test:market": "vitest run --config vitest.market.config.ts",
     "test:sub-agent": "vitest run --config vitest.sub-agent.config.ts",
     "test:agent-team-monitor": "vitest run --config vitest.agent-team-monitor.config.ts",
     "test:packages": "vitest run --config vitest.packages.config.ts",
-    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:model-input-types && npm run test:notification && npm run test:market && npm run test:sub-agent && npm run test:agent-team-monitor && npm run test:packages",
+    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:notification && npm run test:market && npm run test:sub-agent && npm run test:agent-team-monitor && npm run test:packages",
     "check": "npm run typecheck && npm test && npm run build",
     "market:index": "node scripts/update-plugin-index.mjs",
     "repair:edit-last-message-session": "node scripts/repair-edit-last-message-session.mjs",

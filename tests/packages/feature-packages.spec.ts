@@ -37,7 +37,6 @@ const expectedRows: Record<string, string[]> = {
   'agent-team-monitor': ['agent-team-monitor'],
   'edit-last-message': ['edit-last-message-host'],
   'mcp-server-manager': ['mcp-manager'],
-  'model-input-types': ['model-input-types'],
   notification: ['desktop-notifications'],
   'plugin-market': ['plugin-market'],
   'sub-agent': [
@@ -115,6 +114,7 @@ describe('selective feature packages', () => {
     expect(listed.status, listed.stderr).toBe(0)
     for (const feature of expectedFeatures) expect(listed.stdout).toContain(`${feature}\t`)
     expect(listed.stdout).not.toContain('referenced-file\t')
+    expect(listed.stdout).not.toContain('model-input-types\t')
 
     const whatIfHome = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-what-if-'))
     try {
@@ -236,6 +236,48 @@ describe('selective feature packages', () => {
         profile: { install: string[], update: string[], remove: string[] }
       }
       expect(unchanged.profile).toMatchObject({ install: [], update: [], remove: [] })
+
+      // An existing 7.2.1 profile keeps the removed bundle until this update runs.
+      writeFileSync(resolve(dshHome, 'profiles/web/package.json'), JSON.stringify({
+        dependencies: {
+          'dsh-enhanced-notification': '0.1.0',
+          'dsh-enhanced-model-input-types': '7.2.1',
+        },
+      }), 'utf8')
+      writeFileSync(resolve(launcherRoot, 'install-state.json'), JSON.stringify({
+        schemaVersion: 1,
+        profiles: {
+          web: {
+            managed: true,
+            desiredFeatures: ['notification', 'model-input-types'],
+            knownFeatures: [...expectedFeatures, 'model-input-types'],
+            lastAppliedRevision: catalog.sourceRevision,
+          },
+        },
+      }), 'utf8')
+      writeFileSync(planRequestPath, JSON.stringify({
+        requestId: '22222222-2222-2222-2222-222222222222',
+        profile: 'web',
+        desiredFeatures: ['notification', 'model-input-types'],
+        updateSource: false,
+      }), 'utf8')
+      const retirementPlanPath = resolve(managerDirectory, 'retirement-plan.json')
+      const retirementPlan = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'Plan', '-RepositoryRoot', root,
+        '-Profile', 'web', '-RequestPath', planRequestPath, '-OutputPath', retirementPlanPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, DEEPSEEK_HARNESS_LAUNCHER_HOME: launcherRoot, DSH_HOME: dshHome },
+      })
+      expect(retirementPlan.status, `${retirementPlan.stdout}\n${retirementPlan.stderr}`).toBe(0)
+      const retirement = JSON.parse(readFileSync(retirementPlanPath, 'utf8')) as {
+        profile: { desiredFeatures: string[], install: string[], update: string[], remove: string[] }
+      }
+      expect(retirement.profile).toMatchObject({
+        desiredFeatures: ['notification'], install: [], update: [], remove: ['model-input-types'],
+      })
     } finally {
       rmSync(managerDirectory, { recursive: true, force: true })
     }
@@ -248,6 +290,15 @@ describe('selective feature packages', () => {
     expect(retired.status).not.toBe(0)
     expect(`${retired.stdout}\n${retired.stderr}`).toContain("Feature 'referenced-file' is retired and cannot be installed")
     expect(`${retired.stdout}\n${retired.stderr}`).toContain('Official DSH now supports @ workspace file references')
+
+    const retiredModel = spawnSync('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+      '-Features', 'model-input-types', '-WhatIf',
+      ...(process.env.DSH_VERIFY_CHECKOUT ? ['-DshCheckout', process.env.DSH_VERIFY_CHECKOUT] : []),
+    ], { cwd: root, encoding: 'utf8', env: { ...process.env, DSH_COMPATIBILITY_URL: 'http://127.0.0.1:1/compatibility.json' } })
+    expect(retiredModel.status).not.toBe(0)
+    expect(`${retiredModel.stdout}\n${retiredModel.stderr}`).toContain("Feature 'model-input-types' is retired and cannot be installed")
+    expect(`${retiredModel.stdout}\n${retiredModel.stderr}`).toContain('Official DSH 0.1.6-alpha.2 provides model input types')
   }, 20_000)
 
   it.runIf(process.platform === 'win32')('imports a manual source ZIP as a validated immutable snapshot', () => {
@@ -694,13 +745,25 @@ describe('selective feature packages', () => {
 
   it('keeps retired package names as migration metadata without publishing the feature', () => {
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
-      dshEnhanced: { retiredFeatures: Array<{ feature: string; packageNames: string[]; notice: string }> }
+      dshEnhanced: { retiredFeatures: Array<{
+        feature: string; packageNames: string[]; loaderIds: string[]; loaderNames: string[]; notice: string
+      }> }
     }
     expect(manifest.dshEnhanced.retiredFeatures).toContainEqual({
       feature: 'referenced-file',
       packageNames: ['dsh-enhanced-referenced-file', 'dsh-referenced-file'],
+      loaderIds: ['referenced-file'],
+      loaderNames: ['dsh-enhanced-plugins/referenced-file', 'dsh-enhanced-referenced-file', 'dsh-referenced-file'],
       notice: 'Official DSH now supports @ workspace file references; update DSH to the latest release.',
     })
+    expect(manifest.dshEnhanced.retiredFeatures).toContainEqual({
+      feature: 'model-input-types',
+      packageNames: ['dsh-enhanced-model-input-types'],
+      loaderIds: ['model-input-types'],
+      loaderNames: ['dsh-enhanced-model-input-types'],
+      notice: 'Official DSH 0.1.6-alpha.2 provides model input types under Settings → Models.',
+    })
     expect(readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8')).not.toContain('referenced-file')
+    expect(readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8')).not.toContain('model-input-types')
   })
 })
