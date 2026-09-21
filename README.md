@@ -2,7 +2,7 @@
 
 [中文](README.zh.md) | English
 
-An enhancement suite for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness): **six independently installable Cordis bundles plus one Windows companion**.
+An enhancement suite for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness): **seven independently installable Cordis bundles plus one Windows companion**.
 
 - Does not modify DSH core; every Web feature uses public plugin extension points.
 - Installs everything in one pass or keeps only the independently packaged features you select.
@@ -23,16 +23,17 @@ The installer only needs the stable “feature ID.” Every feature also has a s
 | [Edit last message](#5-edit-last-message) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web; latest user message | Change that turn and regenerate in the same session |
 | [Product subagents](#6-product-subagents) | `sub-agent` | `dsh-enhanced-sub-agent` | Web; Settings → Subagents | Enable or disable Claude Code / Codex tools in real time |
 | [Execution monitor](#7-execution-monitor) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web; current conversation composer | Dispatch, member progress, callbacks and internal step/tool details |
+| [Model collaboration V3](packages/model-router/README.md) | `model-router` | `dsh-enhanced-model-router` | Web; Settings → Model collaboration; conversation composer | Configured model picker, role cards, right-sidebar details, role routing and evidence-based upgrades |
 
 The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed installs now express “all” as every independent Profile package plus the required global Launcher, so any one Profile feature can later be removed without changing the others.
 
 ## Quick start
 
-### 7.2.4: native plugin installation and system proxy support
+### 7.2.5: native plugin installation and system proxy support
 
 - Plugin Community installs directly through the native DSH plugin manager, without its own preflight, installation records, or removal flow. DSH owns build approval and installation outcomes.
 - Windows Launcher supplies the system's manual HTTP/HTTPS proxy when no explicit proxy is configured, fixing direct-connection timeouts during index synchronization. Update Launcher and restart DSH to apply this change.
-- The aggregate, all six standalone bundles, and Windows Launcher use `7.2.4`, supporting DSH `0.1.6-alpha.2` at the verified baseline `ddefc45fbc7f8e46dd73185e68295696d1297887`.
+- The aggregate, all seven standalone bundles, and Windows Launcher use `7.2.5`, supporting DSH `0.1.6-alpha.2` at the verified baseline `ddefc45fbc7f8e46dd73185e68295696d1297887`. `agent-team-monitor` and `model-router` are Beta and remain restricted to this DSH version.
 
 ### 7.2.3: DSH 0.1.6-alpha.2 compatibility
 
@@ -315,7 +316,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.4`.
+- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.5`.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** before building, stopping services, or changing a profile, the installer and Launcher updater fetch the compatibility file from this repository’s GitHub `master` branch. A failed request, an eight-second download timeout, or malformed/oversized data falls back to the bundled file with a warning. Every check fetches again; it does not overwrite the local fallback. The remote table takes precedence when it contains the current plugin and DSH version. If it omits either, or lists no DSH version for that plugin, the installer checks the bundled table; installation stops only when neither supports the checkout. Mixed package versions also stop installation. Commits belong to individual DSH versions; an unlisted commit, local tracked changes, or no Git metadata produces an unverified-source warning.
@@ -437,3 +438,15 @@ The validated DSH `0.1.6-alpha.2` source uses `plugins.row.config` / `plugins.bu
 ## License
 
 [MIT](LICENSE)
+
+### Model collaboration UI update
+
+Choose only the Light, Normal and Strong models from the configured DSH catalog. Missing any role disables activation in Settings and conversations, with the missing roles listed and Host validation enforced. Backup selection and failure-driven backup switching are removed; legacy backup references are ignored. Role cards contain one model each; concurrency, retry and routing controls expand on demand. The composer menu opens a right-sidebar single-flow view with the task summary, models actually called and task assignments; request details and session history expand on demand, using DSH controls and theme tokens.
+
+Cumulative token limits and model pricing have been removed. Legacy token settings no longer block requests; new attempts do not reserve tokens or snapshot prices. Request and child-execution counts are statistics only; there is no cumulative 30/12 cap. Reported usage, concurrency controls, bounded failure retries and record-capacity protection remain. Legacy fields are retained only for compatibility.
+
+Model collaboration settings save automatically after a 400 ms pause in editing; leaving the settings page flushes pending changes. Manual save and restore-inheritance buttons are removed. Failed or conflicting writes preserve the draft and show a status message.
+
+When the global collaboration switch is off, the composer entry is hidden. Committed setting changes update it without a reload; disabling removes any open menu, stops entry polling and releases ordinary model selection. Session mode and task history are retained and applied again when globally re-enabled. New sessions opt in explicitly. Composer controls match DSH’s native model/permission trigger appearance, sizing and states. Collaboration management and single-model selection are separate controls. While collaboration is on, the model selector is disabled and displays “Model collaboration active”; the Host rejects ordinary selection calls as well. The ordinary selector retains DSH’s original model/value menu and provider-grouped list. Turning collaboration off restores the original model/effort without changing the global default. Reversible compatibility adapters provide the navigation icon and selection guard without editing DSH core files..
+
+Managed sessions now receive scoped coordination and role instructions with recorded reasons for direct work or delegation. Before the main assistant edits, writes, runs shell/code, the Host requires a work-type decision; implementation requires a NORMAL child and diagnosis/analysis requires a STRONG expert, so a prompt alone cannot silently keep all work on the main model. Structured acceptance separates execution ending from verified outcomes; main review of every child precedes root success. Handoffs retain essential constraints and retrievable history, and file changes invalidate read-only findings. V5 storage imports V4/V3/V2/V1 records read-only..

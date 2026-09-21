@@ -26,6 +26,8 @@ namespace DshEnhanced.WindowsLauncher
         public string scope { get; set; }
         public bool required { get; set; }
         public bool defaultSelected { get; set; }
+        public bool beta { get; set; }
+        public string[] compatibleDshVersions { get; set; }
         public int order { get; set; }
         public string category { get; set; }
         public string name { get; set; }
@@ -637,15 +639,19 @@ namespace DshEnhanced.WindowsLauncher
             feature = value;
             nameLabel.Text = value.name;
             descriptionLabel.Text = value.description;
-            identityLabel.Text = value.id + "  ·  " + value.packageName;
+            string compatibility = value.compatibleDshVersions == null || value.compatibleDshVersions.Length == 0
+                ? String.Empty : "  ·  DSH " + String.Join(", ", value.compatibleDshVersions);
+            identityLabel.Text = value.id + "  ·  " + value.packageName + compatibility;
             toggle.Enabled = !value.required;
             toggle.Checked = value.required || value.selected;
-            string state = value.required ? "必选"
+            string state = value.beta ? "Beta"
+                : value.required ? "必选"
                 : value.isNew ? "新增"
                 : value.installed ? "已安装"
                 : "未安装";
             statusLabel.Text = state;
-            statusLabel.ForeColor = value.isNew ? UiTheme.Success
+            statusLabel.ForeColor = value.beta ? UiTheme.Warning
+                : value.isNew ? UiTheme.Success
                 : value.installed || value.required ? UiTheme.Primary : UiTheme.Muted;
             rowBackColor = value.required ? UiTheme.PrimarySoft : UiTheme.Surface;
             rowBorderColor = value.required ? UiTheme.BorderStrong : UiTheme.Border;

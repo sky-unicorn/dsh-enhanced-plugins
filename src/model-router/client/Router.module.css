@@ -1,0 +1,115 @@
+.section { display: grid; gap: 16px; padding: 20px; max-width: 800px; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 1.5; }
+.section h2 { margin: 0; font-size: 18px; line-height: 1.5; }
+.section p { margin: 0; color: var(--dsw-alias-label-secondary); }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.card { padding: 14px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 12px; display: grid; gap: 10px; }
+.field { display: grid; gap: 6px; flex: 1; min-width: 130px; }
+.control { font: inherit; line-height: 1.5; padding: 7px 10px; border-radius: 8px; border: 0.5px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); min-width: 0; }
+button.control { cursor: pointer; }
+.control:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.control:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+.control:disabled { opacity: 0.5; cursor: default; }
+.control[aria-pressed="true"] { background: var(--dsw-alias-interactive-bg-hover-accent); font-weight: 600; border-color: var(--dsw-alias-brand-primary); }
+.muted { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.5; }
+.result { white-space: pre-wrap; overflow-wrap: anywhere; }
+.error { color: var(--dsw-alias-label-primary); border-inline-start: 3px solid var(--dsw-alias-border-l2); padding-inline-start: 10px; }
+
+.details { display: grid; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.section, .card, .row, .field { min-width: 0; }
+.section { box-sizing: border-box; overflow-wrap: anywhere; }
+.section code, .section pre { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+@media (max-width: 480px) { .row { align-items: stretch; } .field { flex-basis: 100%; } .section { padding: 12px; } }
+
+.section { container-type: inline-size; }
+@container (max-width: 480px) { .row > .field { flex-basis: 100%; } }
+.heading { display: flex; gap: 12px; align-items: flex-start; }
+.heading > svg { flex-shrink: 0; margin-top: 4px; }
+.enableRow { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding-block: 8px 16px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.roleCard { display: grid; gap: 12px; padding: 18px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 14px; background: var(--dsw-alias-bg-base); min-width: 0; }
+.roleHeader { display: flex; gap: 10px; align-items: center; }
+.roleNumber { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
+.modelButton { width: 100%; justify-content: space-between; height: auto; min-height: 46px; border-radius: 8px; text-align: start; }
+.modelButton > span:first-child, .modelRow > span:first-child { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.modelButton small, .modelRow small { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
+.picker { display: grid; gap: 14px; min-width: 0; }
+.pickerGroup { display: grid; gap: 4px; }
+.pickerGroup h3 { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); margin: 0 0 4px; }
+.modelRow { width: 100%; height: auto; min-height: 48px; text-align: start; justify-content: space-between; border-radius: 8px; }
+.dialog { width: min(640px, calc(100vw - 24px)); max-width: calc(100vw - 24px); }
+.dialogContent { overflow: auto; max-height: calc(100dvh - 64px); }
+/* Match DSH's model/permission trigger chrome; no private component import. */
+.composerButton { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 220px; height: 28px; padding: 0 4px 0 8px; border: 0; border-radius: 24px; outline: none; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; line-height: 20px; font-weight: 500; cursor: pointer; }
+.composerButton:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.composerButton:focus-visible { box-shadow: 0 0 0 2px var(--dsw-alias-border-l3); }
+.composerButton:disabled { cursor: default; color: var(--dsw-alias-label-dimmed); }
+.modelTrigger { max-width: min(360px, 45cqw); }
+.composerLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composerIcon { flex: 0 0 auto; width: 16px; height: 16px; }
+.composerChevron { flex: 0 0 auto; color: var(--dsw-alias-label-caption); transition: transform 120ms ease; }
+.composerChevronOpen { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .composerChevron { transition: none; } }
+.section summary { cursor: pointer; font-weight: 500; }
+@container (max-width: 380px) { .roleCard { padding: 12px; } }
+
+.sidebar { height: 100%; overflow: auto; min-width: 0; }
+
+details.card > :not(summary) { margin-top: 10px; }
+
+.modeControl { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px; min-width: 0; }
+
+/* The details pane is a single reading flow: status → model calls → tasks.
+ * Each layer has one visual surface, so usage and history no longer repeat the
+ * same task cards under three competing tabs. */
+.runHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-block: 2px 4px; }
+.runHeader strong { font-size: 15px; line-height: 22px; }
+.statusBadge { display: inline-flex; align-items: center; flex: 0 0 auto; min-height: 22px; padding: 2px 8px; border-radius: 999px; corner-shape: round; background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; white-space: nowrap; }
+.statusBadge[data-status="running"] { color: var(--dsw-alias-state-success-primary); background: var(--dsw-alias-state-success-tertiary); }
+.statusBadge[data-status="failed"], .statusBadge[data-status="interrupted"] { color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-interactive-bg-hover-danger); }
+.metricGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5px; overflow: hidden; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-border-l2); }
+.metric { display: grid; gap: 2px; min-width: 0; padding: 10px 8px; background: var(--dsw-alias-bg-layer-1); }
+.metric strong { font-size: 16px; line-height: 22px; }
+.metric span { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.notice { padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
+.modelSummary, .timeline { display: grid; gap: 10px; }
+.sectionTitle { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.modelSummary h3, .timeline h3 { margin: 0; font-size: 14px; line-height: 22px; font-weight: 600; }
+.modelUsageList { display: grid; gap: 0.5px; overflow: hidden; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-border-l2); }
+.modelUsageRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; min-width: 0; padding: 12px; background: var(--dsw-alias-bg-layer-1); }
+.modelRoute { display: grid; gap: 2px; min-width: 0; }
+.modelRoute strong, .modelRoute span { overflow-wrap: anywhere; }
+.modelRoute > span { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
+.roleChips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.roleChips span { padding: 2px 6px; border-radius: 5px; background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
+.callCount { display: grid; gap: 4px; color: var(--dsw-alias-label-primary); text-align: end; }
+.callCount span { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; font-weight: 400; max-width: 140px; }
+.taskRow { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 10px; min-width: 0; }
+.taskMarker { width: 6px; height: 6px; margin-top: 8px; border-radius: 50%; corner-shape: round; background: var(--dsw-alias-label-caption); }
+.taskBody { display: grid; gap: 6px; min-width: 0; padding-bottom: 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.taskRow:last-child .taskBody { border-bottom: 0; padding-bottom: 0; }
+.taskHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+.taskHeader > strong { min-width: 0; overflow-wrap: anywhere; }
+.taskMeta { display: grid; gap: 3px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
+.inlineDetails { padding-top: 2px; }
+.inlineDetails summary { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 20px; }
+.executionRow { display: grid; gap: 6px; padding: 10px; border-radius: 7px; background: var(--dsw-alias-bg-layer-1); font-size: 12px; line-height: 20px; }
+.executionRow span, .requestRow { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.requestRow { padding-block: 5px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.requestRow:last-child { border-bottom: 0; }
+.requestRow summary > span { margin-inline-end: 8px; }
+.panelHeading { display: flex; align-items: center; gap: 10px; }
+.panelHeading > svg { flex-shrink: 0; }
+.panelHeading > h2 { flex: 1; }
+.fold { min-width: 0; border-top: 0.5px solid var(--dsw-alias-border-l2); padding-block: 10px 0; }
+.fold > summary { font-size: 13px; line-height: 22px; padding-block: 2px; }
+.foldBody { display: grid; gap: 10px; min-width: 0; padding-top: 10px; }
+.section summary:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; border-radius: 4px; }
+@container (max-width: 360px) {
+  .taskHeader { flex-wrap: wrap; }
+  .sectionTitle { flex-wrap: wrap; }
+  .modelUsageRow { padding: 10px; gap: 8px; }
+  .callCount span { max-width: 90px; }
+}
+
+
+/* Only the model seat in this composer is covered; off/dispose restores DSH unchanged. */
+.nativeModelLocked > :not([data-dsh-router-model-status]) { display: none; }

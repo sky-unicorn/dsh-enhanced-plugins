@@ -222,6 +222,15 @@ function Get-Catalog {
     $scope = [string](Get-OptionalProperty $featureManager 'scope' $(if ($kind -eq 'bundle') { 'profile' } else { 'global' }))
     $required = [bool](Get-OptionalProperty $featureManager 'required' $false)
     $defaultSelected = [bool](Get-OptionalProperty $featureManager 'defaultSelected' $true)
+    $beta = [bool](Get-OptionalProperty $featureManager 'beta' $false)
+    $compatibility = Get-OptionalProperty $featureManager 'compatibility'
+    $compatibleDshVersions = @()
+    if ($null -ne $compatibility) {
+      $compatibleDshVersions = @((Get-OptionalProperty $compatibility 'dsh' @()))
+      if (@($compatibleDshVersions | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+        throw "功能 '$id' 的 manager.compatibility.dsh 必须是非空字符串数组。"
+      }
+    }
     if ($scope -notin @('profile', 'global')) { throw "功能 '$id' 的 manager.scope '$scope' 无效。" }
     if ($required -and ($id -ne 'windows-launcher' -or $scope -ne 'global' -or $kind -ne 'companion')) {
       throw "第一版只允许 windows-launcher 声明为全局必选组件。"
@@ -233,6 +242,8 @@ function Get-Catalog {
       scope = $scope
       required = $required
       defaultSelected = $defaultSelected
+      beta = $beta
+      compatibleDshVersions = $compatibleDshVersions
       order = [int](Get-OptionalProperty $featureManager 'order' 1000)
       category = [string](Get-OptionalProperty $featureManager 'category' 'other')
       name = Get-LocalizedText (Get-OptionalProperty $featureManager 'name') $id
@@ -373,6 +384,8 @@ function Get-Snapshot {
       scope = $feature.scope
       required = $feature.required
       defaultSelected = $feature.defaultSelected
+      beta = $feature.beta
+      compatibleDshVersions = $feature.compatibleDshVersions
       order = $feature.order
       category = $feature.category
       name = $feature.name

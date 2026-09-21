@@ -29,6 +29,9 @@
     - id: agent-team-monitor
       name: 'dsh-enhanced-plugins/agent-team-monitor'
 
+    - id: model-router
+      name: 'dsh-enhanced-plugins/model-router'
+
     - id: subagent-codex
       name: 'dsh-enhanced-plugins/sub-agent/codex'
 

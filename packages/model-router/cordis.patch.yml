@@ -1,0 +1,3 @@
+- insert:
+    - id: model-router
+      name: 'dsh-enhanced-model-router'

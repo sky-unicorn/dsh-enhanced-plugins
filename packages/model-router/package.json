@@ -1,0 +1,132 @@
+{
+  "name": "dsh-enhanced-model-router",
+  "version": "7.2.5",
+  "description": "Bounded multi-model collaboration for one DSH conversation",
+  "type": "module",
+  "main": "./lib/model-router/host/index.js",
+  "exports": {
+    ".": "./lib/model-router/host/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-model-selection"
+      ]
+    }
+  },
+  "dshEnhanced": {
+    "feature": "model-router",
+    "kind": "bundle",
+    "legacyPackages": [],
+    "build": {
+      "script": "./build.mjs",
+      "hostEntries": [
+        "src/model-router/accounting.ts",
+        "src/model-router/shared.ts",
+        "src/model-router/host/config.ts",
+        "src/model-router/host/coordination.ts",
+        "src/model-router/host/policy.ts",
+        "src/model-router/host/selection-bridge.ts",
+        "src/model-router/host/workspace.ts",
+        "src/model-router/host/index.ts",
+        "src/model-router/host/service.ts",
+        "src/model-router/host/storage.ts",
+        "src/model-router/schema.ts",
+        "src/model-router/host/workflow.ts"
+      ]
+    },
+    "manager": {
+      "scope": "profile",
+      "required": false,
+      "defaultSelected": false,
+      "beta": true,
+      "compatibility": {
+        "dsh": ["0.1.6-alpha.2"]
+      },
+      "order": 66,
+      "category": "conversation",
+      "name": {
+        "zh-CN": "\u591a\u6a21\u578b\u534f\u4f5c",
+        "en-US": "Model collaboration"
+      },
+      "description": {
+        "zh-CN": "\u6309\u804c\u8d23\u9009\u62e9\u6a21\u578b\u5e76\u7ba1\u7406\u53d7\u63a7\u5b50\u4efb\u52a1\u3002",
+        "en-US": "Route bounded tasks by role with durable controls."
+      }
+    }
+  },
+  "files": [
+    "lib/",
+    "src/",
+    "build.mjs",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ./build.mjs --feature model-router",
+    "prepare": "npm run build"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-agent": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-session": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-subagent": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-connection": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-locale": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.6-alpha.2",
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-store": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-llm": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-tools": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-settings": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-storage-domain": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-settings": "0.1.6-alpha.2",
+    "@deepseek-ai/schemastery": ">=3.18.0",
+    "@deepseek-ai/dsh-plan-mode": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-session-projection": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-model-selection": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-agent-default-model": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-session-query": "0.1.6-alpha.2",
+    "react-dom": "^18.2.0",
+    "@deepseek-ai/dsh-system-prompt": "0.1.6-alpha.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-plan-mode": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session-projection": {
+      "optional": true
+    }
+  }
+}

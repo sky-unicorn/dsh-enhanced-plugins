@@ -23,6 +23,8 @@ interface FeatureManifest {
       scope: 'profile' | 'global'
       required: boolean
       defaultSelected: boolean
+      beta?: boolean
+      compatibility?: { dsh: string[] }
       order: number
       category: string
       name: { 'zh-CN': string, 'en-US': string }
@@ -35,6 +37,7 @@ interface FeatureManifest {
 
 const expectedRows: Record<string, string[]> = {
   'agent-team-monitor': ['agent-team-monitor'],
+  'model-router': ['model-router'],
   'edit-last-message': ['edit-last-message-host'],
   'mcp-server-manager': ['mcp-manager'],
   notification: ['desktop-notifications'],
@@ -78,7 +81,10 @@ describe('selective feature packages', () => {
       expect(manifest.scripts.build).toContain(`--feature ${manifest.dshEnhanced.feature}`)
       expect(manifest.dshEnhanced.manager.scope).toBe('profile')
       expect(manifest.dshEnhanced.manager.required).toBe(false)
-      expect(manifest.dshEnhanced.manager.defaultSelected).toBe(true)
+      const betaFeature = ['agent-team-monitor', 'model-router'].includes(manifest.dshEnhanced.feature)
+      expect(manifest.dshEnhanced.manager.defaultSelected).toBe(!betaFeature)
+      expect(manifest.dshEnhanced.manager.beta ?? false).toBe(betaFeature)
+      if (betaFeature) expect(manifest.dshEnhanced.manager.compatibility?.dsh).toEqual(['0.1.6-alpha.2'])
       expect(manifest.dshEnhanced.manager.name['zh-CN']).not.toBe('')
       expect(patch).toContain(`name: '${manifest.name}`)
       const ids = [...(patch ?? '').matchAll(/^\s+- id: (.+)$/gm)].map(match => match[1])
@@ -164,12 +170,19 @@ describe('selective feature packages', () => {
       const catalog = JSON.parse(readFileSync(catalogPath, 'utf8')) as {
         protocolVersion: number
         sourceRevision: string
-        features: Array<{ id: string, required: boolean, scope: string }>
+        features: Array<{ id: string, required: boolean, scope: string, defaultSelected: boolean,
+          beta: boolean, compatibleDshVersions: string[] }>
       }
       expect(catalog.protocolVersion).toBe(1)
       expect(catalog.features.map(feature => feature.id).sort()).toEqual(expectedFeatures)
       expect(catalog.features.find(feature => feature.id === 'windows-launcher')).toMatchObject({
         required: true, scope: 'global',
+      })
+      expect(catalog.features.find(feature => feature.id === 'agent-team-monitor')).toMatchObject({
+        defaultSelected: false, beta: true, compatibleDshVersions: ['0.1.6-alpha.2'],
+      })
+      expect(catalog.features.find(feature => feature.id === 'model-router')).toMatchObject({
+        defaultSelected: false, beta: true, compatibleDshVersions: ['0.1.6-alpha.2'],
       })
 
       const planRequestPath = resolve(managerDirectory, 'request.json')

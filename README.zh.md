@@ -2,7 +2,7 @@
 
 中文 | [English](README.md)
 
-面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能套件：**6 个可独立安装的 Cordis bundle + 1 个 Windows Companion**。
+面向 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的增强功能套件：**7 个可独立安装的 Cordis bundle + 1 个 Windows Companion**。
 
 - 不修改 DSH 核心，只使用公开插件扩展点。
 - 可一次安装全部功能，也可只保留选中的独立功能。
@@ -23,16 +23,17 @@
 | [编辑上一条消息](#5-编辑上一条消息) | `edit-last-message` | `dsh-enhanced-edit-last-message` | Web；最后一条用户消息 | 修改该轮内容并在当前会话重新生成 |
 | [产品子智能体](#6-产品子智能体) | `sub-agent` | `dsh-enhanced-sub-agent` | Web；设置 → 子智能体 | 实时启用或停用 Claude Code / Codex 工具 |
 | [执行过程监控](#7-执行过程监控) | `agent-team-monitor` | `dsh-enhanced-agent-team-monitor` | Web；当前对话输入框右侧监控图标 | 任务派发、队员进度、结果回调及内部步骤／工具详情 |
+| [多模型协作 V3](packages/model-router/README.md) | `model-router` | `dsh-enhanced-model-router` | Web；设置 → 多模型协作；会话输入区 | 已配置模型选择、职责卡片、右侧协作详情、职责路由与证据驱动升级 |
 
-聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 7 项；选择功能时只安装对应独立包或 Companion。
+聚合包名为 `dsh-enhanced-plugins`。省略功能选择时，安装脚本会组合上表全部 8 项；选择功能时只安装对应独立包或 Companion。
 
 ## 快速开始
 
-### 7.2.4：原生插件安装与系统代理
+### 7.2.5：原生插件安装与系统代理
 
 - 插件社区直接调用 DSH 原生插件管理器安装，不再自行预检、维护安装记录或执行卸载；构建授权和安装结果由 DSH 决定。
 - Windows Launcher 在没有显式代理配置时自动传递系统手动 HTTP/HTTPS 代理，修复索引同步直连超时。更新 Launcher 并重启 DSH 后生效。
-- 聚合包、6 个独立功能包及 Windows Launcher 统一为 `7.2.4`；兼容 DSH `0.1.6-alpha.2`，验证基线仍为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。
+- 聚合包、7 个独立功能包及 Windows Launcher 统一为 `7.2.5`；兼容 DSH `0.1.6-alpha.2`，验证基线仍为 `ddefc45fbc7f8e46dd73185e68295696d1297887`。`agent-team-monitor`（执行过程监控）与 `model-router`（多模型协作）标记为 Beta，且仅兼容此 DSH 版本。
 
 ### 7.2.3：适配 DSH 0.1.6-alpha.2
 
@@ -314,7 +315,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.4`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.5`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件；远端有效但没有匹配当前插件及 DSH 版本的记录时也会检查包内文件。只有两处都不支持当前 DSH 版本才拒绝安装。每次检查重新获取，不覆盖本地回退文件。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
@@ -436,3 +437,15 @@ DSH `0.1.6-alpha.2` 的实际配置入口是 `plugins.row.config`／`plugins.bun
 ## License
 
 [MIT](LICENSE)
+
+### 多模型协作界面改版
+
+仅配置轻量、普通、强力三个模型，从 DSH 已配置目录中搜索选择；任意一档未配置，设置和会话入口均禁止开启并提示缺少的档位，后端同步拒绝。移除备用选择及故障换备用模型，旧备用引用不再生效。三档职责分别呈现，并发、重试和切换规则按需展开。会话输入区的协作菜单打开右侧详情，采用“任务摘要 → 已调用模型 → 任务分工”的单页信息流，请求明细和会话历史按需展开，避免概览、用量、历史重复展示同一任务。深浅主题沿用 DSH 公共控件。
+
+已移除累计 token 限额与模型报价：旧 token 配置不再阻止请求，不再预留 token、配置报价或估算金额；请求次数与子执行次数只统计，不再设 30/12 或其他累计次数上限；保留实际用量、并发控制、失败重试和记录容量保护。旧设置和历史字段仅为兼容读取保留。
+
+多模型设置修改后自动保存，无需点击保存，不再提供恢复继承按钮；停止输入约 400 毫秒后合并提交，离开设置页会提交待保存修改，失败或冲突保留当前草稿并提示。
+
+设置中的“启用自动协作”关闭时，输入区隐藏“多模型协作”入口；保存开启后自动显示，无需刷新。关闭全局开关会清理已打开的菜单、停止入口轮询，并释放普通选模锁定。会话模式与任务记录保留，再次开启全局开关时按原会话模式恢复。新会话默认关闭协作。输入区按钮采用 DSH 原生模型/权限控件的无底色外观、字号、尺寸和状态样式。协作管理与单模型选择为两个独立控件；开启后原选模位置显示不可点击的“多模型协作中”，关闭后恢复 DSH 原有的“模型／当前值”菜单及供应商分组列表，插件不再重写普通选模菜单；Host 同时拒绝普通模型修改，关闭后恢复原单模型与推理选择且不修改全局默认。设置导航独立图标采用仓库已有的可撤销兼容方式实现，无需修改 DSH 本体。
+
+协作启用后追加主助手分工与子助手职责指引，记录直接处理或派发的具体依据。主助手在编辑、写入、Shell 或代码执行前必须提交带工作类型的分工决策；实现任务要求 NORMAL 子助手，诊断/分析要求 STRONG 专家，Host 会拦截绕过检查点的主任务变更。新增结构化验收报告，执行结束不再等同于验收通过；主助手复核子结果后才能报告根目标通过。交接保留必要约束与可回查历史，文件变化会使只读结果需要重验。新记录使用独立 V5 存储并只读导入 V4/V3/V2/V1 历史。

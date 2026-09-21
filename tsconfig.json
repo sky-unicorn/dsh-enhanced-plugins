@@ -20,26 +20,84 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@deepseek-ai/cordis": ["../deepseek-harness/vendor/cordis/lib/types/index.d.ts"],
-      "@deepseek-ai/schemastery": ["../deepseek-harness/vendor/schemastery/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-agent": ["../deepseek-harness/packages/core/agent/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-subagent": ["../deepseek-harness/packages/subagent/subagent/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-experimental-agent-team": ["../deepseek-harness/packages/experimental/agent-team/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-tool-workflow/types": ["../deepseek-harness/packages/workflow/tool-workflow/lib/types/types.d.ts"],
-      "@deepseek-ai/dsh-session-query": ["../deepseek-harness/packages/session-query/session-query/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-credentials": ["../deepseek-harness/packages/credentials/credentials/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-host-webserver": ["../deepseek-harness/packages/host/webserver/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-llm": ["../deepseek-harness/packages/llm/llm/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-llm/message": ["../deepseek-harness/packages/llm/llm/lib/types/message.d.ts"],
-      "@deepseek-ai/dsh-mcp-client": ["../deepseek-harness/packages/mcp/mcp-client/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-session": ["../deepseek-harness/packages/core/session/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-settings": ["../deepseek-harness/packages/settings/settings/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-subprocess": ["../deepseek-harness/packages/subprocess/subprocess/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-tool-subagent": ["../deepseek-harness/packages/subagent/tool-subagent/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-subagent-codex": ["../deepseek-harness/packages/subagent/subagent-codex/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-subagent-claude-code": ["../deepseek-harness/packages/subagent/subagent-claude-code/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-session-projection": ["../deepseek-harness/packages/session/session-projection/lib/types/index.d.ts"],
-      "@deepseek-ai/dsh-typert-protocol": ["../deepseek-harness/packages/typert/protocol/lib/types/index.d.ts"]
+      "@deepseek-ai/cordis": [
+        "../deepseek-harness/vendor/cordis/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/schemastery": [
+        "../deepseek-harness/vendor/schemastery/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-plan-mode": [
+        "../deepseek-harness/packages/plan/plan-mode/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-agent": [
+        "../deepseek-harness/packages/core/agent/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-subagent": [
+        "../deepseek-harness/packages/subagent/subagent/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-experimental-agent-team": [
+        "../deepseek-harness/packages/experimental/agent-team/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-tool-workflow/types": [
+        "../deepseek-harness/packages/workflow/tool-workflow/lib/types/types.d.ts"
+      ],
+      "@deepseek-ai/dsh-session-query": [
+        "../deepseek-harness/packages/session-query/session-query/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-credentials": [
+        "../deepseek-harness/packages/credentials/credentials/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-host-webserver": [
+        "../deepseek-harness/packages/host/webserver/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-llm": [
+        "../deepseek-harness/packages/llm/llm/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-llm/message": [
+        "../deepseek-harness/packages/llm/llm/lib/types/message.d.ts"
+      ],
+      "@deepseek-ai/dsh-mcp-client": [
+        "../deepseek-harness/packages/mcp/mcp-client/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-session": [
+        "../deepseek-harness/packages/core/session/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-settings": [
+        "../deepseek-harness/packages/settings/settings/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-subprocess": [
+        "../deepseek-harness/packages/subprocess/subprocess/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-tool-subagent": [
+        "../deepseek-harness/packages/subagent/tool-subagent/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-subagent-codex": [
+        "../deepseek-harness/packages/subagent/subagent-codex/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-subagent-claude-code": [
+        "../deepseek-harness/packages/subagent/subagent-claude-code/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-session-projection": [
+        "../deepseek-harness/packages/session/session-projection/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-typert-protocol": [
+        "../deepseek-harness/packages/typert/protocol/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-tools": [
+        "../deepseek-harness/packages/core/tools/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-storage-domain": [
+        "../deepseek-harness/packages/storage/storage-domain/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-api-session-controller": [
+        "../deepseek-harness/packages/api/session-controller/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-agent-default-model": [
+        "../deepseek-harness/packages/core/agent-default-model/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-system-prompt": [
+        "../deepseek-harness/packages/core/system-prompt/lib/types/index.d.ts"
+      ]
     }
   },
   "include": [
@@ -57,7 +115,14 @@
     "src/sub-agent/claude-code.ts",
     "src/sub-agent/preset.ts",
     "src/sub-agent/settings.ts",
-    "src/sub-agent/shared.ts"
+    "src/sub-agent/shared.ts",
+    "src/model-router/shared.ts",
+    "src/model-router/host/**/*.ts"
   ],
-  "exclude": ["node_modules", "tests", "lib", "src/**/client/**"]
+  "exclude": [
+    "node_modules",
+    "tests",
+    "lib",
+    "src/**/client/**"
+  ]
 }

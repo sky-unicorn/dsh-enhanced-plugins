@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-plugins",
-  "version": "7.2.4",
+  "version": "7.2.5",
   "description": "Aggregate and selective DeepSeek Harness enhancements, including a standalone Windows launcher companion",
   "type": "module",
   "main": "./lib/index.js",
@@ -17,7 +17,8 @@
     "./sub-agent/claude-code": "./lib/sub-agent/claude-code.js",
     "./sub-agent/preset": "./lib/sub-agent/preset.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./model-router": "./lib/model-router/host/index.js"
   },
   "dsh": {
     "bundle": {
@@ -39,7 +40,9 @@
         "@deepseek-ai/dsh-client-ui-plugin-manager",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-workspace",
-        "@deepseek-ai/dsh-client-ui-layout"
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-model-selection"
       ]
     }
   },
@@ -57,7 +60,9 @@
           "dsh-enhanced-referenced-file",
           "dsh-referenced-file"
         ],
-        "loaderIds": ["referenced-file"],
+        "loaderIds": [
+          "referenced-file"
+        ],
         "loaderNames": [
           "dsh-enhanced-plugins/referenced-file",
           "dsh-enhanced-referenced-file",
@@ -67,10 +72,16 @@
       },
       {
         "feature": "model-input-types",
-        "packageNames": ["dsh-enhanced-model-input-types"],
-        "loaderIds": ["model-input-types"],
-        "loaderNames": ["dsh-enhanced-model-input-types"],
-        "notice": "Official DSH 0.1.6-alpha.2 provides model input types under Settings → Models."
+        "packageNames": [
+          "dsh-enhanced-model-input-types"
+        ],
+        "loaderIds": [
+          "model-input-types"
+        ],
+        "loaderNames": [
+          "dsh-enhanced-model-input-types"
+        ],
+        "notice": "Official DSH 0.1.6-alpha.2 provides model input types under Settings \u2192 Models."
       }
     ]
   },
@@ -107,7 +118,7 @@
     "test:sub-agent": "vitest run --config vitest.sub-agent.config.ts",
     "test:agent-team-monitor": "vitest run --config vitest.agent-team-monitor.config.ts",
     "test:packages": "vitest run --config vitest.packages.config.ts",
-    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:notification && npm run test:market && npm run test:sub-agent && npm run test:agent-team-monitor && npm run test:packages",
+    "test": "npm run test:edit-last-message && npm run test:mcp && npm run test:notification && npm run test:market && npm run test:sub-agent && npm run test:agent-team-monitor && npm run test:packages && npm run test:model-router",
     "check": "npm run typecheck && npm test && npm run build",
     "market:index": "node scripts/update-plugin-index.mjs",
     "repair:edit-last-message-session": "node scripts/repair-edit-last-message-session.mjs",
@@ -126,7 +137,10 @@
     "verify:desktop-launcher": "node scripts/verify-desktop-launcher.mjs",
     "verify:desktop-source": "node scripts/verify-desktop-source.mjs",
     "sync:compatibility": "node scripts/sync-dsh-compatibility.mjs",
-    "verify:market-web": "node scripts/verify-market-web.mjs"
+    "verify:market-web": "node scripts/verify-market-web.mjs",
+    "test:model-router": "vitest run --config vitest.model-router.config.ts",
+    "verify:model-router-web": "node scripts/verify-model-router-web.mjs",
+    "evaluate:model-router": "node scripts/evaluate-model-router.mjs"
   },
   "keywords": [
     "dsh",
@@ -145,7 +159,8 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
-    "smol-toml": "^1.7.1"
+    "smol-toml": "^1.7.1",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.1",
@@ -183,7 +198,12 @@
     "@deepseek-ai/dsh-client-store": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-plugin-manager": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-workspace": "0.1.6-alpha.2",
-    "@deepseek-ai/dsh-client-ui-layout": "0.1.6-alpha.2"
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-storage-domain": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-plan-mode": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-model-selection": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-agent-default-model": "0.1.6-alpha.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
@@ -201,5 +221,10 @@
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
     "undici": "^7.29.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-plan-mode": {
+      "optional": true
+    }
   }
 }
