@@ -21,4 +21,4 @@ export function ledger(run: RunRecord) {
     else { uncertain += r.reservedTokens ?? 0; unknownRequests++ }
   }
   return { reported, reserved, uncertain, unknownRequests, unboundedRequests, occupied: reported + reserved + uncertain }
-}\n
+}
