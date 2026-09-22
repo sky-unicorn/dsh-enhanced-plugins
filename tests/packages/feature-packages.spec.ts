@@ -216,6 +216,76 @@ describe('selective feature packages', () => {
       expect(plan.profile.update).toEqual([])
       expect(plan.profile.remove).toEqual([])
 
+      const upgradeSnapshotPath = resolve(managerDirectory, 'upgrade-snapshot.json')
+      mkdirSync(resolve(managerDirectory, 'upgrade-dsh-home/profiles/web'), { recursive: true })
+      writeFileSync(resolve(managerDirectory, 'upgrade-dsh-home/profiles/web/package.json'), JSON.stringify({
+        dependencies: {
+          'dsh-enhanced-agent-team-monitor': '7.2.5',
+          'dsh-enhanced-model-router': '7.2.5',
+          'dsh-enhanced-notification': '7.2.5',
+        },
+      }), 'utf8')
+      const upgradeLauncherRoot = resolve(managerDirectory, 'upgrade-launcher')
+      mkdirSync(upgradeLauncherRoot, { recursive: true })
+      writeFileSync(resolve(upgradeLauncherRoot, 'install-state.json'), JSON.stringify({
+        schemaVersion: 1,
+        profiles: {
+          web: {
+            managed: true,
+            desiredFeatures: ['agent-team-monitor', 'model-router', 'notification'],
+            knownFeatures: expectedFeatures,
+            lastAppliedRevision: 'previous-release-revision',
+          },
+        },
+      }), 'utf8')
+      const upgradeSnapshot = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'Snapshot', '-RepositoryRoot', root,
+        '-Profile', 'web', '-OutputPath', upgradeSnapshotPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DEEPSEEK_HARNESS_LAUNCHER_HOME: upgradeLauncherRoot,
+          DSH_HOME: resolve(managerDirectory, 'upgrade-dsh-home'),
+        },
+      })
+      expect(upgradeSnapshot.status, `${upgradeSnapshot.stdout}\n${upgradeSnapshot.stderr}`).toBe(0)
+      const upgrade = JSON.parse(readFileSync(upgradeSnapshotPath, 'utf8')) as {
+        features: Array<{ id: string, selected: boolean }>
+      }
+      expect(upgrade.features.find(feature => feature.id === 'agent-team-monitor')?.selected).toBe(false)
+      expect(upgrade.features.find(feature => feature.id === 'model-router')?.selected).toBe(false)
+      expect(upgrade.features.find(feature => feature.id === 'notification')?.selected).toBe(true)
+      const upgradePlanRequestPath = resolve(managerDirectory, 'upgrade-plan-request.json')
+      writeFileSync(upgradePlanRequestPath, JSON.stringify({
+        requestId: '33333333-3333-3333-3333-333333333333',
+        profile: 'web',
+        desiredFeatures: ['agent-team-monitor', 'model-router', 'notification'],
+        updateSource: false,
+      }), 'utf8')
+      const upgradePlanPath = resolve(managerDirectory, 'upgrade-plan.json')
+      const upgradePlan = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', managerScript, '-Operation', 'Plan', '-RepositoryRoot', root,
+        '-Profile', 'web', '-RequestPath', upgradePlanRequestPath, '-OutputPath', upgradePlanPath,
+      ], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DEEPSEEK_HARNESS_LAUNCHER_HOME: upgradeLauncherRoot,
+          DSH_HOME: resolve(managerDirectory, 'upgrade-dsh-home'),
+        },
+      })
+      expect(upgradePlan.status, `${upgradePlan.stdout}\n${upgradePlan.stderr}`).toBe(0)
+      const plannedUpgrade = JSON.parse(readFileSync(upgradePlanPath, 'utf8')) as {
+        profile: { desiredFeatures: string[], remove: string[] }
+      }
+      expect(plannedUpgrade.profile.desiredFeatures).toEqual(['notification'])
+      expect(plannedUpgrade.profile.remove.sort()).toEqual(['agent-team-monitor', 'model-router'])
+
       const launcherRoot = resolve(managerDirectory, 'launcher')
       const dshHome = resolve(managerDirectory, 'dsh-home')
       mkdirSync(resolve(launcherRoot), { recursive: true })

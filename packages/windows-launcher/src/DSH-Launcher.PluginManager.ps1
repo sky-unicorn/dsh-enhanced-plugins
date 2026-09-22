@@ -362,10 +362,19 @@ function Get-Snapshot {
   $actual = @($catalog.features | Where-Object {
     $_.scope -eq 'profile' -and $dependencies -contains $_.packageName
   } | ForEach-Object { $_.id })
+  $lastAppliedRevision = [string](Get-OptionalProperty $profileState 'lastAppliedRevision' '')
+  $revisionChanged = $managed -and ([string]::IsNullOrWhiteSpace($lastAppliedRevision) -or
+    $lastAppliedRevision -ne $catalog.sourceRevision)
   if (-not $managed) {
-    if ($aggregateInstalled) { $desired = @($catalog.features | Where-Object scope -eq 'profile' | ForEach-Object id) }
+    if ($aggregateInstalled) {
+      $desired = @($catalog.features | Where-Object { $_.scope -eq 'profile' -and -not $_.beta } | ForEach-Object id)
+    }
     elseif ($actual.Count -gt 0) { $desired = @($actual) }
     else { $desired = @($catalog.features | Where-Object { $_.scope -eq 'profile' -and $_.defaultSelected } | ForEach-Object id) }
+  }
+  elseif ($revisionChanged) {
+    $betaIds = @($catalog.features | Where-Object { $_.scope -eq 'profile' -and $_.beta } | ForEach-Object id)
+    $desired = @($desired | Where-Object { $betaIds -notcontains $_ })
   }
   $currentLauncher = Read-JsonFile (Join-Path (Get-LauncherRoot) 'current.json')
   $currentLauncherExecutable = [string](Get-OptionalProperty $currentLauncher 'executable' '')
@@ -438,6 +447,10 @@ function Get-ManagementPlan {
   $lastAppliedRevision = [string](Get-OptionalProperty $profileState 'lastAppliedRevision' '')
   $revisionChanged = [string]::IsNullOrWhiteSpace($lastAppliedRevision) -or
     $lastAppliedRevision -ne $catalog.sourceRevision
+  if ($revisionChanged) {
+    $betaIds = @($profileFeatures | Where-Object { $_.beta } | ForEach-Object id)
+    $desired = @($desired | Where-Object { $betaIds -notcontains $_ })
+  }
   $install = @($desired | Where-Object { $actual -notcontains $_ })
   $update = @()
   if ($revisionChanged) { $update = @($desired | Where-Object { $actual -contains $_ }) }
@@ -1356,6 +1369,8 @@ function Invoke-Apply {
   $preflightPlan = Get-ManagementPlan $InitialRoot $profileName $State $Request
   $preflightLauncherAction = [string](Get-OptionalProperty (Get-OptionalProperty $preflightPlan 'launcher') 'action' 'none')
   $preflightProfile = Get-OptionalProperty $preflightPlan 'profile'
+  $desired = @((Get-OptionalProperty $preflightProfile 'desiredFeatures' @()) |
+    ForEach-Object { [string]$_ } | Select-Object -Unique)
   $preflightHasWork = $updateSource -or
     [bool](Get-OptionalProperty $preflightProfile 'migrateAggregate' $false) -or
     @((Get-OptionalProperty $preflightProfile 'install' @())).Count -gt 0 -or
@@ -1466,6 +1481,13 @@ function Invoke-Apply {
   $catalog = Get-Catalog $source
   $validIds = @($catalog.features | Where-Object scope -eq 'profile' | ForEach-Object id)
   $retiredIds = @($catalog.retiredFeatures | ForEach-Object { $_.id })
+  if ($updateSource) {
+    $betaIds = @($catalog.features | Where-Object { $_.scope -eq 'profile' -and $_.beta } | ForEach-Object id)
+    $desired = @($desired | Where-Object { $betaIds -notcontains $_ })
+    foreach ($targetProfile in $profileTargets) {
+      $targetProfile.desired = @($targetProfile.desired | Where-Object { $betaIds -notcontains $_ })
+    }
+  }
   foreach ($targetProfile in $profileTargets) {
     $targetUnknown = @($targetProfile.desired | Where-Object { $validIds -notcontains $_ -and $retiredIds -notcontains $_ })
     if ($targetUnknown.Count -gt 0) {
