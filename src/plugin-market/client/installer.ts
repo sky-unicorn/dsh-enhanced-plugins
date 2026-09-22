@@ -1,5 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { ChangeResult, PluginInstallRequestId } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  ChangeResult,
+  InstallBundleOptions,
+  PluginInstallRequestId,
+} from '@deepseek-ai/dsh-api-remotes/client'
 
 /** Presentation of a DSH-owned installation; never persists profile or approval state. */
 export interface InstallSnapshot {
@@ -11,14 +15,35 @@ export interface InstallSnapshot {
   readonly error?: string
 }
 
-/** Thin current-profile Remote adapter. DSH owns validation, package operations and activation. */
+/** Optional web transport used to apply the Windows install-only proxy scope in the Host. */
+export interface MarketInstallTransport {
+  readonly install: (spec: string, options: InstallBundleOptions) => Promise<{
+    readonly ok: boolean
+    readonly value?: ChangeResult
+    readonly error?: { readonly message: string }
+  }>
+  readonly cancel: (requestId: PluginInstallRequestId) => Promise<{
+    readonly ok: boolean
+    readonly value?: { readonly status: 'cancelled' | 'too-late' | 'not-running' }
+    readonly error?: { readonly message: string }
+  }>
+}
+
+/** Thin current-profile install adapter. The Web client uses the market Host endpoint; tests and non-Web callers may use DSH's Remote directly. */
 export class MarketInstaller {
   private snapshot: InstallSnapshot = { pending: false, cancelling: false }
   private listeners = new Set<() => void>()
   private requestId: PluginInstallRequestId | undefined
   private disposed = false
 
-  constructor(private readonly manager: Context['remote']['pluginManager']) {}
+  private readonly transport: MarketInstallTransport
+
+  constructor(manager: Context['remote']['pluginManager'], transport?: MarketInstallTransport) {
+    this.transport = transport ?? {
+      install: (spec, options) => manager.installBundle(spec, options),
+      cancel: requestId => manager.cancelInstall(requestId),
+    }
+  }
 
   readonly getSnapshot = (): InstallSnapshot => this.snapshot
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -51,12 +76,13 @@ export class MarketInstaller {
     this.requestId = id
     this.publish({ spec, pending: true, cancelling: false })
     try {
-      const response = await this.manager.installBundle(spec, {
+      const response = await this.transport.install(spec, {
         requestId: id,
         ...(approvedBuilds === undefined ? {} : { approvedBuilds }),
       })
       if (this.requestId !== id) return
-      if (!response.ok) throw new Error(response.error.message)
+      if (!response.ok) throw new Error(response.error?.message ?? '插件安装请求失败。')
+      if (response.value === undefined) throw new Error('插件安装没有返回结果。')
       this.requestId = undefined
       this.publish({ spec, pending: false, cancelling: false, result: response.value })
     } catch (error) {
@@ -71,9 +97,10 @@ export class MarketInstaller {
     if (id === undefined || this.snapshot.cancelling) return
     this.publish({ ...this.snapshot, cancelling: true })
     try {
-      const response = await this.manager.cancelInstall(id)
+      const response = await this.transport.cancel(id)
       if (this.requestId !== id) return
-      if (!response.ok) throw new Error(response.error.message)
+      if (!response.ok) throw new Error(response.error?.message ?? '取消插件安装请求失败。')
+      if (response.value === undefined) throw new Error('取消插件安装没有返回结果。')
       if (response.value.status === 'cancelled') {
         this.requestId = undefined
         this.publish({ spec: this.snapshot.spec, pending: false, cancelling: false,
@@ -97,7 +124,7 @@ export class MarketInstaller {
     this.disposed = true
     this.listeners.clear()
     if (this.requestId !== undefined) {
-      try { await this.manager.cancelInstall(this.requestId) } catch { /* Host lifetime owns a disconnected request. */ }
+      try { await this.transport.cancel(this.requestId) } catch { /* Host lifetime owns a disconnected request. */ }
     }
   }
 }

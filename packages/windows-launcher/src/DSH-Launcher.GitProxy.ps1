@@ -78,10 +78,11 @@ function Resolve-SystemGitProxy {
 
 function Get-DshSystemProxyEnvironment {
   <#
-    Supplies a process-only fallback for DSH, which reads proxy environment
-    variables but does not read Windows Internet Settings. Explicit launch or
-    DSH-home .env proxy configuration always wins, including rejected values:
-    DSH remains responsible for validating it. NO_PROXY stays owned by DSH.
+    Resolves a process-only fallback for installation/build tools, which read
+    proxy environment variables but do not read Windows Internet Settings.
+    Explicit launch or DSH-home .env proxy configuration always wins, including
+    rejected values: DSH remains responsible for validating it. NO_PROXY stays
+    owned by DSH.
     PAC/WPAD and partial protocol maps cannot be represented faithfully by
     DSH's fixed environment policy; do not guess a proxy from a sample URL.
     The result reason contains no URL, credential, or environment-file value.
@@ -164,5 +165,43 @@ function Get-DshSystemProxyEnvironment {
     # expose exceptions: registry and file errors may contain sensitive data.
     $result.reason = 'unavailable'
     return $result
+  }
+}
+
+function Enter-DshOperationProxy {
+  <#
+    Apply the current Windows manual HTTP/HTTPS proxy to one installation or
+    build operation.  The returned scope is restored by Exit-DshOperationProxy;
+    normal DSH sessions must never inherit this fallback.
+  #>
+  param(
+    [System.Collections.IDictionary] $Environment = [Environment]::GetEnvironmentVariables('Process'),
+    [scriptblock] $SettingsProvider = {
+      Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction Stop
+    }
+  )
+
+  $fallback = Get-DshSystemProxyEnvironment -Environment $Environment -SettingsProvider $SettingsProvider
+  $saved = @{}
+  if ($fallback.reason -eq 'windows-system') {
+    foreach ($key in $fallback.environment.Keys) {
+      $saved[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+      [Environment]::SetEnvironmentVariable($key, [string]$fallback.environment[$key], 'Process')
+    }
+  }
+  [pscustomobject][ordered]@{
+    applied = $fallback.reason -eq 'windows-system'
+    reason = $fallback.reason
+    environment = $saved
+  }
+}
+
+function Exit-DshOperationProxy {
+  param([AllowNull()][object] $Scope)
+  if ($null -eq $Scope) { return }
+  $environment = $Scope.PSObject.Properties['environment']
+  if ($null -eq $environment -or $null -eq $environment.Value) { return }
+  foreach ($key in $environment.Value.Keys) {
+    [Environment]::SetEnvironmentVariable($key, $environment.Value[$key], 'Process')
   }
 }

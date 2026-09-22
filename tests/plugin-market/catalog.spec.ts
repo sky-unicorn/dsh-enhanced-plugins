@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { Readable } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -12,10 +13,11 @@ const config: Config = {
   pageSize: 12,
 }
 
-function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+function createHandler(manager?: object): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   let handler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined
   const ctx = {
     inject: (_keys: string[], setup: (value: Context) => void) => setup(ctx),
+    get: (name: string) => name === 'pluginManager' ? manager : undefined,
     credentials: { resolve: vi.fn(async () => undefined) },
     webServer: {
       register: vi.fn((entry: { handler: typeof handler }) => {
@@ -32,6 +34,20 @@ function createHandler(): (req: IncomingMessage, res: ServerResponse) => Promise
 
 async function get(handler: ReturnType<typeof createHandler>, url: string): Promise<{ status: number; value: unknown }> {
   const req = { method: 'GET', url, headers: {} } as IncomingMessage
+  let status = 0
+  let raw = ''
+  const res = {
+    writeHead(next: number) { status = next; return this },
+    end(value?: string) { raw = value ?? '' },
+  } as unknown as ServerResponse
+  await handler(req, res)
+  return { status, value: JSON.parse(raw) as unknown }
+}
+
+async function post(handler: ReturnType<typeof createHandler>, path: string, body: object): Promise<{ status: number; value: unknown }> {
+  const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), {
+    method: 'POST', url: `/api/plugin-market/${path}`, headers: { 'content-type': 'application/json' },
+  }) as IncomingMessage
   let status = 0
   let raw = ''
   const res = {
@@ -69,9 +85,9 @@ describe('catalog filtering', () => {
     vi.unstubAllGlobals()
   })
 
-  it('no longer exposes marketplace install, uninstall, preflight or credential endpoints', async () => {
+  it('does not expose legacy marketplace mutation endpoints', async () => {
     const handler = createHandler()
-    for (const path of ['install', 'uninstall', 'install-plan', 'jobs/old-id', 'config']) {
+    for (const path of ['uninstall', 'install-plan', 'jobs/old-id', 'config']) {
       for (const method of ['GET', 'POST', 'DELETE']) {
         let status = 0
         await handler({ method, url: `/api/plugin-market/${path}`, headers: {} } as IncomingMessage,
@@ -105,5 +121,23 @@ describe('catalog filtering', () => {
       status: 200,
       value: { total: 0, plugins: [] },
     })
+  })
+
+  it('routes web installation through the DSH manager with a scoped request', async () => {
+    const manager = {
+      installBundle: vi.fn(async (spec: string, options: object) => ({ changed: true, application: 'applied', stage: 'enable', target: spec, options })),
+      cancelInstall: vi.fn(async () => ({ status: 'cancelled' })),
+    }
+    const before = Object.fromEntries(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'].map(name => [name, process.env[name]]))
+    const result = await post(createHandler(manager), 'install', {
+      spec: 'github:owner/plugin',
+      requestId: '0123456789abcdef0123456789abcdef',
+    })
+    expect(result.status).toBe(200)
+    expect(result.value).toMatchObject({ ok: true, value: { target: 'github:owner/plugin' } })
+    expect(manager.installBundle).toHaveBeenCalledWith('github:owner/plugin', {
+      requestId: '0123456789abcdef0123456789abcdef',
+    })
+    for (const name of Object.keys(before)) expect(process.env[name]).toBe(before[name])
   })
 })

@@ -5,7 +5,7 @@ import type { MarketCatalog, MarketErrorBody, MarketSyncStatus } from '../contra
 import type { MarketInstaller, InstallSnapshot } from './installer.ts'
 import css from './PluginMarket.module.css'
 
-/** The catalog contributes sources; these actions delegate to DSH's public services. */
+/** The catalog contributes sources; installation remains owned by DSH through the market Host adapter. */
 export interface MarketActions {
   readonly installer: MarketInstaller
   readonly openManager: () => void

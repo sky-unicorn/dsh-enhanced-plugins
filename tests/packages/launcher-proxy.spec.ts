@@ -49,6 +49,13 @@ foreach ($value in @('https=127.0.0.1:7890','socks=127.0.0.1:1080','socks5://127
   $settings.ProxyServer = $value
   $cases[$value] = Get-DshSystemProxyEnvironment -Environment $envMap -SettingsProvider $provider
 }
+$settings.ProxyServer = '127.0.0.1:7893'
+$beforeHttp = [Environment]::GetEnvironmentVariable('HTTP_PROXY', 'Process')
+$beforeHttps = [Environment]::GetEnvironmentVariable('HTTPS_PROXY', 'Process')
+$scope = Enter-DshOperationProxy -Environment $envMap -SettingsProvider $provider
+$cases.scope = @{ applied = $scope.applied; http = [Environment]::GetEnvironmentVariable('HTTP_PROXY', 'Process'); https = [Environment]::GetEnvironmentVariable('HTTPS_PROXY', 'Process') }
+Exit-DshOperationProxy $scope
+$cases.scopeAfter = @{ http = [Environment]::GetEnvironmentVariable('HTTP_PROXY', 'Process'); https = [Environment]::GetEnvironmentVariable('HTTPS_PROXY', 'Process') }
 $settings | Add-Member AutoConfigURL 'https://pac.invalid/proxy.pac'
 $cases.pac = Get-DshSystemProxyEnvironment -Environment $envMap -SettingsProvider $provider
 $cases.unavailable = Get-DshSystemProxyEnvironment -Environment $envMap -SettingsProvider { throw 'private-error-detail' }
@@ -69,13 +76,16 @@ $cases | ConvertTo-Json -Depth 6 -Compress
       for (const key of ['https=127.0.0.1:7890', 'socks=127.0.0.1:1080', 'socks5://127.0.0.1:1080', 'http://host.invalid/path']) {
         expect(cases[key]).toEqual({ reason: 'unsupported-policy', environment: {} })
       }
+      expect(cases.scope).toEqual({ applied: true, http: 'http://127.0.0.1:7893/', https: 'http://127.0.0.1:7893/' })
+      expect(cases.scopeAfter.http).toBe(process.env.HTTP_PROXY)
+      expect(cases.scopeAfter.https).toBe(process.env.HTTPS_PROXY)
       expect(cases.pac).toEqual({ reason: 'automatic-policy', environment: {} })
       expect(cases.unavailable).toEqual({ reason: 'unavailable', environment: {} })
       expect(result.stdout + result.stderr).not.toContain('private-error-detail')
     } finally { rmSync(directory, { recursive: true, force: true }) }
   })
 
-  it('passes fallback through the real command runner into DSH fetch and keeps loopback direct', async () => {
+  it('does not pass the Windows proxy into a normal DSH command', async () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'dsh-launch-proxy-wire-'))
     const tunnels: string[] = []
     const proxy = createServer((request, response) => {
@@ -113,10 +123,10 @@ import assert from 'node:assert/strict';
 import { installProxyFromEnvironment } from ${JSON.stringify(pathToFileURL(dshProxy).href)};
 const dispose = await installProxyFromEnvironment({ get: name => process.env[name] === undefined ? undefined : { value: process.env[name] } }, () => {});
 try {
-  const response = await fetch('http://launcher-market.invalid/catalog', { signal: AbortSignal.timeout(5000) });
-  assert.deepEqual(await response.json(), { proxied: true });
+  assert.equal(process.env.HTTP_PROXY, undefined);
+  assert.equal(process.env.HTTPS_PROXY, undefined);
   assert.equal(await (await fetch('http://127.0.0.1:${directPort}', { signal: AbortSignal.timeout(5000) })).text(), 'direct');
-  console.log('DSH_PROXY_FETCH_OK');
+  console.log('DSH_DIRECT_FETCH_OK');
 } finally { await dispose(); }
 `)
       const shim = resolve(directory, 'dsh.ps1')
@@ -133,10 +143,10 @@ try {
       child.stdout.resume()
       const [code] = await once(child, 'exit')
       expect(code, errors + readFileSync(log, 'utf8')).toBe(0)
-      expect(tunnels).toEqual(['launcher-market.invalid:80'])
+      expect(tunnels).toEqual([])
       const output = readFileSync(log, 'utf8')
-      expect(output).toContain('DSH_PROXY_FETCH_OK')
-      expect(output).toContain('using the Windows HTTP/HTTPS proxy')
+      expect(output).toContain('DSH_DIRECT_FETCH_OK')
+      expect(output).not.toContain('using the Windows HTTP/HTTPS proxy')
       expect(output).not.toContain(`127.0.0.1:${port}`)
     } finally {
       proxy.close(); direct.close()

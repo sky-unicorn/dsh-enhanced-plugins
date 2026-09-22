@@ -25,6 +25,9 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
 
+$gitProxyHelper = Join-Path $PSScriptRoot 'DSH-Launcher.GitProxy.ps1'
+if (Test-Path -LiteralPath $gitProxyHelper -PathType Leaf) { . $gitProxyHelper }
+
 function Get-LauncherRoot {
   if (-not [string]::IsNullOrWhiteSpace($env:DEEPSEEK_HARNESS_LAUNCHER_HOME)) {
     return [System.IO.Path]::GetFullPath($env:DEEPSEEK_HARNESS_LAUNCHER_HOME).TrimEnd('\')
@@ -544,11 +547,12 @@ function Invoke-GitFetchWithRetry {
     [string] $RemoteUrl = '',
     [string] $LogPath = ''
   )
-  $gitProxyHelper = Join-Path $PSScriptRoot 'DSH-Launcher.GitProxy.ps1'
-  if (-not (Test-Path -LiteralPath $gitProxyHelper -PathType Leaf)) {
-    throw "Launcher Git proxy helper does not exist: $gitProxyHelper"
+  if ($null -eq (Get-Command -Name 'Resolve-SystemGitProxy' -CommandType Function -ErrorAction SilentlyContinue)) {
+    if (-not (Test-Path -LiteralPath $gitProxyHelper -PathType Leaf)) {
+      throw "Launcher Git proxy helper does not exist: $gitProxyHelper"
+    }
+    . $gitProxyHelper
   }
-  . $gitProxyHelper
   $gitProxy = Resolve-SystemGitProxy $RemoteUrl
   $usesTemporaryGitProxy = -not [string]::IsNullOrWhiteSpace($gitProxy)
   $proxyOptions = if ($usesTemporaryGitProxy) { @('-c', "http.proxy=$gitProxy") } else { @() }
@@ -1132,8 +1136,11 @@ function Initialize-PluginToolchain {
     runtimePath = Join-Path (Get-UpdateWorkspace $LauncherRoot) 'toolchain.json'
   })
   $helper = Join-Path $PSScriptRoot 'DSH-Launcher.Toolchain.cjs'
-  $planJson = & $runtimeNode $helper prepare $toolchainRequestPath
-  if ($LASTEXITCODE -ne 0) { throw '插件源码运行环境准备失败。请查看更新日志。' }
+  $proxyScope = Enter-DshOperationProxy
+  try {
+    $planJson = & $runtimeNode $helper prepare $toolchainRequestPath
+    if ($LASTEXITCODE -ne 0) { throw '插件源码运行环境准备失败。请查看更新日志。' }
+  } finally { Exit-DshOperationProxy $proxyScope }
   $toolchain = $planJson | ConvertFrom-Json
   if ($toolchain.summary.mode -ne 'sandbox') { return }
   if ($toolchain.summary.manager -ne 'pnpm') { throw 'DSH plugin installation requires pnpm.' }
@@ -1151,14 +1158,17 @@ function Invoke-LoggedCommand {
     [string[]] $Arguments,
     [string] $WorkingDirectory,
     [string] $LogPath,
-    [string] $Label
+    [string] $Label,
+    [switch] $UseSystemProxy
   )
   [System.IO.File]::AppendAllText($LogPath,
     "[$([DateTime]::Now.ToString('s'))] START $Label`r`n", $Utf8NoBom)
   $original = (Get-Location).Path
   $originalErrorActionPreference = $ErrorActionPreference
   $code = -1
+  $proxyScope = $null
   try {
+    if ($UseSystemProxy) { $proxyScope = Enter-DshOperationProxy }
     Set-Location -LiteralPath $WorkingDirectory
     # Windows PowerShell 5.1 represents native stderr lines as ErrorRecord
     # objects. npm writes ordinary warnings there, so Stop would abort on the
@@ -1169,6 +1179,7 @@ function Invoke-LoggedCommand {
     }
     $code = $LASTEXITCODE
   } finally {
+    if ($null -ne $proxyScope) { Exit-DshOperationProxy $proxyScope }
     $ErrorActionPreference = $originalErrorActionPreference
     Set-Location -LiteralPath $original
   }
@@ -1326,7 +1337,7 @@ function Assert-SourceDshCompatibility {
   Invoke-LoggedCommand $engine.Source @(
     '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
     '-File', $installer, '-PluginPath', $Source, '-DshCheckout', $Checkout, '-CheckCompatibility'
-  ) $Source $LogPath 'DSH compatibility check'
+  ) $Source $LogPath 'DSH compatibility check' -UseSystemProxy
 }
 
 function Invoke-Apply {
@@ -1445,11 +1456,14 @@ function Invoke-Apply {
       }
       $source = New-GitSnapshot $gitInfo $InitialRoot $LauncherRoot $requestId
       $updateMode = 'git-snapshot'
-    } else {
-      $source = New-DownloadedSnapshot $catalog $State $LauncherRoot $requestId
-      $bindingRoot = $source
-      $updateMode = 'downloaded-snapshot'
-    }
+      } else {
+        $downloadProxyScope = Enter-DshOperationProxy
+        try {
+          $source = New-DownloadedSnapshot $catalog $State $LauncherRoot $requestId
+        } finally { Exit-DshOperationProxy $downloadProxyScope }
+        $bindingRoot = $source
+        $updateMode = 'downloaded-snapshot'
+      }
     $catalog = Get-Catalog $source
     $validIds = @($catalog.features | Where-Object scope -eq 'profile' | ForEach-Object id)
     $retiredIds = @($catalog.retiredFeatures | ForEach-Object { $_.id })
@@ -1507,14 +1521,14 @@ function Invoke-Apply {
   Assert-SourceDshCompatibility $source $dshCheckout $logPath
   Initialize-PluginToolchain $Request $source $dshCheckout $LauncherRoot $logPath
   $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
-  Invoke-LoggedCommand $npm.Source @('ci', '--no-audit', '--no-fund', '--ignore-scripts=false') $source $logPath 'npm ci'
+  Invoke-LoggedCommand $npm.Source @('ci', '--no-audit', '--no-fund', '--ignore-scripts=false') $source $logPath 'npm ci' -UseSystemProxy
   # The repository tsconfig files intentionally resolve DSH types from the
   # sibling development checkout.  This request workspace is isolated under
   # Launcher data, so a repository-wide typecheck would resolve that relative
   # path against the wrong parent directory.  Installation only needs verified
   # publishable artifacts; build them here and validate every selected runtime
   # entry before stopping DSH or changing a Profile.
-  Invoke-LoggedCommand $npm.Source @('run', 'build') $source $logPath 'npm run build'
+  Invoke-LoggedCommand $npm.Source @('run', 'build') $source $logPath 'npm run build' -UseSystemProxy
   $allDesired = @($profileTargets | ForEach-Object { $_.desired } | Select-Object -Unique)
   Assert-CatalogRuntimeEntries $catalog $allDesired
   $serviceState = Stop-LauncherOwnedDsh $LauncherRoot $logPath
@@ -1542,17 +1556,20 @@ function Invoke-Apply {
         )
         if ($profileIndex -lt ($profileTargets.Count - 1)) { $installerProcessArguments += '-SkipLauncherInstall' }
         else { $installerProcessArguments += '-RestartLauncherAfterUpdate' }
-        $managerErrorActionPreference = $ErrorActionPreference
-        try {
-          # DSH writes its echoed native command line to stderr even when the
+          $managerErrorActionPreference = $ErrorActionPreference
+          $installerProxyScope = $null
+          try {
+            $installerProxyScope = Enter-DshOperationProxy
+            # DSH writes its echoed native command line to stderr even when the
           # command succeeds. Collect that diagnostic stream in the log and
           # use the installer's real exit code as the success boundary.
           $ErrorActionPreference = 'Continue'
           $lines = @(& $installerPowerShell.Source @installerProcessArguments 2>&1)
           $exitCode = $LASTEXITCODE
-        } finally {
-          $ErrorActionPreference = $managerErrorActionPreference
-        }
+          } finally {
+            if ($null -ne $installerProxyScope) { Exit-DshOperationProxy $installerProxyScope }
+            $ErrorActionPreference = $managerErrorActionPreference
+          }
         [System.IO.File]::AppendAllText($logPath, (($lines | Out-String) + [Environment]::NewLine), $Utf8NoBom)
         if ($exitCode -ne 0) {
           throw "Profile '$($targetProfile.name)' 安装核心执行失败（退出码 $exitCode），请查看日志 '$logPath'。"

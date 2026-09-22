@@ -46,6 +46,12 @@ if ($CheckCompatibility -and ($UninstallLauncher -or $ListFeatures)) {
 
 . (Join-Path $PSScriptRoot 'dsh-compatibility.ps1')
 
+$proxyHelper = @(
+  (Join-Path $PSScriptRoot '..\packages\windows-launcher\src\DSH-Launcher.GitProxy.ps1'),
+  (Join-Path $PSScriptRoot '..\packages\windows-launcher\lib\DSH-Launcher.GitProxy.ps1')
+) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+if ($null -ne $proxyHelper) { . $proxyHelper }
+
 function Get-DshSourceVersion {
   param([Parameter(Mandatory = $true)][string] $Checkout)
   $dshManifestPath = Join-Path $Checkout 'package.json'
@@ -495,8 +501,10 @@ function Ensure-PluginBuild {
   $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop |
     Select-Object -First 1
   $originalDirectory = (Get-Location).Path
+  $proxyScope = $null
   try {
     Set-Location -LiteralPath $RepositoryRoot
+    $proxyScope = Enter-DshOperationProxy
     Write-Host 'Installing the exact locked dependencies for dsh-enhanced-plugins...'
     & $npm.Source ci --no-audit --no-fund --ignore-scripts=false
     if ($LASTEXITCODE -ne 0) {
@@ -508,6 +516,7 @@ function Ensure-PluginBuild {
       throw "npm run check failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
     }
   } finally {
+    if ($null -ne $proxyScope) { Exit-DshOperationProxy $proxyScope }
     Set-Location -LiteralPath $originalDirectory
   }
 
@@ -517,6 +526,7 @@ function Ensure-PluginBuild {
     $missing += @($entries | ForEach-Object { "$($package.PackageName):$_" })
   }
   if ($missing.Count -gt 0) {
+    $proxyScope = Enter-DshOperationProxy
     try {
       Set-Location -LiteralPath $RepositoryRoot
       Write-Host 'The full check left runtime entries missing; rebuilding explicitly...'
@@ -525,6 +535,7 @@ function Ensure-PluginBuild {
         throw "npm run build failed for dsh-enhanced-plugins with exit code $LASTEXITCODE."
       }
     } finally {
+      Exit-DshOperationProxy $proxyScope
       Set-Location -LiteralPath $originalDirectory
     }
     $missing = @()
@@ -1257,9 +1268,13 @@ if ($ListFeatures) {
 $checkoutCandidate = if ($DshCheckout -ne '') { $DshCheckout }
   else { Join-Path $pluginRoot '..\deepseek-harness' }
 $checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
-$dshVersion = Get-DshSourceVersion -Checkout $checkout
-$compatibility = Resolve-DshCompatibility -RepositoryRoot $pluginRoot -PluginVersion $pluginManifest.version -DshVersion $dshVersion
-Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -DshVersion $dshVersion -Catalog $catalog -Compatibility $compatibility
+if ($null -eq $proxyHelper) { throw 'Installation proxy helper is missing; re-extract the complete plugin package.' }
+$compatibilityProxyScope = Enter-DshOperationProxy
+try {
+  $dshVersion = Get-DshSourceVersion -Checkout $checkout
+  $compatibility = Resolve-DshCompatibility -RepositoryRoot $pluginRoot -PluginVersion $pluginManifest.version -DshVersion $dshVersion
+  Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -DshVersion $dshVersion -Catalog $catalog -Compatibility $compatibility
+} finally { Exit-DshOperationProxy $compatibilityProxyScope }
 if ($CheckCompatibility) { return }
 
 $requestedFeatures = @(
@@ -1370,10 +1385,13 @@ try {
   if ($selectedPackages.Count -gt 0) {
     $packageArchives = @(New-ProfileBundleArchives -Packages $selectedPackages -ProfileName $Profile)
     Write-Host "Installing selected DSH bundles for feature set '$selectedLabel' into profile '$Profile'..."
-    & $executable @prefixArguments plugin --profile $Profile add @packageArchives --yes
-    if ($LASTEXITCODE -ne 0) {
-      throw "DSH plugin installation failed for profile '$Profile' with exit code $LASTEXITCODE; existing bundles and companions were not removed."
-    }
+    $proxyScope = Enter-DshOperationProxy
+    try {
+      & $executable @prefixArguments plugin --profile $Profile add @packageArchives --yes
+      if ($LASTEXITCODE -ne 0) {
+        throw "DSH plugin installation failed for profile '$Profile' with exit code $LASTEXITCODE; existing bundles and companions were not removed."
+      }
+    } finally { Exit-DshOperationProxy $proxyScope }
   } else {
     Write-Host "Feature set '$selectedLabel' contains no DSH bundles to add."
   }
@@ -1413,10 +1431,13 @@ try {
 
   if ($packagesToRemove.Count -gt 0) {
     Write-Host "Removing bundles outside feature set '$selectedLabel': $($packagesToRemove -join ', ')..."
-    & $executable @prefixArguments plugin --profile $Profile remove @packagesToRemove --yes
-    if ($LASTEXITCODE -ne 0) {
-      throw "Selected packages were installed, but removal of conflicting bundles failed for profile '$Profile' with exit code $LASTEXITCODE."
-    }
+    $proxyScope = Enter-DshOperationProxy
+    try {
+      & $executable @prefixArguments plugin --profile $Profile remove @packagesToRemove --yes
+      if ($LASTEXITCODE -ne 0) {
+        throw "Selected packages were installed, but removal of conflicting bundles failed for profile '$Profile' with exit code $LASTEXITCODE."
+      }
+    } finally { Exit-DshOperationProxy $proxyScope }
   } else {
     Write-Host "No conflicting enhanced or legacy bundles found in profile '$Profile'."
   }

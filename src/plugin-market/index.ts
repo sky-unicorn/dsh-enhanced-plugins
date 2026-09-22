@@ -3,7 +3,7 @@
 import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-host-webserver'
@@ -18,6 +18,7 @@ import {
   compareByStars,
   dshBundleEvidence,
 } from './market-utils.js'
+import { withWindowsInstallProxy } from './system-proxy.js'
 
 export interface Config {
   topic: string
@@ -93,6 +94,17 @@ interface ChannelMetadata {
   readonly etag: string
 }
 
+type PluginInstallRequestId = string & { readonly __pluginInstallRequestId: unique symbol }
+interface InstallBundleOptions {
+  readonly requestId: PluginInstallRequestId
+  readonly approvedBuilds?: string[]
+}
+
+interface PluginManagerOperations {
+  readonly installBundle: (spec: string, options: InstallBundleOptions) => Promise<unknown>
+  readonly cancelInstall: (requestId: PluginInstallRequestId) => Promise<unknown>
+}
+
 class HttpError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
     super(message)
@@ -110,6 +122,57 @@ function json(res: ServerResponse, status: number, value: unknown): void {
     'x-content-type-options': 'nosniff',
   })
   res.end(JSON.stringify(value))
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  let size = 0
+  const chunks: Buffer[] = []
+  for await (const chunk of req) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    size += bytes.length
+    if (size > 64 * 1024) throw new HttpError(413, 'REQUEST_TOO_LARGE', '安装请求过大。')
+    chunks.push(bytes)
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  } catch {
+    throw new HttpError(400, 'INVALID_REQUEST', '安装请求不是有效的 JSON。')
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new HttpError(400, 'INVALID_REQUEST', '安装请求必须是 JSON 对象。')
+  }
+  return parsed as Record<string, unknown>
+}
+
+function pluginManagerOf(ctx: Context): PluginManagerOperations | undefined {
+  const get = (ctx as unknown as { readonly get?: (name: string) => unknown }).get
+  if (typeof get !== 'function') return undefined
+  const candidate = get.call(ctx, 'pluginManager') as Partial<PluginManagerOperations> | undefined
+  if (typeof candidate?.installBundle !== 'function' || typeof candidate.cancelInstall !== 'function') return undefined
+  return candidate as PluginManagerOperations
+}
+
+function installationOptions(body: Record<string, unknown>): { readonly spec: string; readonly options: InstallBundleOptions } {
+  const spec = body.spec
+  const requestId = body.requestId
+  const approvedBuilds = body.approvedBuilds
+  if (typeof spec !== 'string' || spec.trim() === '' || spec.length > 4096 || spec.startsWith('-')
+    || typeof requestId !== 'string' || !/^[0-9a-f]{32}$/iu.test(requestId)) {
+    throw new HttpError(400, 'INVALID_REQUEST', '安装请求的来源或请求 ID 无效。')
+  }
+  if (approvedBuilds !== undefined && (!Array.isArray(approvedBuilds)
+    || approvedBuilds.length > 100
+    || approvedBuilds.some(value => typeof value !== 'string' || value.length > 256))) {
+    throw new HttpError(400, 'INVALID_REQUEST', '构建授权列表无效。')
+  }
+  return {
+    spec,
+    options: {
+      requestId: requestId as PluginInstallRequestId,
+      ...(approvedBuilds === undefined ? {} : { approvedBuilds: approvedBuilds as string[] }),
+    },
+  }
 }
 
 function dshHome(): string {
@@ -352,10 +415,10 @@ function discover(channel: ChannelDocument, page: number, pageSize: number, quer
 export function apply(ctx: Context, config: Config): void {
   // Desktop owns plugin transactions and deliberately has no HTTP server.
   // Wait for the optional Web carrier so HMR/dependency replacement remains reversible.
-  ctx.inject(['webServer'], web => applyWeb(web, config))
+  ctx.inject(['webServer'], web => applyWeb(web, config, ctx))
 }
 
-function applyWeb(ctx: Context, config: Config): void {
+function applyWeb(ctx: Context, config: Config, owner: Context): void {
   let channelSnapshot: Promise<ChannelDocument> | undefined
   let syncStatus: MarketSyncStatus = { state: 'idle' }
   let syncController: AbortController | undefined
@@ -419,6 +482,21 @@ function applyWeb(ctx: Context, config: Config): void {
           }
           json(res, 202, syncStatus)
           return
+        }
+        if (req.method === 'POST' && (pathname === '/api/plugin-market/install' || pathname === '/api/plugin-market/cancel')) {
+          const manager = pluginManagerOf(owner)
+          if (manager === undefined) throw new HttpError(503, 'PLUGIN_MANAGER_UNAVAILABLE', '当前 DSH 没有可用的插件管理器。')
+          const body = await readJsonBody(req)
+          if (pathname.endsWith('/cancel')) {
+            const requestId = body.requestId
+            if (typeof requestId !== 'string' || !/^[0-9a-f]{32}$/iu.test(requestId)) {
+              throw new HttpError(400, 'INVALID_REQUEST', '取消请求的请求 ID 无效。')
+            }
+            return json(res, 200, { ok: true, value: await manager.cancelInstall(requestId as PluginInstallRequestId) })
+          }
+          const { spec, options } = installationOptions(body)
+          const value = await withWindowsInstallProxy(() => manager.installBundle(spec, options))
+          return json(res, 200, { ok: true, value })
         }
         json(res, 404, { error: { code: 'NOT_FOUND', message: '接口不存在。' } } satisfies MarketErrorBody)
       } catch (error) {
