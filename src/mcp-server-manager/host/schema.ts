@@ -75,10 +75,22 @@ export const ServerDefinition = z.union([
 /** Settings namespace key for the `mcp` section. */
 export const MCP_SETTINGS_NAMESPACE = 'mcp'
 
+/** Copy a Loader config snapshot, unwrapping DSH 0.1.7 volatile references. */
+export function snapshotMcpConfig(value: unknown): Config {
+  const visit = (item: unknown): unknown => {
+    if (item !== null && typeof item === 'object' && !Array.isArray(item)
+      && typeof (item as { get?: unknown }).get === 'function') return visit((item as { get: () => unknown }).get())
+    if (Array.isArray(item)) return item.map(visit)
+    if (item !== null && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, visit(child)]))
+    return item
+  }
+  return visit(value) as Config
+}
+
 /** The `mcp` settings namespace schema. */
 export const Config = z.object({
   servers: z.dict(ServerDefinition, z.string().pattern(SERVER_NAME_PATTERN)).default({}),
-}) as unknown as z<Config>
+}).volatile() as unknown as z<Config>
 
 /**
  * Build the `mcp-client` plugin config for one server from its record key

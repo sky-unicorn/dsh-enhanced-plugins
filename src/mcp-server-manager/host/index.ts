@@ -21,7 +21,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import { McpServerManager } from './manager.js'
 import { McpConfigRemote } from './remote.js'
-import { MCP_SETTINGS_NAMESPACE, Config, type Config as McpConfig } from './schema.js'
+import { MCP_SETTINGS_NAMESPACE, snapshotMcpConfig, type Config as McpConfig } from './schema.js'
+declare module '@deepseek-ai/cordis' {
+  interface Events { 'loader/volatile-update'(paths: readonly (readonly string[])[]): void }
+}
 import { assertMcpConfigValid } from './validation.js'
 
 export type {
@@ -59,22 +62,22 @@ export const inject = ['tools']
  */
 export function apply(ctx: Context, config: McpConfig): void {
   const manager = new McpServerManager(ctx)
-  let current: () => McpConfig = () => config
+  let current: () => McpConfig = () => snapshotMcpConfig(config)
+  const reconcile = (): void => {
+    const next = current()
+    assertMcpConfigValid(next)
+    manager.reconcile(next)
+  }
 
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, MCP_SETTINGS_NAMESPACE, Config, config, {
-      validate: assertMcpConfigValid,
-      setSource: (source) => { current = source },
-      // The settings seam reports every resolved change; reconcile against the
-      // latest value. Unchanged servers are left alone (deep-equal short-circuit).
-      onChange: () => { manager.reconcile(current()) },
-    })
+    settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
   })
+  ctx.on('loader/volatile-update', reconcile)
 
   // Serve the composition base even before a settings provider attaches; the
   // attach-time `onChange` re-runs against the same resolved value and no-ops
   // through deep-equality when only the base layer is present.
-  manager.reconcile(current())
+  reconcile()
 
   // The plugin-owned configuration Remote rides the settings-injected fiber:
   // its constructor registers it there, so it exists exactly while the

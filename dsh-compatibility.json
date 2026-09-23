@@ -2,6 +2,17 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "pluginVersion": "7.3.0",
+      "dsh": [
+        {
+          "version": "0.1.7-alpha.1",
+          "commits": [
+            "c36a83ff6bb95e3f82cf79f9be7c724270a8aa61"
+          ]
+        }
+      ]
+    },
+    {
       "pluginVersion": "7.2.5",
       "dsh": [
         {

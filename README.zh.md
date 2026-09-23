@@ -29,6 +29,11 @@
 
 ## 快速开始
 
+### 7.3.0：适配 DSH 0.1.7-alpha.1
+
+- 设置表单迁移到 DSH 0.1.7 的 volatile 配置 API，Agent Team 改用 session projection，工具结果消息改用顶层字段，并保留 edit-last-message 的插件归属信息。
+- 聚合包、全部独立 bundle 和 Windows Launcher 统一为 `7.3.0`，支持已验证提交 `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` 的 DSH `0.1.7-alpha.1`；Beta 功能 `agent-team-monitor` 和 `model-router` 均以此 DSH 版本为目标。
+
 ### 7.2.5：原生插件安装与系统代理
 
 - 插件社区通过 Host 端点调用 DSH 原生插件管理器安装，不再自行预检、维护安装记录或执行卸载；构建授权和安装结果由 DSH 决定。
@@ -54,7 +59,7 @@
 
 - Node.js 22.19.x，或 Node.js 24 及更高版本。
 - 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
-- 支持的 DSH 源码基线为 [`0.1.6-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/ddefc45fbc7f8e46dd73185e68295696d1297887)，后续验证通过的版本可追加到 [`dsh-compatibility.json`](dsh-compatibility.json)，无需发布新的插件代码。
+- 支持的 DSH 源码基线为 [`0.1.7-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61)，后续验证通过的版本可追加到 [`dsh-compatibility.json`](dsh-compatibility.json)，无需发布新的插件代码。
 - 此版本 DSH 的 Session 文件锁已不再依赖 `fs-ext`。原生构建要求以目标 checkout 为准；Launcher 自身使用系统 .NET Framework 的 `csc.exe`。不要跳过依赖安装脚本。
 - Windows Launcher、原生提示音和桌面宠物需要带 Windows PowerShell 5.1 的完整 Windows 桌面版本，即 Windows 10 1607 或更高版本，或 Windows 11。所需系统能力在 Home、Pro、Education / Pro Education 与 Enterprise 上相同；Windows S 模式、IoT / 精简版本以及 Windows 10 1507、1511 不在这一基线内。已经超出微软生命周期的 Windows 功能更新只能尽力兼容，因为所需 Node.js 工具链不保证支持已停止维护的操作系统。安装器不依赖某一个特定的 `tar.exe`；其余功能可跨平台使用。
 
@@ -232,7 +237,7 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 内置快照和自动索引同步不需要 GitHub Token，因此已移除市场的 Token 配置入口。索引下载沿用 DSH 已显式配置的全局传输及代理规则。Launcher 管理的源码和插件安装，以及网页插件社区的 Host 安装端点，只在对应操作期间使用当前 Windows 手动 HTTP/HTTPS 代理；正常 DSH 流量保持直连，除非用户显式配置代理。市场提供索引仓库的 `github:owner/repo` 来源，不猜测同名 npm 包是否已发布。目录收录校验用于索引质量，不能保证插件在当前环境安装成功。
 
-本实现按本地 DSH `ddefc45f` 的公开 Remote 接口验证。在线发布教程主要描述 CLI 路径；浏览器安装请求由市场 Host 代理到当前版本的 `pluginManager`，不复制原生 UI 的私有组件或状态。
+本实现按本地 DSH `c36a83ff` 的公开 Remote 接口验证。在线发布教程主要描述 CLI 路径；浏览器安装请求由市场 Host 代理到当前版本的 `pluginManager`，不复制原生 UI 的私有组件或状态。
 
 页面会显示索引生成时间；超过 24 小时未更新时明确提示，同时继续保留上次可用快照。
 
@@ -316,7 +321,7 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.2.5`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.3.0`。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件；远端有效但没有匹配当前插件及 DSH 版本的记录时也会检查包内文件。只有两处都不支持当前 DSH 版本才拒绝安装。每次检查重新获取，不覆盖本地回退文件。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
@@ -433,7 +438,7 @@ Windows 上可额外运行 `npm run verify:compat`：在独立临时 DSH home �
 
 `npm run verify:plugin-ui` 在真实 Web profile 验证 MCP 保存与草稿丢弃、插件热启停，以及真实 Team 的监控与成员跳转，并检查 light/dark 配色。设置 `DSH_VERIFY_AGGREGATE=1` 验证聚合包；默认验证两个相关独立包的组合。发布前可将 `DSH_COMPATIBILITY_URL` 指向隔离测试服务，使验证使用待发布的兼容表；远端没有匹配记录时改用包内表。
 
-DSH `0.1.6-alpha.2` 的实际配置入口是 `plugins.row.config`／`plugins.bundle.config`；在线设置卡片 cookbook 仍可能展示旧 `settings.plugin.item`，本版本以已验证提交的源码和类型为准。
+DSH `0.1.7-alpha.1` 的实际配置入口是 `plugins.row.config`／`plugins.bundle.config`；在线设置卡片 cookbook 仍可能展示旧 `settings.plugin.item`，本版本以已验证提交的源码和类型为准。
 
 ## License
 

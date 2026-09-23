@@ -58,7 +58,19 @@ const Size = z.union([
 
 export const SETTINGS_NAMESPACE = NOTIFICATION_SETTINGS_NAMESPACE
 
-export const Config: z<NotificationSettings> = z.object({
+/** Copy a Loader config snapshot, unwrapping DSH 0.1.7 volatile references. */
+export function snapshotNotificationSettings(value: unknown): NotificationSettings {
+  const visit = (item: unknown): unknown => {
+    if (item !== null && typeof item === 'object' && !Array.isArray(item)
+      && typeof (item as { get?: unknown }).get === 'function') return visit((item as { get: () => unknown }).get())
+    if (Array.isArray(item)) return item.map(visit)
+    if (item !== null && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, visit(child)]))
+    return item
+  }
+  return visit(value) as NotificationSettings
+}
+
+export const Config = z.object({
   completionSound: Sound.default(DEFAULT_NOTIFICATION_SETTINGS.completionSound)
     .description('Sound played when a top-level task completes.'),
   confirmationSound: Sound.default(DEFAULT_NOTIFICATION_SETTINGS.confirmationSound)
@@ -89,4 +101,4 @@ export const Config: z<NotificationSettings> = z.object({
     .description('Desktop pet size in device-independent pixels.'),
   petPosition: Position.default(DEFAULT_NOTIFICATION_SETTINGS.petPosition)
     .description('Fallback corner used before a dragged desktop-pet position is remembered.'),
-})
+}).volatile()

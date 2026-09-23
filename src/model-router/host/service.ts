@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-settings'
 import { MAIN_POLICY, childPolicy, taskPacket, validateReport, missingDivision, type TaskAction } from './workflow.js'
 import type { SelectionBridge } from './selection-bridge.js'
 import { missingModelTiers } from '../shared.js'
@@ -18,7 +19,7 @@ import { domainSpec, v4DomainSpec, legacyDomainSpec, v2DomainSpec, v3DomainSpec,
 import { reportedTotal } from '../accounting.js'
 import { runQuerySchema } from '../schema.js'
 import type { RunQuery, RunPage } from '../shared.js'
-import { Config } from './config.js'
+import { snapshotRouterConfig } from './config.js'
 import { workspaceIdentity, WorkspaceLocks } from './coordination.js'
 import { DELEGATE_TOOL, REVIEW_TOOL, TASK_TOOL, NAMESPACE, roleTier, type Tier, type RouteReason, type RepairReview, type ReviewDecision, type RouterConfig, type RunRecord, type ChildTask, type SessionControl, type ModelRef, type RouterSnapshot } from '../shared.js'
 
@@ -68,10 +69,8 @@ export default class ModelRouter extends Service {
 
   constructor(ctx: Context, config: RouterConfig) {
     super(ctx, 'modelRouter')
-    this.source = () => config
-    ctx.settings.installSection(ctx, NAMESPACE, Config, config, {
-      setSource: source => { this.source = source }, onChange() {}, validate: value => this.validate(value),
-    })
+    this.source = () => snapshotRouterConfig(config)
+    ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber))
     this.ready = this.open()
     ctx.effect(() => async () => {
       this.lifetime.abort()

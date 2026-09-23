@@ -1,3 +1,12 @@
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Preserve the plugin attribution used by existing edit-last-message history. */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    plugin: { kind: 'plugin'; plugin: string } & ContextFormed
+  }
+}
+
 /** Normalized edit identity decoded from current attribution or a historical message source. */
 export interface EditLastMessageSource {
   readonly kind: typeof EDIT_LAST_MESSAGE_SOURCE_KIND

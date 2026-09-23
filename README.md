@@ -29,6 +29,10 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 ## Quick start
 
+### 7.3.0: DSH 0.1.7-alpha.1 compatibility
+
+- Updated settings forms to the DSH 0.1.7 volatile configuration API, migrated Agent Team session projections and tool-result messages, and preserved edit-last-message attribution.
+- The aggregate, all standalone bundles, and Windows Launcher use `7.3.0`, supporting DSH `0.1.7-alpha.1` at verified commit `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`. The Beta `agent-team-monitor` and `model-router` features target this DSH release.
 ### 7.2.5: native plugin installation and system proxy support
 
 - Plugin Community delegates to the native DSH plugin manager through its Host endpoint, without its own preflight, installation records, or removal flow. DSH owns build approval and installation outcomes.
@@ -55,7 +59,7 @@ Recovered inbox edits retain replacement semantics. Missing or stale edit target
 
 - Node.js 22.19.x, or Node.js 24 and later.
 - A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
-- Supported DSH source baseline: [`0.1.6-alpha.2`](https://github.com/deepseek-ai/deepseek-harness/tree/ddefc45fbc7f8e46dd73185e68295696d1297887). Additional validated versions can be listed in [`dsh-compatibility.json`](dsh-compatibility.json) without a plugin code release.
+- Supported DSH source baseline: [`0.1.7-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61). Additional validated versions can be listed in [`dsh-compatibility.json`](dsh-compatibility.json) without a plugin code release.
 - This DSH version no longer requires `fs-ext` for Session locking. Follow the target checkout’s native build requirements; Launcher uses the system .NET Framework `csc.exe`. Do not skip dependency install scripts.
 - Windows Launcher, native sounds, and the desktop pet require a full Windows desktop edition with Windows PowerShell 5.1: Windows 10 version 1607 or later, or Windows 11. The required OS capabilities are the same on Home, Pro, Education / Pro Education, and Enterprise; Windows in S mode, IoT / reduced-footprint editions, and Windows 10 versions 1507 and 1511 are outside this baseline. Windows feature updates outside Microsoft's lifecycle are best-effort because the required Node.js toolchain does not guarantee end-of-life operating systems. The installer does not depend on a particular `tar.exe`. The remaining features are cross-platform.
 
@@ -233,7 +237,7 @@ The [`.github/workflows/update-plugin-index.yml`](.github/workflows/update-plugi
 
 The bundled snapshot and index synchronization need no GitHub token, so the market’s token settings have been removed. Index downloads use DSH’s explicit global transport and proxy rules. Launcher-managed source and plugin installation operations, plus the Web Plugin Community install endpoint, receive the current Windows manual HTTP/HTTPS proxy only for the duration of those operations; normal DSH traffic remains direct unless the user explicitly configured a proxy. The market supplies `github:owner/repo` from the index rather than assuming a matching npm package has been published. Catalog validation is an index-quality check, not an installation guarantee.
 
-This implementation is verified against the public Remote interface in local DSH commit `ddefc45f`. The online publishing tutorial primarily describes the CLI path; the browser uses the current `pluginManager` without importing private native UI components or state.
+This implementation is verified against the public Remote interface in local DSH commit `c36a83ff`. The online publishing tutorial primarily describes the CLI path; the browser uses the current `pluginManager` without importing private native UI components or state.
 
 The page displays index generation time. An index older than 24 hours receives an explicit warning while the last usable snapshot remains available.
 
@@ -317,7 +321,7 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.2.5`.
+- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.3.0`.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** before building, stopping services, or changing a profile, the installer and Launcher updater fetch the compatibility file from this repository’s GitHub `master` branch. A failed request, an eight-second download timeout, or malformed/oversized data falls back to the bundled file with a warning. Every check fetches again; it does not overwrite the local fallback. The remote table takes precedence when it contains the current plugin and DSH version. If it omits either, or lists no DSH version for that plugin, the installer checks the bundled table; installation stops only when neither supports the checkout. Mixed package versions also stop installation. Commits belong to individual DSH versions; an unlisted commit, local tracked changes, or no Git metadata produces an unverified-source warning.
@@ -434,7 +438,7 @@ Browser bundles use CSS Modules and consume only DSH `--dsw-alias-*` semantic th
 
 `npm run verify:plugin-ui` checks MCP saves and discarded drafts, live plugin disable/enable, and real Team monitoring and member navigation in an assembled Web profile, including light/dark appearance. Set `DSH_VERIFY_AGGREGATE=1` for the aggregate bundle; the default tests the two affected standalone bundles together. Before publication, `DSH_COMPATIBILITY_URL` can select an isolated test server serving the pending compatibility table; production selection checks the bundled table when valid remote data lacks a matching plugin/DSH pair.
 
-The validated DSH `0.1.6-alpha.2` source uses `plugins.row.config` / `plugins.bundle.config`; the online settings-card cookbook may still show `settings.plugin.item`. This release follows the tested source and type declarations.
+The validated DSH `0.1.7-alpha.1` source uses `plugins.row.config` / `plugins.bundle.config`; the online settings-card cookbook may still show `settings.plugin.item`. This release follows the tested source and type declarations.
 
 ## License
 

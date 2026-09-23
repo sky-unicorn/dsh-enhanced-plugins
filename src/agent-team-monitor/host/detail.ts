@@ -70,8 +70,8 @@ export async function describeExecutionDetail(reads: CatalogReads, request: unkn
   } else if (event.type === 'tool/call') {
     input = argumentsText(event.data.arguments)
     const result = events.find((item): item is Extract<SessionEvent, { type: 'tool/result' }> => item.type === 'tool/result'
-      && item.data.turn === event.data.turn && item.data.step === event.data.step && item.data.message.content[0].toolCallId === event.data.callId)
-    if (result) output = textContent(result.data.message.content[0].content)
+      && item.data.turn === event.data.turn && item.data.step === event.data.step && item.data.message.toolCallId === event.data.callId)
+    if (result) output = textContent(result.data.message.content)
   } else if (event.type === 'step/start' || event.type === 'turn/start') {
     const start = events.indexOf(event)
     const subsequent = events.slice(start + 1)

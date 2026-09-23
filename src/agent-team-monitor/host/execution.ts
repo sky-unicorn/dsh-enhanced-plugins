@@ -55,10 +55,10 @@ export function describeExecution(events: readonly SessionEvent[], inherited: nu
         break
       }
       case 'tool/result': {
-        const result = event.data.message.content[0]
-        const node = calls.get(`${event.data.turn}:${event.data.step}:${result.toolCallId}`)
+        const message = event.data.message
+        const node = calls.get(`${event.data.turn}:${event.data.step}:${message.toolCallId}`)
         const code = event.data.error?.code
-        const status = code === TOOL_OUTCOME_UNKNOWN || code === TOOL_NOT_STARTED ? 'interrupted' : result.isError ? 'failed' : 'completed'
+        const status = code === TOOL_OUTCOME_UNKNOWN || code === TOOL_NOT_STARTED ? 'interrupted' : message.isError ? 'failed' : 'completed'
         close(node, event.time, status)
         if (status === 'failed') failedSteps.add(`${event.data.turn}:${event.data.step}`)
         break

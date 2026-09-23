@@ -18,6 +18,9 @@ async function boot() {
   const ctx = new Context()
   const settingsFiber = ctx.plugin(MemorySettings)
   await settingsFiber.await()
+  ctx.settings.register(SETTINGS_NAMESPACE, Host.Config, {
+    base: { claudeCode: false, codex: false },
+  })
   const hostFiber = ctx.plugin(Host, { claudeCode: false, codex: false })
   await hostFiber.await()
   const settings = ctx.get('settings') as unknown as MemorySettings

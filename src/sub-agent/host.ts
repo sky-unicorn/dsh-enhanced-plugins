@@ -3,15 +3,15 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { SETTINGS_NAMESPACE } from './settings.js'
+import { SETTINGS_NAMESPACE, snapshotProductToggleSettings } from './settings.js'
 import type { ProductToggleSettings } from './shared.js'
 
 export const name = 'subagent-product-toggles'
 export const inject: string[] = []
 
-export const Config: z<ProductToggleSettings> = z.object({
-  claudeCode: z.boolean().default(false).description('Expose Claude Code to agents.'),
-  codex: z.boolean().default(false).description('Expose Codex to agents.'),
+export const Config = z.object({
+  claudeCode: z.boolean().default(false).description('Expose Claude Code to agents.').volatile(),
+  codex: z.boolean().default(false).description('Expose Codex to agents.').volatile(),
 })
 
 // tsdown intentionally preserves stage-3 decorator syntax, which Node 22 cannot
@@ -80,7 +80,7 @@ class SubagentProductsRemote extends TypertRemoteService {
 
 export function apply(ctx: Context, config: ProductToggleSettings): void {
   ctx.inject(['settings'], (scope) => {
-    scope.settings.register(SETTINGS_NAMESPACE, Config, { base: config })
+    scope.effect(() => scope.settings.configure({ auto: false }, ctx.fiber))
     new SubagentProductsRemote(scope)
   })
 }

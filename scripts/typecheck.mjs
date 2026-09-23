@@ -10,7 +10,7 @@ const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepsee
 const formatVersion = path => readFileSync(path, 'utf8').match(/SESSION_FORMAT_VERSION\s*=\s*(\d+)/)?.[1]
 const source = formatVersion(resolve(dsh, 'packages/core/session/src/types.ts'))
 const built = formatVersion(resolve(dsh, 'packages/core/session/lib/types/types.d.ts'))
-if (source !== '3' || source !== built) throw new Error(`DSH Session declarations are stale or incompatible (source=${source}, built=${built}); build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.`)
+if (source !== '4' || source !== built) throw new Error(`DSH Session declarations are stale or incompatible (source=${source}, built=${built}); build the DSH 0.1.7-alpha.1 target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.`)
 const chatOwner = readFileSync(resolve(dsh, 'packages/client/ui-chat/lib/types/client/contract/slots.d.ts'), 'utf8')
 if (!chatOwner.includes('openSkill:')) throw new Error('DSH Chat declarations predate sent-reference previews; build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.')
 const requiredContracts = [
@@ -21,7 +21,7 @@ const requiredContracts = [
 for (const [relative, signature] of requiredContracts) {
   const path = resolve(dsh, relative)
   if (!existsSync(path) || !readFileSync(path, 'utf8').includes(signature)) {
-    throw new Error(`DSH declarations predate the 0.1.6-alpha.2 plugin/session APIs: ${relative}; build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.`)
+    throw new Error(`DSH declarations predate the 0.1.7-alpha.1 plugin/session APIs: ${relative}; build the target checkout or set DSH_VERIFY_CHECKOUT to a freshly built copy.`)
   }
 }
 const scratch = mkdtempSync(resolve(tmpdir(), 'dsh-enhanced-typecheck-'))

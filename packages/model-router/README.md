@@ -1,6 +1,6 @@
 # Model collaboration V3 / 多模型协作
 
-DSH `0.1.6-alpha.2`, verified against checkout `ddefc45fbc7f8e46dd73185e68295696d1297887`. Install identity: `model-router`; independent bundle: `dsh-enhanced-model-router`. The aggregate also includes this feature.
+DSH `0.1.7-alpha.1`, verified against checkout `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`. Install identity: `model-router`; independent bundle: `dsh-enhanced-model-router`. The aggregate also includes this feature.
 
 ## 安装与使用
 

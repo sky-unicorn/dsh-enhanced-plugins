@@ -6,6 +6,10 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { reviewSchema, runQuerySchema } from '../schema.js'
 import ModelRouter from './service.js'
+import { snapshotRouterConfig } from './config.js'
+declare module '@deepseek-ai/cordis' {
+  interface Events { 'loader/volatile-update'(paths: readonly (readonly string[])[]): void }
+}
 import { DELEGATE_TOOL, REVIEW_TOOL, TASK_TOOL, NAMESPACE, type RouterConfig } from '../shared.js'
 export { Config } from './config.js'
 export const name = 'model-router'
@@ -79,11 +83,11 @@ export async function apply(ctx: Context, config: RouterConfig): Promise<void> {
   })
   let unregister: (() => void) | undefined
   const reconcile = () => {
-    const current = ctx.settings.get(NAMESPACE) as RouterConfig
+    const current = snapshotRouterConfig(config)
     if (current.enabled && !unregister) { const removeDelegate = ctx.tools.register(tool); const removeReview = ctx.tools.register(reviewTool); const removeTask = ctx.tools.register(taskTool); unregister = () => { removeTask(); removeReview(); removeDelegate() } }
     else if (!current.enabled) { unregister?.(); unregister = undefined }
   }
-  ctx.on('settings/updated', ns => { if (ns === NAMESPACE) reconcile() })
+  ctx.on('loader/volatile-update', () => { reconcile() })
   ctx.effect(() => { reconcile(); return () => { unregister?.(); unregister = undefined } }, 'model router: enabled delegation tool')
   await router.initialize()
 }

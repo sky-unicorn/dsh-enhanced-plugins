@@ -4,7 +4,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type { NotificationSettings } from '../shared.js'
-import { Config, SETTINGS_NAMESPACE } from './config.js'
+import { SETTINGS_NAMESPACE, snapshotNotificationSettings } from './config.js'
+declare module '@deepseek-ai/cordis' {
+  interface Events { 'loader/volatile-update'(paths: readonly (readonly string[])[]): void }
+}
 import { DesktopCompanion } from './desktop.js'
 import { migrateRetiredPetCharacter } from './migration.js'
 import { NotificationConfigRemote } from './remote.js'
@@ -32,10 +35,10 @@ export const inject = ['sessions', 'subprocess']
 
 /** Mount the session observer, optional settings owner, and managed desktop companion. */
 export function apply(ctx: Context, config: NotificationSettings): void {
-  let current = (): NotificationSettings => config
+  let current = (): NotificationSettings => snapshotNotificationSettings(config)
   let migrationTail = Promise.resolve()
   const tracker = new NotificationStateTracker()
-  const companion = new DesktopCompanion(ctx, config)
+  const companion = new DesktopCompanion(ctx, current())
 
   const scheduleSettingsMigration = (): void => {
     const settings = ctx.get('settings')
@@ -53,14 +56,9 @@ export function apply(ctx: Context, config: NotificationSettings): void {
   ctx.effect(() => async () => { await migrationTail }, 'desktop notification settings migration')
 
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, SETTINGS_NAMESPACE, Config, config, {
-      setSource: (source) => { current = source },
-      onChange: () => {
-        companion.configure(current())
-        scheduleSettingsMigration()
-      },
-    })
+    settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
   })
+  ctx.on('loader/volatile-update', () => { companion.configure(current()); scheduleSettingsMigration() })
 
   // The standard Host settings RPC deliberately hides third-party namespaces.
   // Mount a plugin-owned, revision-fenced Remote exactly while settings exists.

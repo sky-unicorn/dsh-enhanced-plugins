@@ -44,6 +44,6 @@ Role groups retain distinct native child-session IDs, including nested descendan
 The build uses shared repository source when present; packaged source under `src/` supports isolated `npm run prepare` with the package's esbuild development dependency.
 发布包含可独立构建的源码与构建脚本，不需要 sibling DSH checkout 才能 prepare。
 
-Validated against local DSH `ddefc45fbc7f8e46dd73185e68295696d1297887` (`0.1.6-alpha.2`). `npm run verify:execution-web` exercises the real assembled Web app in temporary profiles; `DSH_VERIFY_AGGREGATE=1` selects aggregate verification. The installation identity remains `agent-team-monitor` / `dsh-enhanced-agent-team-monitor`.
+Validated against local DSH `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` (`0.1.7-alpha.1`). `npm run verify:execution-web` exercises the real assembled Web app in temporary profiles; `DSH_VERIFY_AGGREGATE=1` selects aggregate verification. The installation identity remains `agent-team-monitor` / `dsh-enhanced-agent-team-monitor`.
 
-以本地 DSH `ddefc45fbc7f8e46dd73185e68295696d1297887`（`0.1.6-alpha.2`）核对接口。`npm run verify:execution-web` 在临时 profile 验证真实 Web 页面，`DSH_VERIFY_AGGREGATE=1` 验证聚合安装。安装标识仍为 `agent-team-monitor` / `dsh-enhanced-agent-team-monitor`。
+以本地 DSH `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`（`0.1.7-alpha.1`）核对接口。`npm run verify:execution-web` 在临时 profile 验证真实 Web 页面，`DSH_VERIFY_AGGREGATE=1` 验证聚合安装。安装标识仍为 `agent-team-monitor` / `dsh-enhanced-agent-team-monitor`。

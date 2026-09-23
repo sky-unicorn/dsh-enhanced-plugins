@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Menu, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CollaborationIcon, ConfiguredModelPicker, Choice, FocusDialog, type LoadCatalog } from './Controls.tsx'
 import type { PropsRuntime, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { TIERS, missingModelTiers, type RouterConfig, type RouterSnapshot, type Mode } from '../shared.ts'
 import type { RunQuery, RunPage } from '../shared.ts'
 import type { NS } from './locales.ts'
@@ -14,7 +14,7 @@ export interface Injected {
   openDetails?: () => void
   loadCatalog: LoadCatalog
   listRuns(query: RunQuery, signal: AbortSignal): Promise<RunPage>
-  scope: SettingsScope<RouterConfig>
+  scope: ConfigForm<RouterConfig>
   describe(sessionId: string, signal: AbortSignal): Promise<RouterSnapshot>
   command(request: Record<string, unknown>, signal: AbortSignal): Promise<RouterSnapshot>
 }
@@ -44,7 +44,7 @@ export function Settings({ scope, describe, loadCatalog, t }: PropsRuntime<'sett
     </details>
     </details>
     {!missing.length && TIERS.every(tier => JSON.stringify(draft.models[tier]) === JSON.stringify(draft.models.normal)) && <p role="status">{t('sameModels')}</p>}
-    <p className={css.muted}>{t(snapshot.user && Object.keys(snapshot.user).length ? 'overridden' : 'inherited')}</p>
+    <p className={css.muted}>{t(snapshot.user && typeof snapshot.user === 'object' && Object.keys(snapshot.user).length ? 'overridden' : 'inherited')}</p>
     {message && <p role="status">{t(message)}</p>}
     {(message === 'conflict' || revision !== snapshot.revision) && <Button variant="outline" disabled={busy} onClick={reload}>{t('reloadSettings')}</Button>}
   </section>

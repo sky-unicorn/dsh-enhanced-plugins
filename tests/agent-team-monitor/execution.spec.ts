@@ -12,7 +12,12 @@ function events(rows: { type: string; data: unknown }[]): SessionEvent[] {
 const start = [{ type: 'turn/start', data: { turn: 1 } }, { type: 'step/start', data: { turn: 1, step: 1 } }]
 const call = (id: string, step = 1) => ({ type: 'tool/call', data: { turn: 1, step, callId: id, name: 'read', arguments: '{"path":"app.ts","apiKey":"sensitive"}' } })
 const result = (id: string, isError = false, step = 1) => ({ type: 'tool/result', data: { turn: 1, step, message: {
-  content: [{ type: 'tool-result', toolCallId: id, isError, content: [{ type: 'text', text: 'read complete' }] }],
+  id: `result-${id}`,
+  role: 'tool',
+  source: { kind: 'tool', callId: id },
+  toolCallId: id,
+  isError,
+  content: [{ type: 'text', text: 'read complete' }],
 } } })
 
 it('keeps concurrent calls distinct, failure/retry history and final turn outcome', () => {

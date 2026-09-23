@@ -29,7 +29,7 @@ export function apply(ctx: Context): void {
   let queue = Promise.resolve()
 
   const reconcile = async (): Promise<void> => {
-    const value = ctx.settings.get(SETTINGS_NAMESPACE) as ProductToggleSettings | undefined
+    const value = ctx.settings.describe().find(entry => entry.ns === SETTINGS_NAMESPACE)?.value as ProductToggleSettings | undefined
     if (value === undefined) throw new Error(`missing settings namespace ${SETTINGS_NAMESPACE}`)
     for (const product of Object.keys(PRODUCTS) as Product[]) {
       const current = mounted.get(product)
@@ -46,7 +46,7 @@ export function apply(ctx: Context): void {
     queue = queue.then(reconcile, reconcile).catch(error => ctx.logger.error(error))
   }
 
-  ctx.on('settings/updated', (namespace) => {
+  ctx.on('settings/document-updated', (namespace) => {
     if (namespace === SETTINGS_NAMESPACE) schedule()
   })
   ctx.effect(() => {

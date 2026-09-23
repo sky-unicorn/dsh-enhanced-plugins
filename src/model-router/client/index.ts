@@ -16,10 +16,10 @@ import { catalogSchema } from './Controls.tsx'
 import { Settings, type Injected } from './Views.tsx'
 declare module '@deepseek-ai/dsh-client-ui-slots' { interface LocaleNamespaceMap { 'model-router': LocaleKey } }
 export const name = 'model-router-client'
-export const inject = ['connection', 'settingsScope', 'slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'modelDirectories', 'sessions', 'remote', 'remote.session']
+export const inject = ['connection', 'configForms', 'slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'modelDirectories', 'sessions', 'remote', 'remote.session']
 export function apply(ctx: Context): void {
   ctx.effect(() => installRouterNavIcon([zh.title, en.title]), 'model router: settings icon compatibility')
-  const scope = ctx.settingsScope.bind<RouterConfig>({ namespace: NAMESPACE })
+  const scope = ctx.configForms.get<RouterConfig>(NAMESPACE)
   const connection = ctx.get('connection') as ConnectionHandle
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'model router: dictionaries')
   const call = async (method: string, request: Record<string, unknown>, signal: AbortSignal): Promise<RouterSnapshot> => {

@@ -4,18 +4,18 @@ import { mainSessionId, openMemberSession } from '../../src/agent-team-monitor/c
 it('uses the native address and mode for running, historical and nested member clicks', async () => {
   for (const mode of ['one-shot', 'continuable']) {
     const navigation = { openSession: vi.fn() }
-    const sessions = { refreshSubagents: vi.fn(async () => {}), list: {
-      getSnapshot: () => ({ subagentsByParent: { nestedParent: { entries: [{ kind: 'child', id: 'member', mode }] } } }),
+    const sessions = { refreshProjections: vi.fn(async () => {}), list: {
+      getSnapshot: () => ({ projectionsBySession: { nestedParent: { values: { subagentCatalog: [{ id: 'member', mode }] } } } }),
     } }
     await openMemberSession(sessions as never, navigation, 'nestedParent', 'member', () => true)
-    expect(sessions.refreshSubagents).toHaveBeenCalledWith('nestedParent')
+    expect(sessions.refreshProjections).toHaveBeenCalledWith('nestedParent')
     expect(navigation.openSession).toHaveBeenCalledWith({ parentSessionId: 'nestedParent', childSessionId: 'member', mode })
   }
 })
 it('refuses unavailable children and fences delayed navigation after a selection change', async () => {
   let current = true
   const navigation = { openSession: vi.fn() }
-  const sessions = { refreshSubagents: vi.fn(async () => { current = false }), list: { getSnapshot: () => ({ subagentsByParent: {} }) } }
+  const sessions = { refreshProjections: vi.fn(async () => { current = false }), list: { getSnapshot: () => ({ projectionsBySession: {} }) } }
   await openMemberSession(sessions as never, navigation, 'parent', 'member', () => current)
   expect(navigation.openSession).not.toHaveBeenCalled()
   await expect(openMemberSession(sessions as never, navigation, 'parent', 'member', () => true)).rejects.toThrow('unavailable')

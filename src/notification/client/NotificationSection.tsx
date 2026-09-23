@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import { useState, useSyncExternalStore, type ChangeEvent, type ReactNode } from 'react'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, FishLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -30,7 +30,7 @@ const SOUND_COPY: Record<NotificationSoundEvent, {
 }
 
 export interface NotificationSectionFace {
-  hooks: { notificationSettings: Pick<SettingsScope<NotificationSettings>, 'getSnapshot' | 'subscribe'> }
+  hooks: { notificationSettings: Pick<ConfigForm<NotificationSettings>, 'getSnapshot' | 'subscribe'> }
   soundLibrary: {
     getSnapshot: () => NotificationCustomSound[]
     subscribe: (listener: () => void) => () => void
@@ -47,7 +47,7 @@ export type NotificationSectionProps =
   & PropsLocale<'settings.desktopNotifications'>
   & InjectFace<NotificationSectionFace>
 
-function rawUser(snapshot: SettingsScopeSnapshot<NotificationSettings>): Record<string, unknown> {
+function rawUser(snapshot: ConfigFormSnapshot<NotificationSettings>): Record<string, unknown> {
   return snapshot.user !== null && typeof snapshot.user === 'object' && !Array.isArray(snapshot.user)
     ? snapshot.user as Record<string, unknown>
     : {}

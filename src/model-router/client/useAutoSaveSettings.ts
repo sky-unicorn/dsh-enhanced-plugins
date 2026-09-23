@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { RouterConfig } from '../shared.ts'
 
 const fields = ['enabled', 'models', 'limits', 'retry', 'routing'] as const
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 /** Debounced, revision-fenced writes; rejected drafts require an edit or explicit reload. */
-export function useAutoSaveSettings(scope: Pick<SettingsScope<RouterConfig>, 'getSnapshot' | 'subscribe' | 'mutate'>) {
+export function useAutoSaveSettings(scope: Pick<ConfigForm<RouterConfig>, 'getSnapshot' | 'subscribe' | 'mutate'>) {
   const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope))
   const [draft, setDraft] = useState<RouterConfig>()
   const [baseline, setBaseline] = useState<RouterConfig>()

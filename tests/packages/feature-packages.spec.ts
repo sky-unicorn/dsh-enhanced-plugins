@@ -84,7 +84,7 @@ describe('selective feature packages', () => {
       const betaFeature = ['agent-team-monitor', 'model-router'].includes(manifest.dshEnhanced.feature)
       expect(manifest.dshEnhanced.manager.defaultSelected).toBe(!betaFeature)
       expect(manifest.dshEnhanced.manager.beta ?? false).toBe(betaFeature)
-      if (betaFeature) expect(manifest.dshEnhanced.manager.compatibility?.dsh).toEqual(['0.1.6-alpha.2'])
+      if (betaFeature) expect(manifest.dshEnhanced.manager.compatibility?.dsh).toEqual(['0.1.7-alpha.1'])
       expect(manifest.dshEnhanced.manager.name['zh-CN']).not.toBe('')
       expect(patch).toContain(`name: '${manifest.name}`)
       const ids = [...(patch ?? '').matchAll(/^\s+- id: (.+)$/gm)].map(match => match[1])
@@ -179,10 +179,10 @@ describe('selective feature packages', () => {
         required: true, scope: 'global',
       })
       expect(catalog.features.find(feature => feature.id === 'agent-team-monitor')).toMatchObject({
-        defaultSelected: false, beta: true, compatibleDshVersions: ['0.1.6-alpha.2'],
+        defaultSelected: false, beta: true, compatibleDshVersions: ['0.1.7-alpha.1'],
       })
       expect(catalog.features.find(feature => feature.id === 'model-router')).toMatchObject({
-        defaultSelected: false, beta: true, compatibleDshVersions: ['0.1.6-alpha.2'],
+        defaultSelected: false, beta: true, compatibleDshVersions: ['0.1.7-alpha.1'],
       })
 
       const planRequestPath = resolve(managerDirectory, 'request.json')
@@ -220,9 +220,9 @@ describe('selective feature packages', () => {
       mkdirSync(resolve(managerDirectory, 'upgrade-dsh-home/profiles/web'), { recursive: true })
       writeFileSync(resolve(managerDirectory, 'upgrade-dsh-home/profiles/web/package.json'), JSON.stringify({
         dependencies: {
-          'dsh-enhanced-agent-team-monitor': '7.2.5',
-          'dsh-enhanced-model-router': '7.2.5',
-          'dsh-enhanced-notification': '7.2.5',
+          'dsh-enhanced-agent-team-monitor': '7.3.0',
+          'dsh-enhanced-model-router': '7.3.0',
+          'dsh-enhanced-notification': '7.3.0',
         },
       }), 'utf8')
       const upgradeLauncherRoot = resolve(managerDirectory, 'upgrade-launcher')

@@ -1,7 +1,7 @@
 /** Reactive browser mirror over the notification plugin's private settings Remote. */
 
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {
   NotificationConfigView,
   NotificationCustomSound,
@@ -12,7 +12,7 @@ import type {
 } from '../shared.ts'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '../shared.ts'
 
-const LOADING: SettingsScopeSnapshot<NotificationSettings> = {
+const LOADING: ConfigFormSnapshot<NotificationSettings> = {
   status: 'loading',
   value: undefined,
   base: undefined,
@@ -147,7 +147,7 @@ function decodeOutcome(value: unknown): NotificationMutateOutcome | undefined {
 }
 
 /** Plugin-owned scope view with ordered scalar writes and revision-conflict recovery. */
-export class NotificationConfigStore implements Pick<SettingsScope<NotificationSettings>, 'getSnapshot' | 'subscribe' | 'set' | 'unset'> {
+export class NotificationConfigStore implements Pick<ConfigForm<NotificationSettings>, 'getSnapshot' | 'subscribe' | 'set' | 'unset'> {
   private snapshot = LOADING
   private customSounds: NotificationCustomSound[] = []
   private readonly listeners = new Set<() => void>()
@@ -155,7 +155,7 @@ export class NotificationConfigStore implements Pick<SettingsScope<NotificationS
 
   constructor(private readonly rpc: ClientConnectionRpc) {}
 
-  getSnapshot(): SettingsScopeSnapshot<NotificationSettings> {
+  getSnapshot(): ConfigFormSnapshot<NotificationSettings> {
     return this.snapshot
   }
 
@@ -185,8 +185,8 @@ export class NotificationConfigStore implements Pick<SettingsScope<NotificationS
     }
   }
 
-  set(field: string, value: unknown): Promise<void> {
-    return this.enqueue({ op: 'set', path: [field], value })
+  set(field: string, value: unknown): Promise<boolean> {
+    return this.enqueue({ op: 'set', path: [field], value }).then(() => true)
   }
 
   /** Commit a sound choice and report failure so automatic preview never plays a stale selection. */
@@ -200,8 +200,8 @@ export class NotificationConfigStore implements Pick<SettingsScope<NotificationS
     return this.enqueueRemote('notificationConfig/selectSound', request, 'sound selection was rejected')
   }
 
-  unset(field: string): Promise<void> {
-    return this.enqueue({ op: 'unset', path: [field] })
+  unset(field: string): Promise<boolean> {
+    return this.enqueue({ op: 'unset', path: [field] }).then(() => true)
   }
 
   /** Ask the Host to play the currently committed sound selection. */
