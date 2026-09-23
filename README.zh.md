@@ -293,6 +293,8 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 两个开关默认关闭。写入使用 path-addressed 操作和设置修订号，不会用脱敏或过期快照覆盖其他页面及外部编辑产生的新值。
 
+DSH 0.1.7 的设置按 Loader ID `subagent-product-toggles` 读写并保存在当前 profile 的配置补丁中；设置页面、实时工具开关和外部编辑刷新使用同一标识。侧栏图标使用当前公开的分支图标，随浅色／深色主题显示。
+
 ### 7. 执行过程监控
 
 `agent-team-monitor` · **当前对话输入框右侧 → 团队图标**

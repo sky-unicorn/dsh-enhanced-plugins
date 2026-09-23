@@ -1,5 +1,5 @@
-/** Client-safe spelling of the Host-owned settings namespace. */
-export const SETTINGS_NAMESPACE_KEY = 'subagent-products'
+/** Settings forms use the stable Loader entry id in both bundle patches. */
+export const SETTINGS_NAMESPACE_KEY = 'subagent-product-toggles'
 
 export interface ProductToggleSettings {
   claudeCode: boolean

@@ -83,18 +83,24 @@ try {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url)
-  if (!reuse) await page.getByRole('dialog', { name: 'Internal Testing Notice' }).getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 30_000 })
+  const notice = page.getByRole('dialog', { name: 'Internal Testing Notice' })
+  await notice.waitFor({ timeout: 3000 }).catch(() => {})
+  if (await notice.isVisible()) await notice.getByRole('button', { name: 'Continue', exact: true }).click()
   const later = page.getByRole('button', { name: 'Configure later', exact: true })
   await later.waitFor({ timeout: 5000 }).then(() => later.click()).catch(() => {})
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await page.getByRole('button', { name: 'Plugin Community', exact: true }).click()
   await page.getByRole('heading', { name: 'Plugin Community', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Install with DSH', exact: true }).first().waitFor()
+  const navButton = page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Plugin Community', exact: true })
+  await page.waitForFunction(() => !!document.querySelector('[data-dsh-plugin-community-nav-icon] svg path'))
   assert.equal(await page.getByText('Check install method', { exact: true }).count(), 0)
   assert.equal(await page.getByRole('button', { name: 'Configure', exact: true }).count(), 0)
   for (const theme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: theme })
     await page.waitForFunction(dark => document.body.hasAttribute('data-ds-dark-theme') === dark, theme === 'dark')
+    assert.equal(await navButton.locator('[data-dsh-plugin-community-nav-icon] svg').isVisible(), true)
+    assert.equal(await navButton.locator('svg').last().evaluate(node => getComputedStyle(node).display), 'none')
     await page.screenshot({ path: resolve(home, `market-${theme}.png`), fullPage: true })
   }
   // Substitute only a catalog source with a local package. The actual native Remote,

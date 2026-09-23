@@ -1,14 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
-  IconGlobeOutline14: ({ size = 14, className }: { size?: number; className?: string }) => (
-    <svg width={size} height={size} className={className} data-globe="true">
-      <circle cx="7" cy="7" r="6" />
-    </svg>
-  ),
-}))
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   installPluginCommunityNavIcon,
@@ -43,9 +35,10 @@ describe('plugin community settings navigation icon compatibility', () => {
     await settle()
 
     const host = button.querySelector(`[${PLUGIN_COMMUNITY_NAV_ICON_MARKER}]`)
-    const replacement = host?.querySelector('[data-globe]')
+    const replacement = host?.querySelector('svg')
     expect(fallback.style.display).toBe('none')
     expect(replacement).not.toBeNull()
+    expect(replacement?.querySelector('path')).not.toBeNull()
     expect(replacement?.getAttribute('width')).toBe('16')
     expect(replacement?.getAttribute('class')).toBe('nav-icon')
 

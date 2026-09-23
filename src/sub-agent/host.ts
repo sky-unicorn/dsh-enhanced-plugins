@@ -3,7 +3,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { SETTINGS_NAMESPACE, snapshotProductToggleSettings } from './settings.js'
+import { SETTINGS_NAMESPACE } from './settings.js'
 import type { ProductToggleSettings } from './shared.js'
 
 export const name = 'subagent-product-toggles'

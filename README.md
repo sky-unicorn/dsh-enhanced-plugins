@@ -293,6 +293,8 @@ Enabling Claude Code or Codex applies immediately to every Agent preset carrying
 
 Both toggles default to off. Writes use path-addressed operations and settings revisions, so a redacted or stale snapshot cannot overwrite changes from another page or an external editor.
 
+On DSH 0.1.7, settings use the Loader ID `subagent-product-toggles` and persist in the current profile's configuration patch. The settings page, live tool toggles, and external-edit refresh share that identity. The sidebar uses the current public branch icon in both light and dark themes.
+
 ### 7. Execution monitor
 
 `agent-team-monitor` · **Current conversation composer → Team icon**

@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { IconGlobeOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconGlobeOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 
 export const PLUGIN_COMMUNITY_NAV_ICON_MARKER = 'data-dsh-plugin-community-nav-icon'
 
@@ -70,7 +70,7 @@ export function installPluginCommunityNavIcon(labels: readonly string[]): () => 
       const root = createRoot(host)
       const className = fallback.getAttribute('class')
       root.render(createElement(
-        IconGlobeOutline14,
+        IconGlobeOutlineMedium,
         className === null ? { size: 16 } : { size: 16, className },
       ))
       mounted.set(button, { button, fallback, fallbackDisplay, host, root })

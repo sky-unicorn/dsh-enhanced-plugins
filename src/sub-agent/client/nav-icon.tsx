@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { IconBranchOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconBranchOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 
 export const SUBAGENT_NAV_ICON_MARKER = 'data-dsh-sub-agent-nav-icon'
 
@@ -69,7 +69,7 @@ export function installSubagentNavIcon(labels: readonly string[]): () => void {
       const fallbackDisplay = fallback.style.display
       fallback.style.display = 'none'
       const root = createRoot(host)
-      root.render(createElement(IconBranchOutline16, {
+      root.render(createElement(IconBranchOutlineMedium, {
         size: 16,
         className: fallback.getAttribute('class') ?? undefined,
       }))

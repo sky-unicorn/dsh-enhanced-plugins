@@ -8,6 +8,9 @@ export default defineConfig({
   resolve: {
     alias: exactDshAliases({
       '@deepseek-ai/cordis': resolve(dsh, 'vendor/cordis/lib/index.js'),
+      '@deepseek-ai/schemastery': resolve(dsh, 'vendor/schemastery/lib/index.mjs'),
+      '@deepseek-ai/dsh-app-boot': resolve(dsh, 'packages/boot/app-boot/lib/index.js'),
+      '@deepseek-ai/dsh-config-editor': resolve(dsh, 'packages/boot/config-editor/lib/index.js'),
       '@deepseek-ai/dsh-settings': resolve(dsh, 'packages/settings/settings/lib/index.js'),
       '@deepseek-ai/dsh-tool-subagent': resolve(dsh, 'packages/subagent/tool-subagent/lib/index.js'),
       '@deepseek-ai/dsh-typert-protocol': resolve(dsh, 'packages/typert/protocol/lib/index.js'),
@@ -18,4 +21,4 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/sub-agent/**/*.spec.ts', 'tests/sub-agent/**/*.spec.tsx'],
   },
-    })
+})

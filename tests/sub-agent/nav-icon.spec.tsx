@@ -1,12 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
-  IconBranchOutline16: ({ size = 16, className }: { size?: number; className?: string }) => (
-    <svg width={size} height={size} className={className}><path d="M1 1h14v14z" /></svg>
-  ),
-}))
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { installSubagentNavIcon, SUBAGENT_NAV_ICON_MARKER } from '../../src/sub-agent/client/nav-icon.tsx'
 

@@ -3,7 +3,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
-  IconGlobeOutline14: () => null,
+  IconGlobeOutlineMedium: () => null,
 }))
 
 import { PluginMarket } from '../../src/plugin-market/client/PluginMarket.tsx'
