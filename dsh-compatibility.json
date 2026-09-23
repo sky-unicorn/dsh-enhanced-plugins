@@ -5,6 +5,12 @@
       "pluginVersion": "7.3.0",
       "dsh": [
         {
+          "version": "0.1.7-alpha.2",
+          "commits": [
+            "00102833dfaee1da9f48a3a8eae9d34005a75218"
+          ]
+        },
+        {
           "version": "0.1.7-alpha.1",
           "commits": [
             "c36a83ff6bb95e3f82cf79f9be7c724270a8aa61"
