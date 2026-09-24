@@ -11,10 +11,12 @@ function fixture(edited: boolean) {
     seq: 12, messageSeq: 12, time: 1_780_000_000_000,
     rootSeq: 2, rootMessageId: 'root', transactionId: 'edit',
     source: { kind: 'user' },
+    stepLocation: location,
     content: [{ type: 'text', text: 'Read @"folder/a.txt" with /guide and /unknown' }],
     skillNames: ['guide'],
   }
-  const node = { kind: edited ? 'edited-user' : 'user', data, location }
+  const node = { kind: edited ? 'edited-user' : 'user', data,
+    location: edited ? { kind: 'unresolved' } : location }
   const context = (seq: number, name: string, turn = 3, step = 4) => ({
     kind: 'context', anchorSeq: seq,
     location: { kind: 'step', turn: { turn }, step: { step } },

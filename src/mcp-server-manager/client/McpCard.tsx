@@ -7,8 +7,8 @@
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import clsx from 'clsx'
 import {
-  Button, IconCheckOutline14, IconCodeOutline16, IconDownloadOutline16, IconEditOutline16,
-  IconGlobeOutline14, IconPlusOutline16, IconTrashOutline16, IconWarningOutline16, Modal,
+  Button, IconCheckOutlineRegular, IconCodeOutlineRegular, IconDownloadOutlineRegular, IconEditOutlineRegular,
+  IconGlobeOutlineRegular, IconPlusOutlineRegular, IconTrashOutlineRegular, IconWarningOutlineRegular, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: loads the `plugins.row.config` SlotMap declaration the props
 // below name; cross-package collaboration goes through the slot, never a
@@ -58,8 +58,8 @@ export function McpCard(props: McpCardProps) {
           role="status"
         >
           {state.format.issues.length === 0
-            ? <IconCheckOutline14 className={fieldCss.statusIcon} />
-            : <IconWarningOutline16 size={14} className={fieldCss.statusIcon} />}
+            ? <IconCheckOutlineRegular size={14} className={fieldCss.statusIcon} />
+            : <IconWarningOutlineRegular size={14} className={fieldCss.statusIcon} />}
           <span>{formatSummary(t, state.format.serverCount, state.format.issues.length)}</span>
         </div>
         <span className={fieldCss.count}>{template(t('mcpConfiguredCount'), { count: state.servers.length })}</span>
@@ -82,7 +82,7 @@ export function McpCard(props: McpCardProps) {
       {state.servers.length === 0
         ? (
           <div className={fieldCss.emptyState}>
-            <IconCodeOutline16 className={fieldCss.emptyIcon} />
+            <IconCodeOutlineRegular className={fieldCss.emptyIcon} />
             <span className={fieldCss.emptyTitle}>{t('mcpEmpty')}</span>
             <span className={fieldCss.emptyHint}>{t('mcpEmptyHint')}</span>
           </div>
@@ -92,7 +92,7 @@ export function McpCard(props: McpCardProps) {
             {state.servers.map(server => (
               <li key={server.serverName} className={fieldCss.serverRow}>
                 <span className={fieldCss.transportIcon} aria-hidden>
-                  {server.transport === 'stdio' ? <IconCodeOutline16 /> : <IconGlobeOutline14 size={16} />}
+                  {server.transport === 'stdio' ? <IconCodeOutlineRegular /> : <IconGlobeOutlineRegular size={16} />}
                 </span>
                 <span className={fieldCss.serverDetails}>
                   <span className={fieldCss.serverHeading}>
@@ -105,7 +105,7 @@ export function McpCard(props: McpCardProps) {
                       aria-label={t(server.format === 'valid' ? 'mcpFormatRowValid' : 'mcpFormatRowWarning')}
                       title={t(server.format === 'valid' ? 'mcpFormatRowValid' : 'mcpFormatRowWarning')}
                     >
-                      {server.format === 'valid' ? <IconCheckOutline14 /> : <IconWarningOutline16 size={14} />}
+                      {server.format === 'valid' ? <IconCheckOutlineRegular size={14} /> : <IconWarningOutlineRegular size={14} />}
                     </span>
                   </span>
                   <span className={fieldCss.serverTarget}>{server.target}</span>
@@ -115,7 +115,7 @@ export function McpCard(props: McpCardProps) {
                     variant="ghost"
                     size="sm"
                     disabled={disabled || state.form !== null || state.importing || state.saving}
-                    icon={<IconEditOutline16 />}
+                    icon={<IconEditOutlineRegular />}
                     onClick={() => { props.editServer(server.serverName) }}
                   >
                     {t('mcpEdit')}
@@ -125,7 +125,7 @@ export function McpCard(props: McpCardProps) {
                     size="sm"
                     className={fieldCss.remove}
                     disabled={disabled || state.form !== null || state.importing || state.saving}
-                    icon={<IconTrashOutline16 />}
+                    icon={<IconTrashOutlineRegular />}
                     onClick={() => { props.removeServer(server.serverName) }}
                   >
                     {t('mcpRemove')}
@@ -145,7 +145,7 @@ export function McpCard(props: McpCardProps) {
           variant="primary"
           size="sm"
           disabled={importDisabled}
-          icon={state.importing ? undefined : <IconDownloadOutline16 />}
+          icon={state.importing ? undefined : <IconDownloadOutlineRegular />}
           onClick={props.importServers}
         >
           {t(state.importing ? 'mcpImporting' : 'mcpImportButton')}
@@ -158,7 +158,7 @@ export function McpCard(props: McpCardProps) {
         size="sm"
         className={fieldCss.addServer}
         disabled={disabled || state.form !== null || state.importing || state.saving}
-        icon={<IconPlusOutline16 />}
+        icon={<IconPlusOutlineRegular />}
         onClick={props.openForm}
       >
         {t('mcpAddServer')}
@@ -348,7 +348,7 @@ function ArgsField(props: {
           </Button>
         </div>
       ))}
-      <Button variant="ghost" size="sm" className={fieldCss.addRow} disabled={disabled} icon={<IconPlusOutline16 />} onClick={onAppend}>
+      <Button variant="ghost" size="sm" className={fieldCss.addRow} disabled={disabled} icon={<IconPlusOutlineRegular />} onClick={onAppend}>
         {t('mcpAddArg')}
       </Button>
       <p className={fieldCss.hint}>{t('mcpArgsHint')}</p>
@@ -414,7 +414,7 @@ function KeyValueField(props: {
           </Button>
         </div>
       ))}
-      <Button variant="ghost" size="sm" className={fieldCss.addRow} disabled={disabled} icon={<IconPlusOutline16 />} onClick={onAppend}>
+      <Button variant="ghost" size="sm" className={fieldCss.addRow} disabled={disabled} icon={<IconPlusOutlineRegular />} onClick={onAppend}>
         {copy.addLabel}
       </Button>
       <p className={missingKey || invalidHeader ? fieldCss.invalid : fieldCss.hint}>

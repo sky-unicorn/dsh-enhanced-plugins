@@ -74,6 +74,7 @@ function Assert-DshCompatibility {
     [Parameter(Mandatory = $true)][string] $Checkout,
     [Parameter(Mandatory = $true)][string] $DshVersion,
     [Parameter(Mandatory = $true)][object[]] $Catalog,
+    [object[]] $SelectedFeatures = @(),
     [Parameter(Mandatory = $true)][object] $Compatibility
   )
 
@@ -89,6 +90,15 @@ function Assert-DshCompatibility {
   }
   if ($supportedVersions -cnotcontains $DshVersion) {
     throw "Incompatible DSH: plugin $($PluginManifest.version) requires DSH $($supportedVersions -join ' or '), but '$Checkout' is $DshVersion. Use a supported DSH release or a matching plugin release. Nothing was installed or removed."
+  }
+  foreach ($feature in $SelectedFeatures) {
+    $manager = $feature.Manifest.dshEnhanced.manager
+    $policy = $manager.PSObject.Properties['compatibility']
+    if ($null -eq $policy) { continue }
+    $allowed = @($policy.Value.dsh)
+    if ($allowed.Count -eq 0 -or $allowed -cnotcontains $DshVersion) {
+      throw "Incompatible DSH feature '$($feature.Feature)': supported DSH $($allowed -join ' or '), current $DshVersion. Nothing was installed or removed."
+    }
   }
   $target = @($Compatibility.dsh | Where-Object { $_.version -ceq $DshVersion })[0]
   $verifiedCommits = @($target.commits)
@@ -167,6 +177,47 @@ function New-ProfileBundleArchives {
     }
     if (Test-Path -LiteralPath $absoluteStaging) { Remove-Item -LiteralPath $absoluteStaging -Recurse -Force }
   }
+}
+
+function Test-ProfileBundleArchivesInstalled {
+  param(
+    [Parameter(Mandatory = $true)][object[]] $Packages,
+    [Parameter(Mandatory = $true)][string[]] $Archives,
+    [Parameter(Mandatory = $true)][string] $ProfileName
+  )
+
+  if ($Packages.Count -ne $Archives.Count) { return $false }
+  $dshHome = if ([string]::IsNullOrWhiteSpace($env:DSH_HOME)) {
+    Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh'
+  } else { [System.IO.Path]::GetFullPath($env:DSH_HOME) }
+  $profileRoot = Join-Path (Join-Path $dshHome 'profiles') $ProfileName
+  $manifestPath = Join-Path $profileRoot 'package.json'
+  if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
+  $manifest = Get-Content -Raw -LiteralPath $manifestPath -Encoding UTF8 | ConvertFrom-Json
+  $dependencies = $manifest.PSObject.Properties['dependencies']
+  if ($null -eq $dependencies) { return $false }
+
+  for ($index = 0; $index -lt $Packages.Count; $index += 1) {
+    $package = $Packages[$index]
+    $declared = $dependencies.Value.PSObject.Properties[$package.PackageName]
+    if ($null -eq $declared -or $declared.Value -isnot [string] -or
+      -not $declared.Value.StartsWith('file:', [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $false
+    }
+    try {
+      $declaredPath = [System.IO.Path]::GetFullPath($declared.Value.Substring(5).Replace('/', '\'))
+      $archivePath = [System.IO.Path]::GetFullPath($Archives[$index])
+    } catch { return $false }
+    if (-not [string]::Equals($declaredPath, $archivePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $false
+    }
+    $installedManifestPath = Join-Path (Join-Path (Join-Path $profileRoot 'node_modules') $package.PackageName) 'package.json'
+    if (-not (Test-Path -LiteralPath $installedManifestPath -PathType Leaf)) { return $false }
+    $installedManifest = Get-Content -Raw -LiteralPath $installedManifestPath -Encoding UTF8 | ConvertFrom-Json
+    if ($installedManifest.name -cne $package.PackageName -or
+      $installedManifest.version -cne $package.Manifest.version) { return $false }
+  }
+  return $true
 }
 
 function Get-ProfileDependencies {
@@ -754,10 +805,20 @@ function Get-ProjectSourceRevision {
   }
   $sha = [System.Security.Cryptography.SHA256]::Create()
   try {
-    $relativePaths = @('package.json', 'package-lock.json', 'build.mjs', 'scripts\migrate-to-enhanced-plugin.ps1') + @(
+    # Keep the recorded revision aligned with the Launcher's build inputs.
+    $relativePaths = @('package.json', 'package-lock.json', 'build.mjs', 'cordis.patch.yml',
+      'dsh-compatibility.json', 'tsconfig.json', 'tsconfig.client.json', 'tsconfig.host.json', '.npmrc') + @(
       Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'packages') -File -Recurse | Where-Object {
         $_.FullName -notmatch '[\\/](?:node_modules|lib)[\\/]'
       } | ForEach-Object { $_.FullName.Substring($RepositoryRoot.Length).TrimStart('\') }
+    ) + @(
+      foreach ($directory in @('src', 'scripts')) {
+        $sourceDirectory = Join-Path $RepositoryRoot $directory
+        if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) { continue }
+        Get-ChildItem -LiteralPath $sourceDirectory -File -Recurse | Where-Object {
+          $directory -ne 'scripts' -or $_.Name -notmatch '^(?:verify|evaluate)-'
+        } | ForEach-Object { $_.FullName.Substring($RepositoryRoot.Length).TrimStart('\') }
+      }
     ) | Where-Object { Test-Path -LiteralPath (Join-Path $RepositoryRoot $_) -PathType Leaf }
     foreach ($relative in @($relativePaths | Sort-Object -Unique)) {
       $relativeBytes = [System.Text.Encoding]::UTF8.GetBytes($relative.ToLowerInvariant() + "`n")
@@ -1265,6 +1326,18 @@ if ($ListFeatures) {
   return
 }
 
+$featureRequest = if ($CheckCompatibility -and -not $PSBoundParameters.ContainsKey('Features')) {
+  # An already installed Launcher coordinator calls this older preflight form.
+  # It has no selection to validate; the subsequent installer call supplies it.
+  @('none')
+} else { $Features }
+$requestedFeatures = @(
+  Resolve-RequestedFeatures -Catalog $catalog -RetiredCatalog $retiredCatalog -Requested $featureRequest
+)
+if ($CheckCompatibility -and -not $PSBoundParameters.ContainsKey('Features')) {
+  Write-Warning 'No feature selection supplied; checking only the DSH release. Installation checks selected features separately.'
+}
+
 $checkoutCandidate = if ($DshCheckout -ne '') { $DshCheckout }
   else { Join-Path $pluginRoot '..\deepseek-harness' }
 $checkout = [System.IO.Path]::GetFullPath($checkoutCandidate)
@@ -1273,13 +1346,9 @@ $compatibilityProxyScope = Enter-DshOperationProxy
 try {
   $dshVersion = Get-DshSourceVersion -Checkout $checkout
   $compatibility = Resolve-DshCompatibility -RepositoryRoot $pluginRoot -PluginVersion $pluginManifest.version -DshVersion $dshVersion
-  Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -DshVersion $dshVersion -Catalog $catalog -Compatibility $compatibility
+  Assert-DshCompatibility -PluginManifest $pluginManifest -Checkout $checkout -DshVersion $dshVersion -Catalog $catalog -SelectedFeatures $requestedFeatures -Compatibility $compatibility
 } finally { Exit-DshOperationProxy $compatibilityProxyScope }
 if ($CheckCompatibility) { return }
-
-$requestedFeatures = @(
-  Resolve-RequestedFeatures -Catalog $catalog -RetiredCatalog $retiredCatalog -Requested $Features
-)
 $requiredCompanions = @($catalog | Where-Object { $_.Kind -eq 'companion' -and $_.Feature -eq 'windows-launcher' })
 if ($requiredCompanions.Count -ne 1) {
   throw 'The catalog must contain exactly one required windows-launcher companion.'
@@ -1384,14 +1453,18 @@ try {
 
   if ($selectedPackages.Count -gt 0) {
     $packageArchives = @(New-ProfileBundleArchives -Packages $selectedPackages -ProfileName $Profile)
-    Write-Host "Installing selected DSH bundles for feature set '$selectedLabel' into profile '$Profile'..."
-    $proxyScope = Enter-DshOperationProxy
-    try {
-      & $executable @prefixArguments plugin --profile $Profile add @packageArchives --yes
-      if ($LASTEXITCODE -ne 0) {
-        throw "DSH plugin installation failed for profile '$Profile' with exit code $LASTEXITCODE; existing bundles and companions were not removed."
-      }
-    } finally { Exit-DshOperationProxy $proxyScope }
+    if (Test-ProfileBundleArchivesInstalled -Packages $selectedPackages -Archives $packageArchives -ProfileName $Profile) {
+      Write-Host "Selected DSH bundles are already installed from identical archives in profile '$Profile'; skipping package installation."
+    } else {
+      Write-Host "Installing selected DSH bundles for feature set '$selectedLabel' into profile '$Profile'..."
+      $proxyScope = Enter-DshOperationProxy
+      try {
+        & $executable @prefixArguments plugin --profile $Profile add @packageArchives --yes
+        if ($LASTEXITCODE -ne 0) {
+          throw "DSH plugin installation failed for profile '$Profile' with exit code $LASTEXITCODE; existing bundles and companions were not removed."
+        }
+      } finally { Exit-DshOperationProxy $proxyScope }
+    }
   } else {
     Write-Host "Feature set '$selectedLabel' contains no DSH bundles to add."
   }

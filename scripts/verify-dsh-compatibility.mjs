@@ -11,6 +11,7 @@ import { resolveProject } from '../packages/windows-launcher/src/toolchain.mjs'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const dsh = resolve(process.env.DSH_VERIFY_CHECKOUT ?? resolve(root, '../deepseek-harness'))
 const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
+const dshVersion = JSON.parse(readFileSync(resolve(dsh, 'package.json'), 'utf8')).version
 const cliArgs = resolveProject({ sourceDirectory: dsh }).args
 const cli = cliArgs[0]
 if (process.platform !== 'win32') throw new Error('This installer integration gate requires Windows PowerShell 5.1.')
@@ -19,6 +20,9 @@ const packages = readdirSync(resolve(root, 'packages'))
   .map(name => resolve(root, 'packages', name, 'package.json')).filter(existsSync)
   .map(path => JSON.parse(readFileSync(path, 'utf8')))
   .filter(value => value.dshEnhanced.kind === 'bundle')
+const supports = value => value.dshEnhanced.manager?.compatibility?.dsh?.includes(dshVersion) ?? true
+const compatible = packages.filter(supports)
+const incompatible = packages.filter(value => !supports(value))
 const allNames = [manifest.name, ...packages.map(value => value.name)]
 const scratch = resolve(root, '.verify-dsh-home')
 mkdirSync(scratch, { recursive: true })
@@ -43,6 +47,23 @@ function install(features, label, skipLauncher) {
     '-Features', features.join(','), '-SkipBuild', '-SkipLauncherSystemIntegration',
     ...(skipLauncher ? ['-SkipLauncherInstall'] : []),
   ], label)
+}
+
+function expectRejected(features, label) {
+  const profilePath = resolve(home, 'profiles/web/package.json')
+  const before = existsSync(profilePath) ? readFileSync(profilePath, 'utf8') : null
+  const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', resolve(root, 'scripts/migrate-to-enhanced-plugin.ps1'), '-DshCheckout', dsh,
+    '-Features', features.join(','), '-SkipBuild', '-SkipLauncherSystemIntegration', '-SkipLauncherInstall'],
+  { cwd: root, env, encoding: 'utf8', windowsHide: true, timeout: 120_000 })
+  const output = redact(`${result.stdout ?? ''}\n${result.stderr ?? ''}`)
+  writeFileSync(resolve(home, `${label}.log`), output)
+  assert.notEqual(result.status, 0, `${label}: unsupported feature was installed`)
+  assert.match(output, /Incompatible DSH feature/)
+  assert.equal(existsSync(profilePath) ? readFileSync(profilePath, 'utf8') : null, before,
+    `${label}: rejected install changed the profile`)
+  report.push({ label, rejected: features, profile: 'unchanged' })
+  console.log(`${label}: incompatible feature rejected without changing profile`)
 }
 
 async function verify(expected, label) {
@@ -106,15 +127,24 @@ async function verify(expected, label) {
 }
 
 console.log(`Isolated verification home: ${home}`)
-for (const [index, value] of packages.entries()) {
+for (const [index, value] of compatible.entries()) {
   const label = `single-${value.dshEnhanced.feature}`
   install([value.dshEnhanced.feature], label, index > 0)
   await verify([value.name], label)
 }
-install(['all'], 'all', true)
-await verify(packages.map(value => value.name), 'all')
-install([packages[0].dshEnhanced.feature, packages[1].dshEnhanced.feature], 'reselect-two', true)
-await verify([packages[0].name, packages[1].name], 'reselect-two')
+for (const value of incompatible) expectRejected([value.dshEnhanced.feature], `rejected-${value.dshEnhanced.feature}`)
+if (incompatible.length === 0) {
+  install(['all'], 'all', true)
+  await verify(packages.map(value => value.name), 'all')
+} else {
+  expectRejected(['all'], 'rejected-all')
+  install(compatible.map(value => value.dshEnhanced.feature), 'selected-compatible', true)
+  await verify(compatible.map(value => value.name), 'selected-compatible')
+}
+if (compatible.length >= 2) {
+  install(compatible.slice(0, 2).map(value => value.dshEnhanced.feature), 'reselect-two', true)
+  await verify(compatible.slice(0, 2).map(value => value.name), 'reselect-two')
+}
 install(['none'], 'none', true)
 await verify([], 'none')
 // Exercise migration from a real, previously installed bundle in this isolated profile.
@@ -130,10 +160,12 @@ writeFileSync(resolve(retiredModel, 'cordis.patch.yml'), '- insert:\n    - id: m
 command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', retiredModel, '--yes'], 'retired-model-install', dsh)
 install(['none'], 'retired-model-cleanup', true)
 await verify([], 'retired-model-cleanup')
-const aggregatePack = spawnSync(process.execPath, [process.env.npm_execpath, 'pack', '--ignore-scripts', '--json',
-  '--pack-destination', home, root], { cwd: root, encoding: 'utf8', windowsHide: true })
-assert.equal(aggregatePack.status, 0, aggregatePack.stderr)
-const aggregateArchive = resolve(home, JSON.parse(aggregatePack.stdout)[0].filename)
-command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', aggregateArchive, '--yes'], 'aggregate-install', dsh)
-await verify([manifest.name], 'aggregate')
+if (incompatible.length === 0) {
+  const aggregatePack = spawnSync(process.execPath, [process.env.npm_execpath, 'pack', '--ignore-scripts', '--json',
+    '--pack-destination', home, root], { cwd: root, encoding: 'utf8', windowsHide: true })
+  assert.equal(aggregatePack.status, 0, aggregatePack.stderr)
+  const aggregateArchive = resolve(home, JSON.parse(aggregatePack.stdout)[0].filename)
+  command(process.execPath, [...cliArgs, 'plugin', '--profile', 'web', 'add', aggregateArchive, '--yes'], 'aggregate-install', dsh)
+  await verify([manifest.name], 'aggregate')
+}
 console.log(`Compatibility selection gate passed; report: ${resolve(home, 'report.json')}`)

@@ -2,7 +2,9 @@ import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties }
 import clsx from 'clsx'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { IconUserOutline16, IconChecklistOutline14, IconCloseOutline16, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  IconChecklistOutlineRegular, IconCloseOutlineRegular, IconRefreshOutlineRegular, IconUserOutlineRegular,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MonitorState } from './controller.ts'
 import type { MonitorTask, TeamSnapshot, WorkflowActivity, ExecutionDetail } from '../shared.ts'
 import { ExecutionFlow } from './ExecutionFlow.tsx'
@@ -64,7 +66,7 @@ export function MonitorControl(props: MonitorControlProps) {
   return <div ref={root} className={css.control} data-team-monitor-session={sessionId}>
     <button ref={trigger} type="button" className={clsx(css.trigger, state.open && css.selected)} title={t('open')}
       aria-label={t('open')} aria-haspopup="dialog" aria-expanded={state.open} aria-controls={state.open ? panelId : undefined}
-      onClick={() => setOpen(!state.open)}><IconUserOutline16 /></button>
+      onClick={() => setOpen(!state.open)}><IconUserOutlineRegular /></button>
     <MonitorPanel {...props} panelId={panelId} close={close} style={position} />
   </div>
 }
@@ -78,7 +80,7 @@ function WorkflowBody({ activity, sessionId, t, openMember }: {
     try { await openMember(sessionId, id) } catch { setNavigationError(true) }
   }
   return <section className={css.section}>
-    <h3><IconUserOutline16 />{t('workflows')}<span>{activity.counts.runs}</span></h3>
+    <h3><IconUserOutlineRegular />{t('workflows')}<span>{activity.counts.runs}</span></h3>
     <p className={css.notice}>{t('workflowHint')}</p>
     <div className={css.metrics}>
       <div><strong>{activity.counts.members}</strong><span>{t('startedMembers')}</span></div>
@@ -134,7 +136,7 @@ function TeamBody({ snapshot, t, openMember }: { snapshot: TeamSnapshot; t: View
     {!snapshot.enabled && <p className={css.notice}>{t('disabled')}</p>}
     {snapshot.truncated && <p className={css.notice}>{t('truncated')}</p>}
     <section className={css.section}>
-      <h3><IconUserOutline16 />{t('members')}<span>{snapshot.counts.members}</span>
+      <h3><IconUserOutlineRegular />{t('members')}<span>{snapshot.counts.members}</span>
         <button type="button" className={css.memberToggle} aria-expanded={membersOpen} onClick={() => setMembersOpen(!membersOpen)}>{t(membersOpen ? 'collapseMembers' : 'expandMembers')}</button>
       </h3>
       {membersOpen && <div className={css.members}>
@@ -158,7 +160,7 @@ function TeamBody({ snapshot, t, openMember }: { snapshot: TeamSnapshot; t: View
       {navigationError && <p role="alert" className={css.warning}>{t('navigationError')}</p>}
     </section>
     <section className={css.section}>
-      <h3><IconChecklistOutline14 />{t('tasks')}<span>{snapshot.counts.tasks}</span></h3>
+      <h3><IconChecklistOutlineRegular size={14} />{t('tasks')}<span>{snapshot.counts.tasks}</span></h3>
       {snapshot.tasks.length === 0 ? <p className={css.empty}>{t('noTasks')}</p> : graph === undefined ? <p role="alert">{t('incompatible')}</p> : <>
         <div className={css.graphScroll} role="region" aria-label={t('tasks')} tabIndex={0}>
           <div className={css.graph} style={{ '--team-width': `${graph.width}px`, '--team-height': `${graph.height}px` } as CSSProperties}>
@@ -207,8 +209,8 @@ export function MonitorPanel({ useTeamMonitor, sessionId, panelId, close, style,
     <header className={css.header}>
       <div><h2>{t('title')}</h2><p>{t('subtitle')}</p></div>
       {snapshot !== undefined && snapshot.kind !== 'unavailable' && <span className={css.source} data-live={snapshot.source === 'live'}>{t(snapshot.source)}</span>}
-      <button type="button" className={css.iconButton} onClick={refresh} disabled={state.loading || !state.online} aria-label={t('refresh')} title={t('refresh')}><IconRefreshOutline16 /></button>
-      <button type="button" className={css.iconButton} onClick={close} aria-label={t('close')} title={t('close')}><IconCloseOutline16 /></button>
+      <button type="button" className={css.iconButton} onClick={refresh} disabled={state.loading || !state.online} aria-label={t('refresh')} title={t('refresh')}><IconRefreshOutlineRegular /></button>
+      <button type="button" className={css.iconButton} onClick={close} aria-label={t('close')} title={t('close')}><IconCloseOutlineRegular /></button>
     </header>
     <div className={css.body} aria-busy={state.loading && snapshot === undefined}>
       {snapshot !== undefined && <ExecutionFlow key={`execution:${sessionId}`} snapshot={snapshot} openMember={openMember} inspectNode={inspectNode} t={t} />}

@@ -5,8 +5,8 @@ import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  Button, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconLoadingOutline16,
-  IconSendOutline14, JsonBlock, projectUserText, Tooltip, writeClipboard, FileTypeIcon, fileSizeText,
+  Button, IconCheckOutlineRegular, IconCopyOutlineRegular, IconEditOutlineRegular, IconLoadingOutlineRegular,
+  IconSendOutlineRegular, JsonBlock, projectUserText, Tooltip, writeClipboard, FileTypeIcon, fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { EditLastMessageRequest } from './edit-session.ts'
 import {
@@ -241,8 +241,8 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, op
                           variant="primary"
                           size="sm"
                           icon={saving
-                            ? <IconLoadingOutline16 className={css.loadingIcon} />
-                            : <IconSendOutline14 size={16} />}
+                            ? <IconLoadingOutlineRegular className={css.loadingIcon} />
+                            : <IconSendOutlineRegular size={16} />}
                           aria-label={saving ? t('action.saving') : t('action.save')}
                           disabled={saving}
                           onClick={() => { void save() }}
@@ -274,13 +274,13 @@ function EditableUserBubble({ data, renderMessageImages, useSession, useChat, op
           <span className={css.time}>{new Date(data.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           <Tooltip label={copied ? t('action.copied') : t('action.copy')} side="bottom">
             <button type="button" className={css.action} aria-label={copied ? t('action.copied') : t('action.copy')} onClick={onCopy}>
-              {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}
+              {copied ? <IconCheckOutlineRegular /> : <IconCopyOutlineRegular />}
             </button>
           </Tooltip>
           {canEdit && (
             <Tooltip label={t('action.edit')} side="bottom">
               <button type="button" className={css.action} aria-label={t('action.edit')} onClick={beginEdit}>
-                <IconEditOutline16 />
+                <IconEditOutlineRegular />
               </button>
             </Tooltip>
           )}
@@ -381,7 +381,7 @@ export function EditedUserMessage({
 }: EditedUserMessageProps) {
   const data = node.data
   const latest = useChat(snapshot => isLatestRootEdit(snapshot, data))
-  const skillNames = useChat(snapshot => loadedEditSkills(snapshot, node.location, data.messageSeq))
+  const skillNames = useChat(snapshot => loadedEditSkills(snapshot, data.stepLocation, data.messageSeq))
   const flowRevision = useChat(snapshot => {
     const order = snapshot.order
     return `${order.length}:${order[0] ?? ''}:${order.at(-1) ?? ''}`

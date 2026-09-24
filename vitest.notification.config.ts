@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: exactDshAliases({
       '@deepseek-ai/cordis': resolve(dsh, 'vendor/cordis/lib/index.js'),
+      '@deepseek-ai/schemastery': resolve(dsh, 'vendor/schemastery/lib/index.mjs'),
       '@deepseek-ai/dsh-settings': resolve(dsh, 'packages/settings/settings/lib/index.js'),
       '@deepseek-ai/dsh-typert-protocol': resolve(root, 'tests/mcp-server-manager/stubs/dsh-typert-protocol.ts'),
       '@deepseek-ai/dsh-client-ui-primitives': resolve(root, 'tests/notification/stubs/ui-primitives.tsx')

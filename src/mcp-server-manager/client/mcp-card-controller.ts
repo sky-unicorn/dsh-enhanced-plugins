@@ -51,7 +51,7 @@ export interface CardShell {
  * Namespace of the MCP manager. Spelled here rather than imported: a client
  * package must not depend on a Host package.
  */
-export const MCP_NS = 'mcp'
+export const MCP_NS = 'mcp-manager'
 
 /** The `serverName` contract, kept in sync with the manager's key pattern. */
 export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/

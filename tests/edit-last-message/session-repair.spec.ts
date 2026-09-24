@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { assertReleasedPayloadSemantics } from '@dsh-test/session-format-v0-to-v1-validation'
-import { createEditSource } from '../../src/edit-last-message/shared.ts'
+import { createEditSource, EDIT_SOURCE_PREFIX } from '../../src/edit-last-message/shared.ts'
 import {
   repairSessionArtifact, scanZstdFrames,
 } from '../../scripts/repair-edit-last-message-session.mjs'
@@ -82,7 +82,7 @@ describe('edit-last-message session repair', () => {
     expect(await readFile(repaired.backupPath!)).toEqual(original)
 
     const rows = await decodedRows(path)
-    const expectedSource = createEditSource('original-message')
+    const expectedSource = { kind: 'plugin', plugin: EDIT_SOURCE_PREFIX + encodeURIComponent('original-message') }
     expect(rows[1]).toMatchObject({ data: { inserted: [{ source: expectedSource }] } })
     expect(rows[2]).toMatchObject({ data: { source: expectedSource } })
     expect(() => assertReleasedPayloadSemantics(rows[1] as never, 0)).not.toThrow()
@@ -90,5 +90,24 @@ describe('edit-last-message session repair', () => {
 
     const secondCheck = await repairSessionArtifact(path)
     expect(secondCheck).toMatchObject({ replacements: 0, affectedSeqs: [] })
+  })
+
+  it('converts retired plugin wrappers in native V4 rows to a producer-owned source', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-edit-session-repair-v4-'))
+    roots.push(root)
+    const path = join(root, 'session.jsonl.zstd')
+    const source = { kind: 'plugin', plugin: EDIT_SOURCE_PREFIX + encodeURIComponent('original / 中文') }
+    const header = { type: 'session', version: 4, id: 'session-v4', createdAt: 1 }
+    const inbox = { type: 'agent/inbox/spliced', seq: 0, time: 2, data: { inserted: [message(source)] } }
+    const user = { type: 'user/message', seq: 1, time: 3, data: message(source) }
+    await writeFile(path, Buffer.concat([header, inbox, user].map(row => zstdCompressSync(line(row), zstdOptions))))
+
+    const repaired = await repairSessionArtifact(path, { write: true })
+    expect(repaired.replacements).toBe(2)
+    const rows = await decodedRows(path)
+    const expected = createEditSource('original / 中文')
+    expect(rows[1]).toMatchObject({ data: { inserted: [{ source: expected }] } })
+    expect(rows[2]).toMatchObject({ data: { source: expected } })
+    expect((await repairSessionArtifact(path)).replacements).toBe(0)
   })
 })

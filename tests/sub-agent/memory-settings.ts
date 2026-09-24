@@ -12,12 +12,34 @@ function plain(value: unknown): unknown {
   return value
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeLayers(base: unknown, user: unknown): unknown {
+  if (!isRecord(base) || !isRecord(user)) return user
+  const result: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(user)) result[key] = key in result ? mergeLayers(result[key], value) : value
+  return result
+}
+
 function applyOps(input: Record<string, unknown>, ops: readonly Operation[]): Record<string, unknown> {
   const result = structuredClone(input)
   for (const op of ops) {
-    if (op.path.length !== 1) throw new Error('MemorySettings only supports scalar test paths')
-    if (op.op === 'set') result[op.path[0]!] = structuredClone(op.value)
-    else delete result[op.path[0]!]
+    if (op.path.length === 0) throw new Error('MemorySettings requires a field path')
+    let parent: Record<string, unknown> = result
+    let found = true
+    for (const key of op.path.slice(0, -1)) {
+      if (!isRecord(parent[key])) {
+        if (op.op === 'unset') { found = false; break }
+        parent[key] = {}
+      }
+      parent = parent[key] as Record<string, unknown>
+    }
+    if (!found) continue
+    const field = op.path.at(-1)!
+    if (op.op === 'set') parent[field] = structuredClone(op.value)
+    else delete parent[field]
   }
   return result
 }
@@ -40,7 +62,7 @@ export class MemorySettings extends Service {
   register(ns: SettingsNamespace, schema: SchemaLike, options: { base?: Record<string, unknown> } = {}): void {
     const base = structuredClone(options.base ?? {})
     const user = structuredClone((this.storedDocument[String(ns)] as Record<string, unknown> | undefined) ?? {})
-    const value = plain(schema({ ...base, ...user })) as Record<string, unknown>
+    const value = plain(schema(mergeLayers(base, user))) as Record<string, unknown>
     this.sections.set(ns, { ns, schema, base, user, value, revision: 0 })
   }
 
@@ -57,7 +79,7 @@ export class MemorySettings extends Service {
     if (!section) throw new Error(`missing settings namespace ${String(ns)}`)
     if (expectedRevision !== undefined && expectedRevision !== section.revision) throw new SettingsConflictError(ns, expectedRevision, section.revision)
     section.user = applyOps(section.user, ops)
-    section.value = plain(section.schema({ ...section.base, ...section.user })) as Record<string, unknown>
+    section.value = plain(section.schema(mergeLayers(section.base, section.user))) as Record<string, unknown>
     section.revision += 1
     this.storedDocument[String(ns)] = structuredClone(section.user)
     this.persisted.push({ ns, section: structuredClone(section.user) })

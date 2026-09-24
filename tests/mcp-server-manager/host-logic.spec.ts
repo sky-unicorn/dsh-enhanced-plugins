@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { maskServers, SECRET_MASK } from '../../src/mcp-server-manager/host/remote.ts'
 import {
-  Config, SERVER_NAME_PATTERN, toMcpClientConfig,
+  Config, SERVER_NAME_PATTERN, snapshotMcpConfig, toMcpClientConfig,
   type ServerDefinition, type StdioServerDefinition, type StreamableHttpServerDefinition,
 } from '../../src/mcp-server-manager/host/schema.ts'
 
@@ -101,12 +101,12 @@ describe('toMcpClientConfig', () => {
 
 describe('Config schema', () => {
   it('accepts a mixed server record and fills defaults', () => {
-    const resolved = Config({
+    const resolved = snapshotMcpConfig(Config({
       servers: {
         a: { transport: 'stdio', command: 'npx' },
         b: { transport: 'streamable-http', url: 'https://x.test' },
       },
-    }) as { servers: Record<string, ServerDefinition> }
+    })) as { servers: Record<string, ServerDefinition> }
     const a = resolved.servers['a']
     if (a?.transport !== 'stdio') throw new Error('unreachable')
     expect(a.args).toEqual([])

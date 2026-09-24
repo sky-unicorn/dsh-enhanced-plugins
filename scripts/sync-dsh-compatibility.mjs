@@ -48,17 +48,38 @@ export function syncDshPeers(root, versions = bundledDshVersions(root)) {
   for (const { value } of manifests) {
     if (value.version !== pluginVersion) throw new Error(`Mixed plugin release: ${value.name}`)
   }
+  const featureLimits = manifests.slice(1).map(({ value }) => {
+    const allowed = value.dshEnhanced?.manager?.compatibility?.dsh
+    if (allowed === undefined) return undefined
+    if (!Array.isArray(allowed) || allowed.length === 0 || new Set(allowed).size !== allowed.length
+      || allowed.some(version => typeof version !== 'string' || !exactVersion.test(version))) {
+      throw new Error(`Invalid DSH feature compatibility: ${value.name}`)
+    }
+    return allowed
+  })
+  const aggregateVersions = versions.filter(version => featureLimits.every(allowed => allowed === undefined || allowed.includes(version)))
+  const selectedVersions = manifests.map(({ value }, index) => index === 0
+    ? aggregateVersions
+    : versions.filter(version => featureLimits[index - 1] === undefined || featureLimits[index - 1].includes(version)))
   const lockPath = resolve(root, 'package-lock.json')
   if (existsSync(lockPath)) {
     const lock = read(lockPath)
     if (!lock.packages?.['']) throw new Error('Root package lock has no root metadata')
     manifests.push({ path: lockPath, value: lock, peerOwner: lock.packages[''] })
+    selectedVersions.push(aggregateVersions)
   }
-  for (const { path, value, peerOwner = value } of manifests) {
+  for (const [index, { path, value, peerOwner = value }] of manifests.entries()) {
+    if (selectedVersions[index].length === 0
+      && Object.keys(peerOwner.peerDependencies ?? {}).some(name => name.startsWith('@deepseek-ai/dsh-'))) {
+      throw new Error(`No supported DSH versions for ${peerOwner.name ?? value.name ?? path}`)
+    }
+  }
+  for (const [index, { path, value, peerOwner = value }] of manifests.entries()) {
+    const supported = selectedVersions[index]
     let changed = false
     for (const name of Object.keys(peerOwner.peerDependencies ?? {})) {
-      if (name.startsWith('@deepseek-ai/dsh-') && peerOwner.peerDependencies[name] !== versions.join(' || ')) {
-        peerOwner.peerDependencies[name] = versions.join(' || ')
+      if (name.startsWith('@deepseek-ai/dsh-') && peerOwner.peerDependencies[name] !== supported.join(' || ')) {
+        peerOwner.peerDependencies[name] = supported.join(' || ')
         changed = true
       }
     }

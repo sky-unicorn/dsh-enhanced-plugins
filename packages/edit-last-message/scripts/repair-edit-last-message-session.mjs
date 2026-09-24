@@ -14,6 +14,7 @@ const ZSTD_MAGIC = 0xFD2FB528
 const CHECKSUM_OPTIONS = {
   params: { [constants.ZSTD_c_checksumFlag]: 1 },
 }
+const EDIT_SOURCE_PREFIX = 'dsh-enhanced/edit-last-message/v2/'
 
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -21,6 +22,7 @@ function isRecord(value) {
 
 function legacyMarker(source, label) {
   if (!isRecord(source)) return undefined
+  if (source.kind === 'edit-last-message' && source.version === 2) return undefined
   const marker = source.kind === 'edit-last-message' ? source
     : source.kind === 'plugin' && source.plugin === 'edit-last-message' && Object.hasOwn(source, 'editLastMessage')
       ? source.editLastMessage : undefined
@@ -36,34 +38,41 @@ function legacyMarker(source, label) {
   return marker
 }
 
-function repairMessage(message, label) {
+function repairMessage(message, label, formatVersion) {
   if (!isRecord(message)) return false
-  const marker = legacyMarker(message.source, `${label} source`)
-  if (marker === undefined) return false
-  // Same wire convention as createEditSource(). The offline repair stays
-  // standalone so it can run before DSH is able to open the old artifact.
-  message.source = {
-    kind: 'plugin',
-    plugin: 'dsh-enhanced/edit-last-message/v2/' + encodeURIComponent(marker.rootMessageId),
+  const source = message.source
+  const marker = legacyMarker(source, `${label} source`)
+  let rootMessageId = marker?.rootMessageId
+  if (rootMessageId === undefined && formatVersion === 4 && isRecord(source)
+    && source.kind === 'plugin' && typeof source.plugin === 'string' && source.plugin.startsWith(EDIT_SOURCE_PREFIX)) {
+    try { rootMessageId = decodeURIComponent(source.plugin.slice(EDIT_SOURCE_PREFIX.length)) }
+    catch { throw new Error(`${label} source contains an invalid encoded root message ID`) }
+    if (rootMessageId.length === 0) throw new Error(`${label} source contains an empty root message ID`)
   }
+  if (rootMessageId === undefined) return false
+  // Pre-V4 artifacts need the released V3 wrapper so the V2-to-V3 migrator
+  // can classify it. Native V4 rows must use a producer-owned kind.
+  message.source = formatVersion === 4
+    ? { kind: 'edit-last-message', version: 2, rootMessageId }
+    : { kind: 'plugin', plugin: EDIT_SOURCE_PREFIX + encodeURIComponent(rootMessageId) }
   return true
 }
 
-function repairRecord(record, affectedSeqs) {
+function repairRecord(record, affectedSeqs, formatVersion) {
   if (!isRecord(record)) throw new Error('session JSONL member must be an object')
   let replacements = 0
   if (record.type === 'agent/inbox/spliced' && isRecord(record.data) && Array.isArray(record.data.inserted)) {
     for (const [index, message] of record.data.inserted.entries()) {
-      if (repairMessage(message, `agent/inbox/spliced ${String(record.seq)} inserted[${index}]`)) replacements += 1
+      if (repairMessage(message, `agent/inbox/spliced ${String(record.seq)} inserted[${index}]`, formatVersion)) replacements += 1
     }
   } else if (record.type === 'user/message' && isRecord(record.data)) {
-    if (repairMessage(record.data, `user/message ${String(record.seq)}`)) replacements += 1
+    if (repairMessage(record.data, `user/message ${String(record.seq)}`, formatVersion)) replacements += 1
   }
   if (replacements > 0 && Number.isSafeInteger(record.seq)) affectedSeqs.add(record.seq)
   return replacements
 }
 
-function rewriteJsonl(plaintext, label, affectedSeqs) {
+function rewriteJsonl(plaintext, label, affectedSeqs, formatVersion) {
   if (plaintext.length === 0 || plaintext.at(-1) !== 0x0A) {
     throw new Error(`${label} does not end at a complete JSONL record`)
   }
@@ -78,13 +87,25 @@ function rewriteJsonl(plaintext, label, affectedSeqs) {
     } catch (error) {
       throw new Error(`${label} contains invalid JSON at line ${index + 1}`, { cause: error })
     }
-    const changed = repairRecord(record, affectedSeqs)
+    const changed = repairRecord(record, affectedSeqs, formatVersion)
     if (changed > 0) {
       lines[index] = JSON.stringify(record)
       replacements += changed
     }
   }
   return { bytes: Buffer.from(lines.join('\n')), replacements }
+}
+
+function artifactVersion(plaintext) {
+  const newline = plaintext.indexOf(0x0A)
+  if (newline < 0) throw new Error('session artifact has no complete header')
+  let header
+  try { header = JSON.parse(plaintext.subarray(0, newline).toString('utf8')) }
+  catch { throw new Error('session artifact has an invalid JSON header') }
+  if (!isRecord(header) || !Number.isSafeInteger(header.version) || header.version < 0 || header.version > 4) {
+    throw new Error('session artifact has an unsupported format version')
+  }
+  return header.version
 }
 
 /** Locate complete frames in DSH's concatenated-Zstandard container. */
@@ -136,13 +157,15 @@ export function scanZstdFrames(buffer) {
 function repairZstd(input) {
   const frames = scanZstdFrames(input)
   if (frames.length === 0) throw new Error('empty Zstandard session artifact')
+  const first = frames[0]
+  const formatVersion = artifactVersion(zstdDecompressSync(input.subarray(first.start, first.end)))
   const output = []
   const affectedSeqs = new Set()
   let replacements = 0
   for (const [index, frame] of frames.entries()) {
     const encoded = input.subarray(frame.start, frame.end)
     const plaintext = zstdDecompressSync(encoded)
-    const rewritten = rewriteJsonl(plaintext, `Zstandard frame ${index}`, affectedSeqs)
+    const rewritten = rewriteJsonl(plaintext, `Zstandard frame ${index}`, affectedSeqs, formatVersion)
     output.push(rewritten.replacements === 0 ? encoded : zstdCompressSync(rewritten.bytes, CHECKSUM_OPTIONS))
     replacements += rewritten.replacements
   }
@@ -151,7 +174,7 @@ function repairZstd(input) {
 
 function repairPlaintext(input) {
   const affectedSeqs = new Set()
-  const rewritten = rewriteJsonl(input, 'session artifact', affectedSeqs)
+  const rewritten = rewriteJsonl(input, 'session artifact', affectedSeqs, artifactVersion(input))
   return { ...rewritten, affectedSeqs: [...affectedSeqs] }
 }
 

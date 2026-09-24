@@ -42,9 +42,7 @@ const expectedRows: Record<string, string[]> = {
   'mcp-server-manager': ['mcp-manager'],
   notification: ['desktop-notifications'],
   'plugin-market': ['plugin-market'],
-  'sub-agent': [
-    'subagent-codex', 'subagent-claude-code', 'subagent-product-toggles', 'subagent-product-toggle-tools',
-  ],
+  'sub-agent': ['subagent-product-toggles', 'subagent-product-toggle-tools'],
 }
 const expectedCompanions = ['windows-launcher']
 const expectedFeatures = [...Object.keys(expectedRows), ...expectedCompanions].sort()
@@ -575,6 +573,71 @@ describe('selective feature packages', () => {
       rmSync(managerDirectory, { recursive: true, force: true })
     }
   }, 30_000)
+
+  it.skipIf(process.platform !== 'win32')('tracks runtime source edits in both Launcher and installer revisions', () => {
+    const fixture = mkdtempSync(resolve(tmpdir(), 'dsh-source-revision-'))
+    try {
+      mkdirSync(resolve(fixture, 'packages/example'), { recursive: true })
+      mkdirSync(resolve(fixture, 'src/example'), { recursive: true })
+      mkdirSync(resolve(fixture, 'scripts'), { recursive: true })
+      writeFileSync(resolve(fixture, 'package.json'), '{"name":"fixture"}')
+      writeFileSync(resolve(fixture, 'packages/example/package.json'), '{"name":"example"}')
+      writeFileSync(resolve(fixture, 'src/example/index.ts'), 'export const value = 1\n')
+      writeFileSync(resolve(fixture, 'scripts/build-client.mjs'), 'export const build = 1\n')
+      writeFileSync(resolve(fixture, 'scripts/verify-example.mjs'), 'export const check = 1\n')
+      writeFileSync(resolve(fixture, 'README.md'), 'before\n')
+      const probe = resolve(fixture, 'probe.ps1')
+      writeFileSync(probe, `
+param([string] $FixtureRoot, [string] $ManagerScript, [string] $InstallerScript)
+$ErrorActionPreference = 'Stop'
+function Load-Function([string] $Path, [string] $Name) {
+  $source = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+  $tokens = $null
+  $errors = $null
+  $ast = [System.Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$errors)
+  if (@($errors).Count -gt 0) { throw "Cannot parse $Path" }
+  $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $Name }, $true)
+  if ($null -eq $definition) { throw "Missing $Name in $Path" }
+  $definition.Extent.Text
+}
+Invoke-Expression (Load-Function $ManagerScript 'Get-LocalSourceRevision')
+Invoke-Expression (Load-Function $InstallerScript 'Get-ProjectSourceRevision')
+function Get-WindowsLauncherInstallRoot { Join-Path $FixtureRoot 'launcher-home' }
+function RevisionPair {
+  [pscustomobject]@{
+    manager = Get-LocalSourceRevision $FixtureRoot
+    installer = Get-ProjectSourceRevision $FixtureRoot
+  }
+}
+$baseline = RevisionPair
+Set-Content -LiteralPath (Join-Path $FixtureRoot 'README.md') -Value 'after' -Encoding UTF8
+$documentation = RevisionPair
+Set-Content -LiteralPath (Join-Path $FixtureRoot 'scripts/verify-example.mjs') -Value 'changed' -Encoding UTF8
+$verification = RevisionPair
+Set-Content -LiteralPath (Join-Path $FixtureRoot 'src/example/index.ts') -Value 'export const value = 2' -Encoding UTF8
+$source = RevisionPair
+Set-Content -LiteralPath (Join-Path $FixtureRoot 'scripts/build-client.mjs') -Value 'export const build = 2' -Encoding UTF8
+$buildScript = RevisionPair
+[pscustomobject]@{ baseline = $baseline; documentation = $documentation; verification = $verification; source = $source; buildScript = $buildScript } | ConvertTo-Json -Depth 5 -Compress
+`, 'utf8')
+      const result = spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', probe,
+        '-FixtureRoot', fixture,
+        '-ManagerScript', resolve(packagesRoot, 'windows-launcher/src/DSH-Launcher.PluginManager.ps1'),
+        '-InstallerScript', resolve(root, 'scripts/migrate-to-enhanced-plugin.ps1'),
+      ], { encoding: 'utf8' })
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+      const revisions = JSON.parse(result.stdout.trim()) as Record<string, { manager: string, installer: string }>
+      for (const pair of Object.values(revisions)) expect(pair.manager).toBe(pair.installer)
+      expect(revisions.documentation.manager).toBe(revisions.baseline.manager)
+      expect(revisions.verification.manager).toBe(revisions.baseline.manager)
+      expect(revisions.source.manager).not.toBe(revisions.baseline.manager)
+      expect(revisions.buildScript.manager).not.toBe(revisions.source.manager)
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
 
   it('keeps the Windows companion outside Cordis and avoids port-owner termination', () => {
     const launcherRoot = resolve(packagesRoot, 'windows-launcher')

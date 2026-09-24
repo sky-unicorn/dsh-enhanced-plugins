@@ -267,13 +267,29 @@ namespace DshEnhanced.WindowsLauncher
             File.WriteAllText(temporary, Serializer.Serialize(value), new UTF8Encoding(false));
             try
             {
-                if (File.Exists(path)) File.Replace(temporary, path, null, true);
-                else File.Move(temporary, path);
+                for (int attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        if (File.Exists(path)) File.Replace(temporary, path, null, true);
+                        else File.Move(temporary, path);
+                        break;
+                    }
+                    catch (IOException)
+                    {
+                        if (attempt >= 4) throw;
+                        Thread.Sleep(50 * (1 << attempt));
+                    }
+                }
             }
             catch (PlatformNotSupportedException)
             {
                 File.Copy(temporary, path, true);
-                File.Delete(temporary);
+            }
+            finally
+            {
+                try { if (File.Exists(temporary)) File.Delete(temporary); }
+                catch (IOException) { }
             }
         }
     }

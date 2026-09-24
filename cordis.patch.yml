@@ -32,12 +32,6 @@
     - id: model-router
       name: 'dsh-enhanced-plugins/model-router'
 
-    - id: subagent-codex
-      name: 'dsh-enhanced-plugins/sub-agent/codex'
-
-    - id: subagent-claude-code
-      name: 'dsh-enhanced-plugins/sub-agent/claude-code'
-
     - id: subagent-product-toggles
       name: 'dsh-enhanced-plugins/sub-agent/host'
       config:

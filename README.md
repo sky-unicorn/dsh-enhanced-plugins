@@ -29,6 +29,11 @@ The historical aggregate package is `dsh-enhanced-plugins`. Launcher-managed ins
 
 ## Quick start
 
+### 8.1.0: DSH 0.1.7-rc.1 compatibility
+
+- Non-Beta standalone bundles support DSH `0.1.7-rc.1` at verified commit `46a7f68b0922371ce7144b668b90e377d8e799f4`. This release fixes icons and message-editing interfaces, migrates legacy MCP and subagent settings, and improves Launcher installation state and source-change detection.
+- The aggregate, seven standalone bundles, and Windows Launcher use `8.1.0`. The Beta `agent-team-monitor` and `model-router` features remain limited to DSH `0.1.7-alpha.1`, so the aggregate declares only that version. Select the non-Beta features individually on rc.1.
+
 ### 7.3.0: DSH 0.1.7-alpha.1 compatibility
 
 - Updated settings forms to the DSH 0.1.7 volatile configuration API, migrated Agent Team session projections and tool-result messages, and preserved edit-last-message attribution.
@@ -59,7 +64,7 @@ Recovered inbox edits retain replacement semantics. Missing or stale edit target
 
 - Node.js 22.19.x, or Node.js 24 and later.
 - A recent DSH Web profile that runs from source; see the [DSH Web UI quickstart](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart).
-- Supported DSH source baseline: [`0.1.7-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61). Additional validated versions can be listed in [`dsh-compatibility.json`](dsh-compatibility.json) without a plugin code release.
+- Verified DSH source baseline for non-Beta features: [`0.1.7-rc.1`](https://github.com/deepseek-ai/deepseek-harness/tree/46a7f68b0922371ce7144b668b90e377d8e799f4). The two Beta features remain limited to `0.1.7-alpha.1`. See [`dsh-compatibility.json`](dsh-compatibility.json) and each standalone manifest for feature limits and other versions.
 - This DSH version no longer requires `fs-ext` for Session locking. Follow the target checkout’s native build requirements; Launcher uses the system .NET Framework `csc.exe`. Do not skip dependency install scripts.
 - Windows Launcher, native sounds, and the desktop pet require a full Windows desktop edition with Windows PowerShell 5.1: Windows 10 version 1607 or later, or Windows 11. The required OS capabilities are the same on Home, Pro, Education / Pro Education, and Enterprise; Windows in S mode, IoT / reduced-footprint editions, and Windows 10 versions 1507 and 1511 are outside this baseline. Windows feature updates outside Microsoft's lifecycle are best-effort because the required Node.js toolchain does not guarantee end-of-life operating systems. The installer does not depend on a particular `tar.exe`. The remaining features are cross-platform.
 
@@ -125,7 +130,7 @@ Common combinations can replace the `-Features` value in that command:
 3. Only then removes the aggregate package, unselected sibling features, and declared legacy conflicts.
 4. Detects and cleans up the retired file-reference plugin.
 
-The installer packs selected bundles before installing them inside the Profile, avoiding source-directory links that prevent the built DSH entry from resolving plugin dependencies. Content-addressed tarballs remain in the Profile's `.dsh-enhanced-bundles` directory for future pnpm reinstalls; retain archives while the Profile references them. Reinstalling replaces legacy source links.
+The installer packs selected bundles before installing them inside the Profile, avoiding source-directory links that prevent the built DSH entry from resolving plugin dependencies. Content-addressed tarballs remain in the Profile's `.dsh-enhanced-bundles` directory for future pnpm reinstalls; retain archives while the Profile references them. When every selected archive and installed package already matches, the installer skips `pnpm add`. Reinstalling replaces legacy source links.
 
 ### Launcher plugin management
 
@@ -136,7 +141,7 @@ The source installer records the DSH checkout, this repository's source path, Gi
 - when applying a newer source revision, Beta features are automatically disabled for each managed Profile and remain available for manual re-enabling after the update;
 - Windows system-proxy resolution for the plugin remote URL before a safe Git `fetch`; when Windows selects a proxy, a command-scoped Git setting applies it to every backoff attempt and expires afterward without changing existing Git configuration. Connection-reset retries switch to HTTP/1.1, followed only by a local `merge --ff-only` so `pull` does not make a second network request; when Git is unavailable, Launcher downloads an exact-commit source ZIP, while an extracted source directory or manual source ZIP can be bound without network access;
 - `npm ci`, a production `npm run build`, and runtime-entry validation in a persistent isolated `sources/runtime-*` snapshot only when the source revision or desired feature set changed; built bundles are packed and installed inside the Profile, while old source snapshots no longer referenced by any Profile are safely removed; repository-wide development typechecks remain a source-checkout concern so sibling DSH type paths do not block an isolated install; native stderr warnings remain in the log while failure is determined by the real process exit code; Launcher-owned DSH is stopped only after these checks pass;
-- an external coordinator that switches Launcher versions only when the executable hash changes, waits for readiness, rolls back failures, and restores DSH when appropriate; restoration is reported successful only after DSH remains Launcher-owned for 15 consecutive seconds;
+- an external coordinator that streams installer output to the operation log, switches Launcher versions when a changed source revision produces a different executable, waits for readiness, rolls back failures, and restores DSH when appropriate; restoration is reported successful only after DSH remains Launcher-owned for 15 consecutive seconds;
 - recovery of a still-running or interrupted coordinator after Launcher restarts, plus preservation and partial reconstruction when install state is damaged.
 
 The first version supports only a local DSH source checkout and source installs of this repository. It does not support npx, a global `dsh`, npm-published packages, or GitHub Releases. A dirty, ahead, or diverged Git checkout is never reset, rebased, or overwritten.
@@ -260,6 +265,8 @@ Servers declared directly in the `cordis.yml` composition layer support field ed
 
 Drafts retain the configuration revision at the start of editing. If another page or external editor changes the configuration, saving an older draft is refused without deleting the other editor's new servers; leave the page to discard the draft, then reopen it, review the latest configuration, and edit again. Only Save commits staged MCP changes. Interrupted saves leave the saving state and retain the draft. Failed writes re-read Host configuration, and older read responses cannot overwrite newer refresh results.
 
+In DSH `0.1.7-rc.1`, MCP settings live in the current profile's `mcp-manager` Loader entry. On the first upgrade, the plugin merges servers from the old `settings.yaml.imported` once. Existing server names win, and the original file remains as a backup. Deleting a server later does not import it again on restart.
+
 ### 5. Edit last message
 
 `edit-last-message` · **Latest editable user-message bubble in the current session**
@@ -274,14 +281,14 @@ Resend stays inside the current session: the plugin replaces model context start
 
 Sent-reference previews are preserved: selecting a file or a Skill actually loaded in that step opens the current session's right sidebar without changing or resending the text. Edited bubbles also preview files; their Skill labels use only invocation records from the edited step, never records from the replaced turn. Resends keep plugin attribution, so slash text alone does not trigger a new user Skill invocation.
 
-Since release 6.1.0, the plugin writes V3 replacement operations and uses standard plugin attribution containing the original message ID, without embedding event sequence numbers. DSH migration can renumber events without losing the edit's identity. Older nested markers and the 5.x `edit-last-message` source kind are not accepted by the V2-to-V3 migrator. Before opening such sessions in the new DSH, stop every DSH Host and run the offline repair on each affected log:
+Current V4 messages use the producer-owned `edit-last-message` source kind with the original message ID, without embedding event sequence numbers. The plugin also recognizes earlier V3 plugin attribution after DSH migrates it to V4. Older nested markers and the 5.x `edit-last-message` source kind are not accepted by the V2-to-V3 migrator. Before opening such sessions in the new DSH, stop every DSH Host and run the offline repair on each affected log:
 
 ```powershell
 node .\scripts\repair-edit-last-message-session.mjs "C:\path\to\session.jsonl.zstd"
 node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.jsonl.zstd"
 ```
 
-The first command is read-only. The second converts both historical marker formats to standard plugin attribution and creates a timestamped backup beside the original artifact. A truncated, corrupt, mismatched, or concurrently changed log is refused instead of being silently rewritten.
+The first command is read-only. The second writes migration-safe plugin attribution for pre-V4 logs, or a producer-owned source for V4 logs, and creates a timestamped backup beside the original artifact. It also repairs V4 logs containing the retired plugin wrapper. A truncated, corrupt, mismatched, or concurrently changed log is refused instead of being silently rewritten.
 
 ### 6. Product subagents
 
@@ -289,7 +296,9 @@ The first command is read-only. The second converts both historical marker forma
 
 ![Claude Code and Codex subagent toggles](assets/readme/subagent-toggles.png)
 
-Enabling Claude Code or Codex applies immediately to every Agent preset carrying this controller, including running sessions. Disabling a toggle removes the matching tool in real time. The corresponding product and its official DSH provider must still be installed locally.
+Enabling Claude Code or Codex applies immediately to every Agent preset carrying this controller, including running sessions. Disabling a toggle removes the matching tool in real time. The corresponding product must be installed locally, and its official `@deepseek-ai/dsh-subagent-claude-code` or `@deepseek-ai/dsh-subagent-codex` bundle must be installed in the current profile at the matching DSH version.
+
+On upgrade to DSH `0.1.7-rc.1`, product toggles from the old `settings.yaml.imported` are merged once into the current profile. Existing profile values take precedence.
 
 Both toggles default to off. Writes use path-addressed operations and settings revisions, so a redacted or stale snapshot cannot overwrite changes from another page or an external editor.
 
@@ -323,26 +332,27 @@ Install only this Profile feature with `-Features agent-team-monitor`; use `-Lis
 
 ## Compatibility and migration
 
-- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all six standalone bundles, and Windows Launcher use `7.3.0`.
+- **Version pairing:** [`dsh-compatibility.json`](dsh-compatibility.json) is the authority for each plugin release’s supported DSH versions and verified commits. The aggregate, all seven standalone bundles, and Windows Launcher use `8.1.0`.
+- **DSH 0.1.7-rc.1:** Verified non-Beta standalone bundles can be selected. `agent-team-monitor` and `model-router` remain limited to `0.1.7-alpha.1`; the aggregate bundle containing them declares only that version. Launcher and the installer check the final selected features before building or changing a Profile.
 - **V3 editing:** replacement operations use `startSeq/endSeq`; current attribution retains the root message ID across event renumbering. Run the offline repair described above before migrating historical edit logs. Attachment bubbles use the current public `FileTypeIcon` export instead of the removed `DocumentFileIcon`.
 - **Historical monitoring:** Cold monitor reads use the shared public `sessionQuery.observeSession()` API with `projectionMode: 'none'`, release the observation after reading, and never activate an Agent or commit crash recovery. Custom profiles need a `sessionQuery` provider for historical monitoring; the standard Web profile already supplies one. Agent Teams v1/v2 history compatibility remains owned by the active official Team projection; rejected history is shown as incompatible, never rewritten by this plugin.
 - **Installation preflight:** before building, stopping services, or changing a profile, the installer and Launcher updater fetch the compatibility file from this repository’s GitHub `master` branch. A failed request, an eight-second download timeout, or malformed/oversized data falls back to the bundled file with a warning. Every check fetches again; it does not overwrite the local fallback. The remote table takes precedence when it contains the current plugin and DSH version. If it omits either, or lists no DSH version for that plugin, the installer checks the bundled table; installation stops only when neither supports the checkout. Mixed package versions also stop installation. Commits belong to individual DSH versions; an unlisted commit, local tracked changes, or no Git metadata produces an unverified-source warning.
 - **Current interfaces:** Client features use `client-store`, `ui-session`, `ui-chat`, and public Remotes, without the removed `dsh-client-runtime`, `connection.api`, or `hostDescription`. Host settings owners pass validated namespace literals and use `SettingsProvider.installSection()`. Session consumers use `eventAt()` / `snapshotEvents()` and keep `SessionLogOffset` inheritance metadata separate from `SessionHeader`; Team Monitor preserves that exact cut through query observations and projection replay. This project follows the public interfaces of the source commit above.
-- **Provider provenance:** the `subagent-codex` and `subagent-claude-code` Loader IDs are unchanged. Their official implementations are re-exported through this package's `sub-agent/codex` and `sub-agent/claude-code` entries (`./codex` and `./claude-code` in the standalone bundle), so the new DeepSeek active-package inventory can resolve ownership without being disabled or changing DSH.
+- **Provider provenance:** `sub-agent` installs only the product toggles and tool Consumer. Codex and Claude Code's official DSH Providers are optional bundles; install either separately when needed, and its own patch registers `subagent-codex` or `subagent-claude-code`. This package retains its existing re-export entry points for older compositions, but no longer loads an absent Provider by default.
 - **Standalone builds:** feature distributions include their own source and build scripts. `npm install --legacy-peer-deps`, `npm run prepare`, and `npm pack` work without a sibling DSH checkout; the matching DSH runtime still supplies public peer services. Rebuilding Windows Launcher requires Windows and a .NET Framework 4.x compiler.
 - **Architecture boundary:** Web features extend public Services, events, slots, and settings. Windows Launcher is an independent companion and never joins the Cordis plugin tree.
 
 Check the version pairing without building or installing (add `-DshCheckout` when the checkouts are not siblings):
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -CheckCompatibility
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features edit-last-message,mcp-server-manager,notification,plugin-market,sub-agent -CheckCompatibility
 ```
 
 Use the matching plugin release for an older DSH version instead of bypassing peer dependency checks or forcing this release to install.
 
 To declare compatibility after validating a newer DSH checkout, edit only the root [`dsh-compatibility.json`](dsh-compatibility.json): keep `schemaVersion: 1`, find the exact `pluginVersion` in `releases`, and append `{ "version": "<exact DSH version>", "commits": ["<full lowercase 40-character Git hash>"] }` to its `dsh` array. If only the commit changed, append it to that version’s `commits`. Keep older plugin entries for existing installers. Push this file to GitHub `master`; users with this new installer can then receive it without downloading new plugin code. Older installer releases must first be updated to this mechanism. GitHub’s caching can delay visibility briefly.
 
-`peerDependencies` remain exact package-manager declarations, generated from this table. `npm run build` (or `npm run sync:compatibility`) synchronizes all source manifests and root lock metadata from the bundled table. Installation synchronizes them again from the resolved remote/fallback table after building, including `-SkipBuild`. These generated edits may appear in the local worktree; a compatibility-only commit needs only the JSON table. Package versions, implementation, and other dependency fields stay the same. Direct `dsh plugin add`/Desktop imports bypass this installer and use their packaged peer snapshot; rebuild/repack from the updated table for that route.
+`peerDependencies` remain exact package-manager declarations, generated from the table and each feature's own version limit. `npm run build` (or `npm run sync:compatibility`) synchronizes source manifests and root lock metadata; installation synchronizes them again from the resolved remote/fallback table after building, including `-SkipBuild`. Non-Beta standalone bundles can declare rc.1, while the two Beta bundles and the aggregate remain at alpha.1. Direct `dsh plugin add`/Desktop imports bypass this installer and use their packaged peer snapshot; rebuild/repack from the updated table for that route.
 
 The default endpoint is the [GitHub raw compatibility file](https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/master/dsh-compatibility.json). `DSH_COMPATIBILITY_URL` can point to an HTTPS mirror; HTTP is accepted only for loopback test servers. The file contains data only and cannot change code, package URLs, or build commands. `-CheckCompatibility` remains read-only.
 

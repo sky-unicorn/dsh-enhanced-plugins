@@ -21,6 +21,7 @@ const workspace = resolve(home, 'workspace')
 mkdirSync(workspace)
 const aggregate = process.env.DSH_VERIFY_AGGREGATE === '1'
 const mcpOnly = process.env.DSH_VERIFY_MCP_ONLY === '1'
+const profilePatch = resolve(home, 'profiles/web/cordis.patch.yml')
 assert.ok(!(aggregate && mcpOnly), 'Choose aggregate or MCP-only verification')
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1',
   DEEPSEEK_API_KEY: 'local-fixture',
@@ -140,17 +141,17 @@ try {
   await page.getByText('UI fixture parent', { exact: true }).waitFor()
   const panel = page.locator('[data-plugin-panel]')
   const mcpBundle = aggregate ? 'dsh-enhanced-plugins' : 'dsh-enhanced-mcp-server-manager'
-  const openRow = async (bundle, row) => {
+  const openRow = async (bundle) => {
     await page.getByRole('navigation', { name: 'Global panels' }).getByRole('button', { name: 'Plugins', exact: true }).click()
     await panel.waitFor()
     while (await panel.getByRole('button', { name: /^Back to / }).count()) await panel.getByRole('button', { name: /^Back to / }).first().click()
-    await panel.getByRole('button', { name: `View ${bundle.replace(/^dsh-/, '')}`, exact: true }).click()
-    await panel.getByRole('button', { name: `Configure ${row}`, exact: true }).click()
+    await panel.getByRole('button', { name: `View ${bundle}`, exact: true }).click()
+    await panel.getByRole('button', { name: /^Configure .*mcp/i }).click()
   }
   for (const scheme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: scheme })
     await page.waitForFunction(dark => document.body.hasAttribute('data-ds-dark-theme') === dark, scheme === 'dark')
-    await openRow(mcpBundle, 'mcp-manager')
+    await openRow(mcpBundle)
     if (scheme === 'light') {
       await panel.getByRole('button', { name: 'Add server', exact: true }).click()
       const addDialog = page.getByRole('dialog', { name: 'New MCP server' })
@@ -169,7 +170,7 @@ try {
       await addDialog.waitFor({ state: 'hidden' })
       await panel.getByRole('button', { name: 'Save', exact: true }).click()
       await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Save' && button.disabled))
-      assert.ok(readFileSync(resolve(home, 'settings.yaml'), 'utf8').includes('fixture-server'), 'MCP save did not reach the Host settings document')
+      assert.ok(readFileSync(profilePatch, 'utf8').includes('fixture-server'), 'MCP save did not reach the profile patch')
       await panel.getByRole('button', { name: 'Edit', exact: true }).click()
       const editDialog = page.getByRole('dialog', { name: 'Edit MCP server' })
       await editDialog.waitFor()
@@ -186,7 +187,7 @@ try {
       await editDialog.waitFor({ state: 'hidden' })
       await panel.getByRole('button', { name: 'Save', exact: true }).click()
       await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Save' && button.disabled))
-      const saved = readFileSync(resolve(home, 'settings.yaml'), 'utf8')
+      const saved = readFileSync(profilePatch, 'utf8')
       assert.ok(saved.includes('fixture-renamed') && saved.includes('fixture-secret') && saved.includes('90000'),
         'MCP edit did not preserve the secret and update the server')
       await panel.getByRole('button', { name: 'Edit', exact: true }).click()
@@ -195,7 +196,7 @@ try {
       await sameNameDialog.getByRole('button', { name: 'Apply changes', exact: true }).click()
       await panel.getByRole('button', { name: 'Save', exact: true }).click()
       await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Save' && button.disabled))
-      const revised = readFileSync(resolve(home, 'settings.yaml'), 'utf8')
+      const revised = readFileSync(profilePatch, 'utf8')
       assert.ok(revised.includes('91000') && revised.includes('fixture-secret'),
         'Same-name MCP edit did not preserve the secret and update the server')
     }
@@ -223,15 +224,15 @@ try {
     await stagedDialog.getByRole('textbox', { name: 'Command', exact: true }).fill(process.execPath)
     await stagedDialog.getByRole('button', { name: 'Add', exact: true }).click()
     await panel.getByText('unsaved-fixture', { exact: true }).waitFor()
-    await openRow(mcpBundle, 'mcp-manager')
+    await openRow(mcpBundle)
     assert.equal(await panel.getByText('unsaved-fixture', { exact: true }).count(), 0, 'MCP draft survived leaving its page')
   }
-  await panel.getByRole('button', { name: `Back to ${mcpBundle.replace(/^dsh-/, '')}`, exact: true }).click()
-  const enableMcp = panel.getByRole('switch', { name: `Enable ${mcpBundle.replace(/^dsh-/, '')}`, exact: true })
+  await panel.getByRole('button', { name: `Back to ${mcpBundle}`, exact: true }).click()
+  const enableMcp = panel.getByRole('switch', { name: `Enable ${mcpBundle}`, exact: true })
   const waitEnabled = async enabled => page.waitForFunction(({ label, enabled }) => {
     const control = [...document.querySelectorAll('[role="switch"]')].find(element => element.getAttribute('aria-label') === label)
     return control?.getAttribute('aria-checked') === String(enabled) && !control.hasAttribute('disabled')
-  }, { label: `Enable ${mcpBundle.replace(/^dsh-/, '')}`, enabled })
+  }, { label: `Enable ${mcpBundle}`, enabled })
   await enableMcp.click()
   await waitEnabled(false)
   const graphAfterDisable = await page.evaluate(async () => {
@@ -241,15 +242,15 @@ try {
   })
   writeFileSync(resolve(home, 'entries-after-disable.json'), JSON.stringify(graphAfterDisable))
   assert.ok(!graphAfterDisable.includes(mcpBundle), 'Disabled bundle still contributes a Client module')
-  await panel.getByRole('button', { name: 'Configure mcp-manager', exact: true }).waitFor({ state: 'hidden' })
+  await panel.getByRole('button', { name: /^Configure .*mcp/i }).waitFor({ state: 'hidden' })
   await enableMcp.click()
   await waitEnabled(true)
-  await panel.getByRole('button', { name: 'Configure mcp-manager', exact: true }).waitFor()
+  await panel.getByRole('button', { name: /^Configure .*mcp/i }).waitFor()
   await page.reload()
   // Let the workspace owner restore its main reference before opening another panel.
   await page.getByText('Enhanced UI parent', { exact: true }).first().click({ timeout: 30_000 })
   await page.getByText('UI fixture parent', { exact: true }).waitFor()
-  await openRow(mcpBundle, 'mcp-manager')
+  await openRow(mcpBundle)
   await panel.getByRole('button', { name: 'Add server', exact: true }).waitFor()
   await page.getByText('Enhanced UI parent', { exact: true }).first().click()
   if (!mcpOnly) {

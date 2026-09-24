@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-agent-team-monitor",
-  "version": "7.3.0",
+  "version": "8.1.0",
   "description": "Per-conversation execution flows and drill-down for DSH agents and teammates",
   "type": "module",
   "main": "./lib/agent-team-monitor/host/index.js",
@@ -51,7 +51,9 @@
       "defaultSelected": false,
       "beta": true,
       "compatibility": {
-        "dsh": ["0.1.7-alpha.1"]
+        "dsh": [
+          "0.1.7-alpha.1"
+        ]
       },
       "order": 65,
       "category": "conversation",

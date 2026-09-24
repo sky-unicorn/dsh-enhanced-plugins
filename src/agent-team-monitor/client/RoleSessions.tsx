@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconUserOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconUserOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MonitorSnapshot } from '../shared.ts'
 import { groupRoleSessions } from './roles.ts'
 import type { NS } from './locales.ts'
@@ -36,7 +36,7 @@ export function RoleSessions({ snapshot, openMember, t }: RoleSessionsProps) {
     try { await openMember(parentId, id) } catch { setError(id) } finally { setOpening(undefined) }
   }
   return <section className={css.root} aria-label={t('roleSessions')}>
-    <h3><IconUserOutline16 />{t('roleSessions')}<span>{groups.length}</span></h3>
+    <h3><IconUserOutlineRegular />{t('roleSessions')}<span>{groups.length}</span></h3>
     <p className={css.hint}>{t('roleHint')}</p>
     {catalog.state === 'unavailable' && <p role="status" className={css.warning}>{t('catalogUnavailable')}</p>}
     {catalog.truncated && <p className={css.warning}>{t('catalogTruncated')} {all.length} / {catalog.total}</p>}

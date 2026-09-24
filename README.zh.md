@@ -29,6 +29,11 @@
 
 ## 快速开始
 
+### 8.1.0：适配 DSH 0.1.7-rc.1
+
+- 非 Beta 独立功能包适配 DSH `0.1.7-rc.1`（验证提交 `46a7f68b0922371ce7144b668b90e377d8e799f4`）；修复图标和消息编辑接口，迁移 MCP／子智能体旧设置，并改进 Launcher 的安装状态与源码变更检测。
+- 聚合包、7 个独立功能包及 Windows Launcher 统一为 `8.1.0`。`agent-team-monitor` 和 `model-router` 仍仅兼容 DSH `0.1.7-alpha.1`；因此聚合包也仅声明该版本。使用 rc.1 时请按需选择非 Beta 功能。
+
 ### 7.3.0：适配 DSH 0.1.7-alpha.1
 
 - 设置表单迁移到 DSH 0.1.7 的 volatile 配置 API，Agent Team 改用 session projection，工具结果消息改用顶层字段，并保留 edit-last-message 的插件归属信息。
@@ -59,7 +64,7 @@
 
 - Node.js 22.19.x，或 Node.js 24 及更高版本。
 - 可从源码运行的最新 DSH Web profile；可先阅读 [DSH Web UI 入门](https://deepseek-harness.github.io/deepseek-harness/guide/quickstart)。
-- 支持的 DSH 源码基线为 [`0.1.7-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/tree/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61)，后续验证通过的版本可追加到 [`dsh-compatibility.json`](dsh-compatibility.json)，无需发布新的插件代码。
+- 非 Beta 功能已验证的 DSH 源码基线为 [`0.1.7-rc.1`](https://github.com/deepseek-ai/deepseek-harness/tree/46a7f68b0922371ce7144b668b90e377d8e799f4)；两项 Beta 功能仅兼容 `0.1.7-alpha.1`。各功能限制及其他版本见 [`dsh-compatibility.json`](dsh-compatibility.json) 与各独立包 manifest。
 - 此版本 DSH 的 Session 文件锁已不再依赖 `fs-ext`。原生构建要求以目标 checkout 为准；Launcher 自身使用系统 .NET Framework 的 `csc.exe`。不要跳过依赖安装脚本。
 - Windows Launcher、原生提示音和桌面宠物需要带 Windows PowerShell 5.1 的完整 Windows 桌面版本，即 Windows 10 1607 或更高版本，或 Windows 11。所需系统能力在 Home、Pro、Education / Pro Education 与 Enterprise 上相同；Windows S 模式、IoT / 精简版本以及 Windows 10 1507、1511 不在这一基线内。已经超出微软生命周期的 Windows 功能更新只能尽力兼容，因为所需 Node.js 工具链不保证支持已停止维护的操作系统。安装器不依赖某一个特定的 `tar.exe`；其余功能可跨平台使用。
 
@@ -125,7 +130,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 3. 成功后再移除聚合包、未选择的同仓库功能和已声明冲突的旧包。
 4. 检测并清理已经退役的文件引用插件。
 
-安装器会先将所选 bundle 打包，再安装到 Profile 内，避免源码目录链接使 DSH 构建入口无法解析插件依赖。按内容哈希命名的 tarball 保存在该 Profile 的 `.dsh-enhanced-bundles` 目录，供 pnpm 后续重装使用；请勿在仍被 Profile 引用时删除。重新安装会替换旧的源码链接。
+安装器会先将所选 bundle 打包，再安装到 Profile 内，避免源码目录链接使 DSH 构建入口无法解析插件依赖。按内容哈希命名的 tarball 保存在该 Profile 的 `.dsh-enhanced-bundles` 目录，供 pnpm 后续重装使用；请勿在仍被 Profile 引用时删除。如果所选归档与已安装包均未变化，安装器会跳过 `pnpm add`。重新安装会替换旧的源码链接。
 
 ### Launcher 插件管理
 
@@ -136,7 +141,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enh
 - 应用更新源码时，两个 Beta 功能会在每个已管理 Profile 中自动关闭；更新完成后仍可手动重新开启；
 - Git 工作区先按插件远端 URL 解析 Windows 系统代理；系统选择代理时，仅通过 Git 单次命令配置应用于带退避重试的安全 `fetch`，操作结束后自动失效且不修改既有 Git 配置。连接重置时自动改用 HTTP/1.1 重试，成功后仅在本地执行 `merge --ff-only`，避免 `pull` 再次访问网络；或没有 Git 时下载准确 commit 的源码 ZIP；无网络时也可手动绑定源码目录或导入源码 ZIP；
 - 只有源码 revision 或目标功能发生变化时，才在 `sources/runtime-*` 持久化隔离快照中执行 `npm ci`、正式 `npm run build` 和 runtime entry 校验；将构建后的包打成 tarball 安装到 Profile 内，未被任何 Profile 引用的旧源码快照会安全清理；开发期的全仓类型检查仍在源码目录运行，不会因 sibling DSH 类型路径阻止安装；npm 的 stderr 警告保留在日志中，是否失败只看真实退出码；全部完成后才停止 Launcher-owned DSH 并提交更改；
-- Launcher 哈希变化时由外部协调器切换版本、等待新版就绪、失败回滚，并恢复此前运行的 DSH；DSH 连续保持 Launcher-owned 状态 15 秒后才报告恢复成功；
+- 外部协调器实时写入安装日志；源码 revision 变化且 Launcher 可执行文件变化时切换版本、等待新版就绪、失败回滚，并恢复此前运行的 DSH；DSH 连续保持 Launcher-owned 状态 15 秒后才报告恢复成功；
 - Launcher 重启后继续跟踪仍在运行的协调器；异常中断或状态文件损坏时保留日志/备份并从实际 Profile inventory 重新读取状态。
 
 第一版只支持本地 DSH 源码 checkout 和本项目源码安装，不支持 npx、全局 `dsh`、npm 发布包或 GitHub Releases。Git 工作区有修改、本地领先或发生分叉时不会 reset、rebase 或覆盖用户改动。
@@ -260,6 +265,8 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 草稿绑定开始编辑时的配置版本。其他页面或外部编辑更新配置后，旧草稿保存会被拒绝，不会删除对方新增的服务器；请离开页面丢弃草稿，再重新打开、查看最新配置后编辑。只有点击保存才提交 MCP 草稿。连接中断时会退出保存状态并保留草稿，写入失败后重新读取 Host 配置；较早的读取响应不会覆盖较新的刷新结果。
 
+在 DSH `0.1.7-rc.1` 中，MCP 设置保存在当前 Profile 的 `mcp-manager` Loader 条目中。首次升级时，插件会把旧 `settings.yaml.imported` 中的 MCP 服务器合并一次；已有同名服务器保持现状，原文件继续作为备份。之后删除服务器不会在重启时重新导入。
+
 ### 5. 编辑上一条消息
 
 `edit-last-message` · **当前会话最后一条可编辑的用户消息气泡**
@@ -274,14 +281,14 @@ Web、源码桌面、源码构建和每个 Profile 各自只保留最新一次�
 
 保留已发送引用预览：点击文件标签或该步骤实际加载的 Skill 标签，会在当前会话右侧栏打开预览，不修改文本或重新发送。编辑后的气泡也提供文件预览；Skill 标签只使用编辑所属步骤的调用记录，不沿用被替换轮次的记录。重新发送继续使用插件来源，斜杠文本本身不会被当作新的用户 Skill 调用。
 
-6.1.0 起使用 V3 的替换字段与标准插件来源格式，只保存原始消息 ID，不再嵌入事件序号，避免迁移重编号导致编辑位置错误。早期嵌套标记及 5.x 的独立 `edit-last-message` 来源均不被 V2→V3 迁移接受。升级后打开这类旧会话前，请先停止所有 DSH Host，对受影响的日志执行离线修复：
+当前 V4 消息使用插件自有的 `edit-last-message` 来源类型，只保存原始消息 ID，不嵌入事件序号；插件也能识别 DSH 将早期 V3 插件来源迁移到 V4 后的记录。早期嵌套标记及 5.x 的独立 `edit-last-message` 来源均不被 V2→V3 迁移接受。升级后打开这类旧会话前，请先停止所有 DSH Host，对受影响的日志执行离线修复：
 
 ```powershell
 node .\scripts\repair-edit-last-message-session.mjs "C:\path\to\session.jsonl.zstd"
 node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.jsonl.zstd"
 ```
 
-第一条命令只检查，不写文件；第二条命令将两代旧编辑标记转换为标准插件来源，并在同目录创建带时间戳的原始文件备份。截断、损坏、格式不符或检查期间发生变化的日志都会被拒绝，不会静默重写。
+第一条命令只检查，不写文件；第二条命令按日志版本写入可迁移的旧插件来源或 V4 自有来源，也能修复 V4 中残留的旧 `plugin` 包装，并在同目录创建带时间戳的原始文件备份。截断、损坏、格式不符或检查期间发生变化的日志都会被拒绝，不会静默重写。
 
 ### 6. 产品子智能体
 
@@ -289,7 +296,9 @@ node .\scripts\repair-edit-last-message-session.mjs --write "C:\path\to\session.
 
 ![Claude Code 与 Codex 子智能体开关](assets/readme/subagent-toggles.png)
 
-打开 Claude Code 或 Codex 后，变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话；关闭开关会实时移除对应工具。本机仍需安装对应产品及其官方 DSH provider。
+打开 Claude Code 或 Codex 后，变更会立即应用到加载了本控制插件的 Agent preset，包括正在运行的会话；关闭开关会实时移除对应工具。本机仍需安装对应产品，并在当前 Profile 中分别安装与 DSH 同版本的官方 `@deepseek-ai/dsh-subagent-claude-code` 或 `@deepseek-ai/dsh-subagent-codex` bundle。
+
+升级到 DSH `0.1.7-rc.1` 时，旧 `settings.yaml.imported` 中的产品开关会合并一次到当前 Profile；Profile 中已有的开关值优先。
 
 两个开关默认关闭。写入使用 path-addressed 操作和设置修订号，不会用脱敏或过期快照覆盖其他页面及外部编辑产生的新值。
 
@@ -323,12 +332,13 @@ DSH 0.1.7 的设置按 Loader ID `subagent-product-toggles` 读写并保存在�
 
 ## 兼容性与迁移
 
-- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、6 个独立功能包和 Windows Launcher 均使用 `7.3.0`。
+- **版本对应：** [`dsh-compatibility.json`](dsh-compatibility.json) 统一维护各插件版本支持的 DSH 版本及验证提交。聚合包、7 个独立功能包和 Windows Launcher 均使用 `8.1.0`。
+- **DSH 0.1.7-rc.1：** 已验证的非 Beta 独立功能包可按需安装。`agent-team-monitor` 和 `model-router` 仍仅支持 `0.1.7-alpha.1`；包含它们的聚合包也仅声明该版本。Launcher 和安装脚本会按最终选择的功能检查兼容性，选中不支持的功能时在构建及修改 Profile 前拒绝。
 - **V3 消息编辑：** 替换操作改用 `startSeq/endSeq`；新来源格式通过原始消息 ID 保持重编号后的关联。旧编辑日志迁移前应执行上文离线修复。附件气泡使用当前公开的 `FileTypeIcon`，不再引用已移除的 `DocumentFileIcon`。
 - **历史监控：** 监控冷读取使用共有的公开 `sessionQuery.observeSession()`，指定 `projectionMode: 'none'`，读取后释放 observation，不激活 Agent、不提交崩溃修复。自定义 profile 的历史监控需要 `sessionQuery` 提供方，标准 Web profile 已包含。Agent Teams v1/v2 历史兼容由当前官方 Team 投影负责；拒绝的历史显示为不兼容，本插件不改写日志。
 - **安装前检查：** 安装脚本和 Launcher 更新流程在构建、停止服务或修改 profile 之前，优先获取本仓库 GitHub `master` 分支上的对应关系文件。请求失败、下载超过 8 秒、内容格式错误或过大时，显示警告并回退包内文件；远端有效但没有匹配当前插件及 DSH 版本的记录时也会检查包内文件。只有两处都不支持当前 DSH 版本才拒绝安装。每次检查重新获取，不覆盖本地回退文件。插件包版本混杂也会停止。每个 DSH 版本独立关联提交；commit 未列入该版本记录、源码有本地已跟踪修改或 ZIP 无 Git 信息时显示“未经验证”警告。
 - **新版接口：** Client 使用 `client-store`、`ui-session`、`ui-chat` 和公开 Remote；不再依赖已删除的 `dsh-client-runtime`、`connection.api` 或 `hostDescription`。Host 设置 owner 使用经校验的 namespace 字面量和 `SettingsProvider.installSection()`。Session consumer 使用 `eventAt()` / `snapshotEvents()`，并把 `SessionLogOffset` 继承边界与 `SessionHeader` 分开传递；Team Monitor 从 query observation 到 projection 回放都保留这条精确边界。本项目以上述源码 commit 的公开接口为准。
-- **提供方来源：** `subagent-codex`、`subagent-claude-code` 的 Loader ID 不变，改由本包的 `sub-agent/codex`、`sub-agent/claude-code` 入口转出官方提供方；独立包对应 `./codex`、`./claude-code`。这样新版 DeepSeek 请求的活动插件清单能解析其包来源，无需关闭该功能或修改 DSH。
+- **提供方来源：** `sub-agent` 只安装产品开关及工具 Consumer。Codex 与 Claude Code 官方 DSH Provider 是独立可选 bundle，按需安装后由各自的 patch 注册 `subagent-codex`、`subagent-claude-code`；本包保留原有的转出入口供旧组合引用，但不再默认加载缺失的 Provider。
 - **独立构建：** 各功能发布物携带自身源码和构建脚本，可在没有 sibling DSH checkout 的目录执行 `npm install --legacy-peer-deps`、`npm run prepare` 和 `npm pack`；运行时仍由匹配版本的 DSH 提供公开 peer 服务。Windows Launcher 原生重建需要 Windows 与 .NET Framework 4.x 编译器。
 - **架构边界：** Web 功能通过公开 Service、event、slot 和 settings 扩展；Windows Launcher 是独立 Companion，不进入 Cordis 插件树。
 - **文件引用已退役：** 最新官方 DSH 已原生支持 [`@` 文件引用](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/context/file-reference)。在输入框键入 `@`，含空格路径可键入 `@"`。旧 `referenced-file` 安装名称和 `#` 快照语法不再提供。
@@ -339,14 +349,14 @@ DSH 0.1.7 的设置按 Loader ID `subagent-product-toggles` 读写并保存在�
 只检查版本对应关系、不构建或安装（非同目录时追加 `-DshCheckout`）：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -CheckCompatibility
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate-to-enhanced-plugin.ps1 -Features edit-last-message,mcp-server-manager,notification,plugin-market,sub-agent -CheckCompatibility
 ```
 
 需要旧版 DSH 时应选择其对应的插件版本，不要仅删除 peer dependency 检查或强行安装新版插件。
 
 验证新版 DSH 仍兼容后，只需编辑根目录 [`dsh-compatibility.json`](dsh-compatibility.json)：保持 `schemaVersion: 1`，在 `releases` 中找到精确的 `pluginVersion`，向其 `dsh` 数组追加 `{ "version": "<精确 DSH 版本>", "commits": ["<完整的小写 40 位 Git 哈希>"] }`。若只有提交改变，在该 DSH 版本的 `commits` 中追加即可。保留旧插件版本记录，以服务已有安装器。将此文件推送到 GitHub `master` 后，使用新安装器的用户无需更新插件代码即可获取新对应关系；旧安装器需要先升级到这套机制。GitHub 缓存可能造成短暂延迟。
 
-`peerDependencies` 仍是精确的包管理器声明，但由此表自动生成。`npm run build`（或 `npm run sync:compatibility`）按包内表同步各源码 manifest 及根锁文件元数据；安装器在构建后按本次选中的远程／本地表再次同步，`-SkipBuild` 同样适用。这些生成的改动可能出现在本地工作区，但只更新兼容关系时只需提交 JSON 文件，无需手工维护各包的依赖版本；插件版本号、实现和其他依赖字段不变。直接使用 `dsh plugin add` 或 Desktop 导入会绕过本安装器，采用发布物里的 peer 快照，需按更新后的表重新构建／打包后再走该路径。
+`peerDependencies` 仍是精确的包管理器声明，由兼容表与各功能自身的版本限制共同生成。`npm run build`（或 `npm run sync:compatibility`）按包内表同步各源码 manifest 及根锁文件元数据；安装器在构建后按本次选中的远程／本地表再次同步，`-SkipBuild` 同样适用。非 Beta 独立包可声明 rc.1，两项 Beta 及包含它们的聚合包仍只声明 alpha.1。直接使用 `dsh plugin add` 或 Desktop 导入会绕过本安装器，采用发布物里的 peer 快照，需按更新后的表重新构建／打包后再走该路径。
 
 默认端点为 [GitHub 原始对应关系文件](https://raw.githubusercontent.com/sky-unicorn/dsh-enhanced-plugins/master/dsh-compatibility.json)。可用 `DSH_COMPATIBILITY_URL` 指向 HTTPS 镜像，仅本机回环测试服务器允许 HTTP。文件只能提供数据，不能改变代码、包下载地址或构建命令。`-CheckCompatibility` 保持只读。
 

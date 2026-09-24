@@ -13,6 +13,8 @@ export interface EditedUserChatData {
   readonly time: number
   readonly content: UserMessageNode['content']
   readonly source: UserMessageNode['source']
+  /** Actual replay step, retained while the bubble itself stays outside folded process groups. */
+  readonly stepLocation: ConversationLocation
 }
 
 /** Invisible durable boundary delimiting the discarded raw transcript range. */
@@ -103,7 +105,10 @@ function chatNode<Kind extends keyof ChatNodeDataMap & string>(
     id: context.id,
     target: 'chat',
     anchorSeq,
-    location: context.state?.location ?? { kind: 'unresolved' },
+    // A replacement is displayed at the original user-bubble coordinate. Its
+    // actual step is kept in data, while an unresolved view location prevents
+    // DSH's process grouping from folding this user-facing row on cold replay.
+    location: { kind: 'unresolved' },
     visibility: 'visible',
     data,
   }
@@ -130,6 +135,7 @@ export const editedUserDefinition: ConversationNodeDefinition<EditEventState> = 
       time: state.time,
       content: state.content,
       source: state.source,
+      stepLocation: state.location,
     })
   },
 }

@@ -1,13 +1,13 @@
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 
-/** Preserve the plugin attribution used by existing edit-last-message history. */
+/** Own the producer kind written into current durable Session messages. */
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    plugin: { kind: 'plugin'; plugin: string } & ContextFormed
+    'edit-last-message': { kind: 'edit-last-message'; version: 2; rootMessageId: string } & ContextFormed
   }
 }
 
-/** Normalized edit identity decoded from current attribution or a historical message source. */
+/** Normalized edit identity decoded from current or historical message sources. */
 export interface EditLastMessageSource {
   readonly kind: typeof EDIT_LAST_MESSAGE_SOURCE_KIND
   readonly version: 1
@@ -25,13 +25,13 @@ interface LegacyEditLastMessageSource {
 
 export const EDIT_LAST_MESSAGE_SOURCE_KIND = 'edit-last-message' as const
 export const EDIT_LAST_MESSAGE_PLUGIN = 'edit-last-message' as const
-/** Versioned attribution uses only the public plugin source fields and stable message identity. */
+/** Historical V3 plugin attribution; V3-to-V4 migration prefixes it with `plugin:`. */
 export const EDIT_SOURCE_PREFIX = 'dsh-enhanced/edit-last-message/v2/'
 
-/** Create migration-safe attribution; event sequence numbers must never be embedded in opaque metadata. */
-export function createEditSource(rootMessageId: string): { kind: 'plugin'; plugin: string } {
+/** Create V4 producer-owned attribution using a stable message identity, never an event sequence. */
+export function createEditSource(rootMessageId: string): { kind: 'edit-last-message'; version: 2; rootMessageId: string } {
   if (rootMessageId.length === 0) throw new Error('edit root message identity is empty')
-  return { kind: 'plugin', plugin: EDIT_SOURCE_PREFIX + encodeURIComponent(rootMessageId) }
+  return { kind: EDIT_LAST_MESSAGE_SOURCE_KIND, version: 2, rootMessageId }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -59,9 +59,18 @@ function editMarker(value: unknown): Omit<EditLastMessageSource, 'kind'> | undef
  */
 export function editLastMessageSource(value: unknown): EditLastMessageSource | undefined {
   if (!isPlainObject(value)) return
-  if (value['kind'] === 'plugin' && typeof value['plugin'] === 'string' && value['plugin'].startsWith(EDIT_SOURCE_PREFIX)) {
+  if (value['kind'] === EDIT_LAST_MESSAGE_SOURCE_KIND && value['version'] === 2
+    && typeof value['rootMessageId'] === 'string' && value['rootMessageId'].length > 0) {
+    return { kind: EDIT_LAST_MESSAGE_SOURCE_KIND, version: 1, rootMessageId: value['rootMessageId'] }
+  }
+  const encoded = value['kind'] === 'plugin' && typeof value['plugin'] === 'string' && value['plugin'].startsWith(EDIT_SOURCE_PREFIX)
+    ? value['plugin'].slice(EDIT_SOURCE_PREFIX.length)
+    : typeof value['kind'] === 'string' && value['kind'].startsWith(`plugin:${EDIT_SOURCE_PREFIX}`)
+      ? value['kind'].slice(`plugin:${EDIT_SOURCE_PREFIX}`.length)
+      : undefined
+  if (encoded !== undefined) {
     try {
-      const rootMessageId = decodeURIComponent(value['plugin'].slice(EDIT_SOURCE_PREFIX.length))
+      const rootMessageId = decodeURIComponent(encoded)
       if (rootMessageId.length > 0) return { kind: EDIT_LAST_MESSAGE_SOURCE_KIND, version: 1, rootMessageId }
     } catch { /* Invalid attribution is not an editable message. */ }
     return

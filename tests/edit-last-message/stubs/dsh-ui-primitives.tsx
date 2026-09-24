@@ -1,24 +1,24 @@
 import type { ButtonHTMLAttributes, ReactElement, ReactNode, SVGProps } from 'react'
 
 /** Lightweight stand-in for the public edit icon. */
-export function IconEditOutline16(props: SVGProps<SVGSVGElement>) {
+export function IconEditOutlineRegular(props: SVGProps<SVGSVGElement>) {
   return <svg aria-hidden {...props} />
 }
 
-export function IconCheckOutline16(props: SVGProps<SVGSVGElement>) {
+export function IconCheckOutlineRegular(props: SVGProps<SVGSVGElement>) {
   return <svg aria-hidden {...props} />
 }
 
-export function IconCopyOutline16(props: SVGProps<SVGSVGElement>) {
+export function IconCopyOutlineRegular(props: SVGProps<SVGSVGElement>) {
   return <svg aria-hidden {...props} />
 }
 
-export function IconLoadingOutline16(props: SVGProps<SVGSVGElement>) {
+export function IconLoadingOutlineRegular(props: SVGProps<SVGSVGElement>) {
   return <svg aria-hidden {...props} />
 }
 
 // Use the target DSH export so a removed icon cannot be hidden by a test double.
-export { IconSendOutline14 } from '@dsh-test/icons'
+export { IconSendOutlineRegular } from '@dsh-test/icons'
 
 export function Button({ children, icon, ...props }: {
   children?: ReactNode

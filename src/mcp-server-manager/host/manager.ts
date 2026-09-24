@@ -5,8 +5,8 @@
  * Each record key is a `serverName` and each value is a stdio or Streamable
  * HTTP server definition; the reconciler starts, restarts, and disposes one
  * supervised `mcp-client` fiber per entry as the resolved settings section
- * changes, so the Web UI (or a hand-edited `settings.yaml`) can add and
- * remove MCP servers without touching `cordis.yml`.
+ * changes, so the Web UI (or a hand-edited profile patch) can add and
+ * remove MCP servers without touching the composition layer.
  *
  * Mounting is standard Cordis dynamic composition: `ctx.plugin(mcpClient,
  * config)` creates one independent fiber per call (the framework supports

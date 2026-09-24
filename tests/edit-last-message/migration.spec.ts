@@ -5,11 +5,21 @@ import { describe, expect, it } from 'vitest'
 import { SessionFormatEventCollector } from '@deepseek-ai/dsh-session-format'
 import { sessionFormatV2ToV3, restoreReleasedV3Artifact } from '@deepseek-ai/dsh-session-format-v2-to-v3'
 import { repairSessionArtifact } from '../../scripts/repair-edit-last-message-session.mjs'
-import { createEditSource, editLastMessageSource } from '../../src/edit-last-message/shared.ts'
+import { createEditSource, EDIT_SOURCE_PREFIX, editLastMessageSource } from '../../src/edit-last-message/shared.ts'
 import { installEditAdmission } from '../../src/edit-last-message/host/rewind.ts'
 import { editRootDefinition, editedUserDefinition } from '../../src/edit-last-message/client/conversation-nodes.ts'
 
 describe('historical edits across DSH V3 migration', () => {
+  it('recognizes the producer kind emitted by DSH V3-to-V4 migration', () => {
+    const rootMessageId = 'original / 中文'
+    expect(editLastMessageSource({
+      kind: `plugin:${EDIT_SOURCE_PREFIX}${encodeURIComponent(rootMessageId)}`,
+    })).toMatchObject({ kind: 'edit-last-message', rootMessageId })
+    expect(editLastMessageSource(createEditSource(rootMessageId))).toMatchObject({
+      kind: 'edit-last-message', rootMessageId,
+    })
+  })
+
   it.each(['nested', 'custom'] as const)('repairs %s attribution without losing the root identity or replacement', async (shape) => {
     const directory = await mkdtemp(join(tmpdir(), 'dsh-edit-v3-'))
     try {
@@ -37,7 +47,9 @@ describe('historical edits across DSH V3 migration', () => {
       const edit = artifact.events.at(-1)!
       expect(root.seq).toBe(3) // The migration inserted the protected system head.
       expect(edit.surfaceOp).toEqual({ op: 'replace', startSeq: root.seq, endSeq: root.seq })
-      expect((edit.data as { source: unknown }).source).toEqual(createEditSource(marker.rootMessageId))
+      expect((edit.data as { source: unknown }).source).toEqual({
+        kind: 'plugin', plugin: EDIT_SOURCE_PREFIX + encodeURIComponent(marker.rootMessageId),
+      })
       expect(editLastMessageSource((edit.data as { source: unknown }).source)?.rootSeq).toBeUndefined()
 
       const rootState = editRootDefinition.start({} as never, { event: root } as never, { previous: () => undefined })

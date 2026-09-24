@@ -72,8 +72,10 @@ export const ServerDefinition = z.union([
   }),
 ]) as unknown as z<ServerDefinition>
 
-/** Settings namespace key for the `mcp` section. */
-export const MCP_SETTINGS_NAMESPACE = 'mcp'
+/** DSH settings use the owning Loader entry id as the namespace. */
+export const MCP_SETTINGS_NAMESPACE = 'mcp-manager'
+/** Settings key used by earlier DSH releases before Loader entry ids owned forms. */
+export const LEGACY_MCP_SETTINGS_NAMESPACE = 'mcp'
 
 /** Copy a Loader config snapshot, unwrapping DSH 0.1.7 volatile references. */
 export function snapshotMcpConfig(value: unknown): Config {

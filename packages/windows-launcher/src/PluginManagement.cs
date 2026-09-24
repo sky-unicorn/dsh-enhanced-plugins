@@ -1324,7 +1324,7 @@ namespace DshEnhanced.WindowsLauncher
 
         private static string LauncherActionName(string action)
         {
-            if (String.Equals(action, "none", StringComparison.Ordinal)) return "哈希相同，无需重启";
+            if (String.Equals(action, "none", StringComparison.Ordinal)) return "已是目标版本，无需重启";
             if (String.Equals(action, "repair", StringComparison.Ordinal)) return "修复必选组件";
             if (String.Equals(action, "update", StringComparison.Ordinal)) return "更新并重启";
             return "构建后按候选哈希决定是否更新";

@@ -77,7 +77,7 @@ function mount(ctx: ClientContext, configKey: string): void {
   // it (another tab, or a hand-edit the provider picks up); both invalidation
   // signals are the ones the shared settings scope rides too.
   ctx.effect(() => ctx.remote.$on('settings/document-updated', (namespace?: string) => {
-    if (namespace !== undefined && namespace !== 'mcp') return
+    if (namespace !== undefined && namespace !== 'mcp-manager' && namespace !== 'mcp') return
     void store.refresh()
   }), 'mcp-server-manager: document invalidation')
   ctx.effect(() => ctx.on('connection/reset', () => { void store.refresh() }), 'mcp-server-manager: connection invalidation')

@@ -164,10 +164,21 @@ function Get-LocalSourceRevision {
   param([string] $Root)
   $sha = [System.Security.Cryptography.SHA256]::Create()
   try {
-    $paths = @('package.json', 'package-lock.json', 'build.mjs', 'scripts\migrate-to-enhanced-plugin.ps1') + @(
+    # Hash build inputs, not tests or documentation. The application sources
+    # live in src/, outside the independently packaged manifests.
+    $paths = @('package.json', 'package-lock.json', 'build.mjs', 'cordis.patch.yml',
+      'dsh-compatibility.json', 'tsconfig.json', 'tsconfig.client.json', 'tsconfig.host.json', '.npmrc') + @(
       Get-ChildItem -LiteralPath (Join-Path $Root 'packages') -File -Recurse | Where-Object {
         $_.FullName -notmatch '[\\/](?:node_modules|lib)[\\/]'
       } | ForEach-Object { $_.FullName.Substring($Root.Length).TrimStart('\') }
+    ) + @(
+      foreach ($directory in @('src', 'scripts')) {
+        $sourceDirectory = Join-Path $Root $directory
+        if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) { continue }
+        Get-ChildItem -LiteralPath $sourceDirectory -File -Recurse | Where-Object {
+          $directory -ne 'scripts' -or $_.Name -notmatch '^(?:verify|evaluate)-'
+        } | ForEach-Object { $_.FullName.Substring($Root.Length).TrimStart('\') }
+      }
     ) | Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf }
     foreach ($relative in @($paths | Sort-Object -Unique)) {
       $relativeBytes = [System.Text.Encoding]::UTF8.GetBytes($relative.ToLowerInvariant() + "`n")
@@ -465,7 +476,18 @@ function Get-ManagementPlan {
   } else { '' }
   $current = Read-JsonFile (Join-Path (Get-LauncherRoot) 'current.json')
   $currentHash = [string](Get-OptionalProperty $current 'hash' '')
-  $launcherAction = if ([string]::IsNullOrWhiteSpace($currentHash)) { 'repair' }
+  $currentExecutable = [string](Get-OptionalProperty $current 'executable' '')
+  $installedHash = if (-not [string]::IsNullOrWhiteSpace($currentExecutable) -and
+    (Test-Path -LiteralPath $currentExecutable -PathType Leaf)) {
+    Get-FileSha256 $currentExecutable
+  } else { '' }
+  $launcherState = Get-OptionalProperty $State 'launcher'
+  $launcherRevision = [string](Get-OptionalProperty $launcherState 'lastAppliedRevision' '')
+  $installedVersion = [string](Get-OptionalProperty $current 'version' '')
+  $candidateVersion = [string](Get-OptionalProperty (Read-JsonFile (Join-Path $launcherFeature.root 'package.json')) 'version' '')
+  $launcherAction = if ([string]::IsNullOrWhiteSpace($currentHash) -or $installedHash -ne $currentHash) { 'repair' }
+    elseif ($installedVersion -ne $candidateVersion) { 'update' }
+    elseif ($launcherRevision -eq $catalog.sourceRevision) { 'none' }
     elseif ([string]::IsNullOrWhiteSpace($candidateHash)) { 'evaluate-after-build' }
     elseif ($candidateHash -eq $currentHash) { 'none' }
     else { 'update' }
@@ -1329,14 +1351,15 @@ function Restore-LauncherOwnedDsh {
 }
 
 function Assert-SourceDshCompatibility {
-  param([string] $Source, [string] $Checkout, [string] $LogPath)
+  param([string] $Source, [string] $Checkout, [string] $LogPath, [string[]] $Features)
   if ([string]::IsNullOrWhiteSpace($Checkout)) { throw '安装状态未绑定 DSH 源码 checkout。' }
   $installer = Join-Path $Source 'scripts\migrate-to-enhanced-plugin.ps1'
   if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw '候选源码缺少安装核心脚本。' }
   $engine = Get-Command -Name 'powershell.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
   Invoke-LoggedCommand $engine.Source @(
     '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-    '-File', $installer, '-PluginPath', $Source, '-DshCheckout', $Checkout, '-CheckCompatibility'
+    '-File', $installer, '-PluginPath', $Source, '-DshCheckout', $Checkout,
+    '-Features', $(if ($Features.Count -eq 0) { 'none' } else { $Features -join ',' }), '-CheckCompatibility'
   ) $Source $LogPath 'DSH compatibility check' -UseSystemProxy
 }
 
@@ -1390,7 +1413,7 @@ function Invoke-Apply {
     $preflightLauncherAction -ne 'none'
   if (-not $preflightHasWork) {
     $boundDsh = Get-OptionalProperty $State 'dsh'
-    Assert-SourceDshCompatibility $InitialRoot ([string](Get-OptionalProperty $boundDsh 'checkout' '')) $logPath
+    Assert-SourceDshCompatibility -Source $InitialRoot -Checkout ([string](Get-OptionalProperty $boundDsh 'checkout' '')) -LogPath $logPath -Features $desired
     Remove-LegacyUpdateDirectories $LauncherRoot @($InitialRoot, $requestRoot, $PSScriptRoot) $logPath
     return [pscustomobject][ordered]@{
       protocolVersion = 1
@@ -1518,7 +1541,8 @@ function Invoke-Apply {
   [System.IO.File]::AppendAllText($logPath,
     "[$([DateTime]::Now.ToString('s'))] request=$requestId profile=$profileName source=$source revision=$($catalog.sourceRevision)`r`n", $Utf8NoBom)
   $installerPowerShell = Get-Command -Name 'powershell.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
-  Assert-SourceDshCompatibility $source $dshCheckout $logPath
+  $allDesired = @($profileTargets | ForEach-Object { $_.desired } | Select-Object -Unique)
+  Assert-SourceDshCompatibility -Source $source -Checkout $dshCheckout -LogPath $logPath -Features $allDesired
   Initialize-PluginToolchain $Request $source $dshCheckout $LauncherRoot $logPath
   $npm = Get-Command -Name 'npm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
   Invoke-LoggedCommand $npm.Source @('ci', '--no-audit', '--no-fund', '--ignore-scripts=false') $source $logPath 'npm ci' -UseSystemProxy
@@ -1529,7 +1553,6 @@ function Invoke-Apply {
   # publishable artifacts; build them here and validate every selected runtime
   # entry before stopping DSH or changing a Profile.
   Invoke-LoggedCommand $npm.Source @('run', 'build') $source $logPath 'npm run build' -UseSystemProxy
-  $allDesired = @($profileTargets | ForEach-Object { $_.desired } | Select-Object -Unique)
   Assert-CatalogRuntimeEntries $catalog $allDesired
   $serviceState = Stop-LauncherOwnedDsh $LauncherRoot $logPath
   $dshRestored = $true
@@ -1563,15 +1586,20 @@ function Invoke-Apply {
             # DSH writes its echoed native command line to stderr even when the
           # command succeeds. Collect that diagnostic stream in the log and
           # use the installer's real exit code as the success boundary.
-          $ErrorActionPreference = 'Continue'
-          $lines = @(& $installerPowerShell.Source @installerProcessArguments 2>&1)
-          $exitCode = $LASTEXITCODE
+           $ErrorActionPreference = 'Continue'
+           & $installerPowerShell.Source @installerProcessArguments 2>&1 | ForEach-Object {
+             $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message }
+               else { [string]$_ }
+             if (-not [string]::IsNullOrWhiteSpace($line)) {
+               [System.IO.File]::AppendAllText($logPath, ($line + [Environment]::NewLine), $Utf8NoBom)
+             }
+           }
+           $exitCode = $LASTEXITCODE
           } finally {
             if ($null -ne $installerProxyScope) { Exit-DshOperationProxy $installerProxyScope }
             $ErrorActionPreference = $managerErrorActionPreference
           }
-        [System.IO.File]::AppendAllText($logPath, (($lines | Out-String) + [Environment]::NewLine), $Utf8NoBom)
-        if ($exitCode -ne 0) {
+         if ($exitCode -ne 0) {
           throw "Profile '$($targetProfile.name)' 安装核心执行失败（退出码 $exitCode），请查看日志 '$logPath'。"
         }
       }

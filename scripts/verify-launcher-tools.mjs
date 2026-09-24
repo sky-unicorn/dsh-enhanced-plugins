@@ -60,12 +60,12 @@ export async function apply(ctx) {
   agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Read the fixture file.' }], source: { kind: 'user' } }));
   await agent.whenIdle();
   const events = agent.session.snapshotEvents();
-  const result = events.find(event => event.type === 'tool/result')?.data.message.content.find(block => block.type === 'tool-result');
+  const result = events.find(event => event.type === 'tool/result')?.data.message;
   const end = events.findLast(event => event.type === 'turn/end')?.data.reason;
   writeFileSync(join(${JSON.stringify(home)}, mode + '-tool.json'), JSON.stringify({
     completed: end?.kind === 'completed', resultRecorded: result !== undefined,
     isError: result?.isError ?? false, contentMatched: JSON.stringify(result?.content ?? []).includes('LAUNCHER_TOOL_DISPATCH_OK'),
-    mcpRegistered: ctx.settings.describe().some(entry => entry.ns === 'mcp'),
+    mcpRegistered: ctx.settings.describe().some(entry => entry.ns === 'mcp-manager'),
     reason: end,
   }, null, 2));
 }

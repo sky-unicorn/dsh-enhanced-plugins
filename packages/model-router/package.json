@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-model-router",
-  "version": "7.3.0",
+  "version": "8.1.0",
   "description": "Bounded multi-model collaboration for one DSH conversation",
   "type": "module",
   "main": "./lib/model-router/host/index.js",
@@ -55,16 +55,18 @@
       "defaultSelected": false,
       "beta": true,
       "compatibility": {
-        "dsh": ["0.1.7-alpha.1"]
+        "dsh": [
+          "0.1.7-alpha.1"
+        ]
       },
       "order": 66,
       "category": "conversation",
       "name": {
-        "zh-CN": "\u591a\u6a21\u578b\u534f\u4f5c",
+        "zh-CN": "多模型协作",
         "en-US": "Model collaboration"
       },
       "description": {
-        "zh-CN": "\u6309\u804c\u8d23\u9009\u62e9\u6a21\u578b\u5e76\u7ba1\u7406\u53d7\u63a7\u5b50\u4efb\u52a1\u3002",
+        "zh-CN": "按职责选择模型并管理受控子任务。",
         "en-US": "Route bounded tasks by role with durable controls."
       }
     }

@@ -123,6 +123,7 @@ describe('EditableUserMessage', () => {
       time: 1_780_000_000_001,
       content: [{ type: 'text', text: 'revised prompt' }],
       source: { kind: 'plugin', plugin: 'edit-last-message' },
+      stepLocation: { kind: 'unresolved' },
     }
     const snapshot = {
       running: false,

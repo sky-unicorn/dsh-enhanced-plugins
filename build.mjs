@@ -16,6 +16,7 @@ const AGGREGATE_HOST_ENTRIES = [
   'src/edit-last-message/host/rewind.ts',
   'src/mcp-server-manager/host/importers.ts',
   'src/mcp-server-manager/host/index.ts',
+  'src/mcp-server-manager/host/legacy-settings.ts',
   'src/mcp-server-manager/host/manager.ts',
   'src/mcp-server-manager/host/remote.ts',
   'src/mcp-server-manager/host/schema.ts',
@@ -36,6 +37,7 @@ const AGGREGATE_HOST_ENTRIES = [
   'src/plugin-market/market-utils.ts',
   'src/plugin-market/system-proxy.ts',
   'src/sub-agent/host.ts',
+  'src/sub-agent/legacy-settings.ts',
   'src/sub-agent/codex.ts',
   'src/sub-agent/claude-code.ts',
   'src/sub-agent/preset.ts',
@@ -65,6 +67,7 @@ const FEATURE_TARGETS = [
     hostEntries: [
       'src/mcp-server-manager/host/importers.ts',
       'src/mcp-server-manager/host/index.ts',
+      'src/mcp-server-manager/host/legacy-settings.ts',
       'src/mcp-server-manager/host/manager.ts',
       'src/mcp-server-manager/host/remote.ts',
       'src/mcp-server-manager/host/schema.ts',
@@ -108,6 +111,7 @@ const FEATURE_TARGETS = [
     directory: 'packages/sub-agent',
     hostEntries: [
       'src/sub-agent/host.ts',
+      'src/sub-agent/legacy-settings.ts',
       'src/sub-agent/codex.ts',
       'src/sub-agent/claude-code.ts',
       'src/sub-agent/preset.ts',

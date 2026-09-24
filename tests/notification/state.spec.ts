@@ -7,7 +7,7 @@ import { inflateSync } from 'node:zlib'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import { describe, expect, it, vi } from 'vitest'
-import { Config } from '../../src/notification/host/config.ts'
+import { Config, snapshotNotificationSettings } from '../../src/notification/host/config.ts'
 import {
   migrateRetiredPetCharacter,
   normalizeNotificationUserLayer,
@@ -329,9 +329,9 @@ describe('desktop notification state', () => {
 
 describe('desktop notification assets and defaults', () => {
   it('resolves the complete schema defaults', () => {
-    expect(Config({})).toEqual(DEFAULT_NOTIFICATION_SETTINGS)
-    expect(Config({ petCharacter: 'whale-girl' }).petCharacter).toBe('whale-girl')
-    expect(Config({ petCharacter: 'beijing-shark' } as never).petCharacter).toBe('classic')
+    expect(snapshotNotificationSettings(Config({}))).toEqual(DEFAULT_NOTIFICATION_SETTINGS)
+    expect(snapshotNotificationSettings(Config({ petCharacter: 'whale-girl' })).petCharacter).toBe('whale-girl')
+    expect(snapshotNotificationSettings(Config({ petCharacter: 'beijing-shark' } as never)).petCharacter).toBe('classic')
     expect(() => Config({ petSize: 20 })).toThrow()
     expect(() => Config({ petCharacter: 'unknown' })).toThrow()
     expect(() => Config({ completionSound: 'unknown' })).toThrow()

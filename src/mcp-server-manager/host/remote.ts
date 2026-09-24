@@ -1,6 +1,6 @@
 /**
  * The `mcpConfig` Typert Remote: this plugin's own configuration face over
- * the `mcp` settings namespace. The Host's settings RPC exposes an explicit
+ * the MCP Loader entry settings namespace. The Host's settings RPC exposes an explicit
  * allowlist a third-party plugin cannot extend, so this Remote is the
  * portable path: any composition mounting the Typert Gateway (the dsh-base
  * layer) serves `mcpConfig/describe` and `mcpConfig/mutate` to configuration
@@ -21,7 +21,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { discoverMcpImports, planMcpImports } from './importers.js'
-import { MCP_SETTINGS_NAMESPACE, SERVER_NAME_PATTERN, type Config, type ServerDefinition } from './schema.js'
+import { LEGACY_MCP_SETTINGS_NAMESPACE, MCP_SETTINGS_NAMESPACE, SERVER_NAME_PATTERN, type Config, type ServerDefinition } from './schema.js'
 import type {
   McpConfigView, McpImportOutcome, McpImportRequest, McpImportSource,
   McpMutateOutcome, McpMutateRequest, McpMutateWireOp, McpServerFieldOp,
@@ -243,7 +243,7 @@ export function maskServers(servers: Record<string, ServerDefinition>): Record<s
   )
 }
 
-/** The plugin-owned Remote over the `mcp` settings namespace. */
+/** The plugin-owned Remote over the MCP Loader entry settings namespace. */
 export class McpConfigRemote extends TypertRemoteService {
   /** The settings service this face reads and writes through. */
   static inject = ['settings']
@@ -253,14 +253,15 @@ export class McpConfigRemote extends TypertRemoteService {
   }
 
   /** This namespace's descriptor, when its registration is live. */
-  private descriptor(): { value: Config; revision: number; inheritedNames: ReadonlySet<string> } | undefined {
+  private descriptor(): { namespace: string; value: Config; revision: number; inheritedNames: ReadonlySet<string> } | undefined {
     const descriptor = this.ctx.settings.describe()
-      .find(entry => entry.ns === MCP_SETTINGS_NAMESPACE)
+      .find(entry => entry.ns === MCP_SETTINGS_NAMESPACE || entry.ns === LEGACY_MCP_SETTINGS_NAMESPACE)
     if (descriptor === undefined) return undefined
     // The value carries this plugin's own registered schema; the seam types
     // it as unknown because it serves every registrant's schema alike.
     const base = descriptor.base as Partial<Config> | undefined
     return {
+      namespace: descriptor.ns,
       value: descriptor.value as Config,
       revision: descriptor.revision,
       inheritedNames: new Set(Object.keys(base?.servers ?? {})),
@@ -268,7 +269,7 @@ export class McpConfigRemote extends TypertRemoteService {
   }
 
   /**
-   * Serve the masked `mcp` namespace view.
+   * Serve the masked MCP namespace view.
    * @returns the masked server record and its revision, or `registered: false`.
    */
   @Remote('describe')
@@ -302,7 +303,7 @@ export class McpConfigRemote extends TypertRemoteService {
     const expanded = expandMutations(ops, before.value.servers, before.inheritedNames)
     try {
       await this.ctx.settings.mutate(
-        MCP_SETTINGS_NAMESPACE,
+        before.namespace,
         expanded,
         expectedRevision,
       )
@@ -359,7 +360,7 @@ export class McpConfigRemote extends TypertRemoteService {
     }))
     if (ops.length > 0) {
       try {
-        await this.ctx.settings.mutate(MCP_SETTINGS_NAMESPACE, ops, before.revision)
+        await this.ctx.settings.mutate(before.namespace, ops, before.revision)
       } catch (error) {
         if (error instanceof SettingsConflictError) return { kind: 'conflict', revision: error.actual }
         throw error

@@ -1,9 +1,9 @@
 /**
  * MCP server manager: one settings-driven plugin that reconciles the `mcp`
- * settings namespace's `servers` record into live `mcp-client` connections.
+ * Loader entry's `servers` record into live `mcp-client` connections.
  *
  * The composition entry in `cordis.yml` is the `base` layer; the user's
- * settings document (`settings.yaml`) is the override layer. When no settings
+ * active profile patch is the override layer. When no settings
  * provider is mounted, the manager serves the composition entry alone. Every
  * dynamic server is mounted as an independent `mcp-client` fiber, so a
  * dynamic server and a static `cordis.yml` `mcp-client` instance can never
@@ -21,6 +21,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import { McpServerManager } from './manager.js'
 import { McpConfigRemote } from './remote.js'
+import { importLegacyMcpSettings } from './legacy-settings.js'
 import { MCP_SETTINGS_NAMESPACE, snapshotMcpConfig, type Config as McpConfig } from './schema.js'
 declare module '@deepseek-ai/cordis' {
   interface Events { 'loader/volatile-update'(paths: readonly (readonly string[])[]): void }
@@ -54,7 +55,7 @@ export const name = 'mcp-manager'
 export const inject = ['tools']
 
 /**
- * Register the `mcp` settings namespace and keep the live server record in
+ * Register the `mcp-manager` settings namespace and keep the live server record in
  * sync with it. Without a settings provider, the composition entry is served
  * alone; the optional-settings wiring falls back to it on provider disposal.
  * @param ctx - plugin context carrying the tools service.
@@ -71,6 +72,15 @@ export function apply(ctx: Context, config: McpConfig): void {
 
   ctx.inject(['settings'], (settingsCtx) => {
     settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
+    settingsCtx.effect(() => {
+      const abort = new AbortController()
+      void importLegacyMcpSettings(settingsCtx, abort.signal)
+        .then(count => { if (count > 0) settingsCtx.logger.info('mcp-manager: imported %d legacy MCP servers', count) })
+        .catch(() => {
+          if (!abort.signal.aborted) settingsCtx.logger.warn('mcp-manager: legacy MCP settings could not be imported; the original document remains available')
+        })
+      return () => { abort.abort() }
+    }, 'mcp-manager: legacy settings import')
   })
   ctx.on('loader/volatile-update', reconcile)
 

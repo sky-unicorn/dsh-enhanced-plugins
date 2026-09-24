@@ -10,7 +10,8 @@ const installer = resolve(root, 'scripts/migrate-to-enhanced-plugin.ps1')
 const release = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
 const bundled = JSON.parse(readFileSync(resolve(root, 'dsh-compatibility.json'), 'utf8'))
 const supported = bundled.releases.find((entry: { pluginVersion: string }) => entry.pluginVersion === release.version)
-const baseline = supported.dsh[0]
+const baseline = supported.dsh.find((target: { version: string }) => target.version === '0.1.7-alpha.1')
+const current = supported.dsh.find((target: { version: string }) => target.version === '0.1.7-rc.1')
 const packages = readdirSync(resolve(root, 'packages'))
   .filter(name => existsSync(resolve(root, 'packages', name, 'package.json')))
 const temporary: string[] = []
@@ -98,7 +99,7 @@ describe('central compatibility authority', () => {
     const patch = readFileSync(resolve(root, 'packages/sub-agent/cordis.patch.yml'), 'utf8')
     const subagents = JSON.parse(readFileSync(resolve(root, 'packages/sub-agent/package.json'), 'utf8'))
     for (const provider of ['codex', 'claude-code']) {
-      expect(patch).toContain(`name: 'dsh-enhanced-sub-agent/${provider}'`)
+      expect(patch).not.toContain(`name: 'dsh-enhanced-sub-agent/${provider}'`)
       expect(subagents.exports[`./${provider}`]).toBe(`./lib/sub-agent/${provider}.js`)
     }
   })
@@ -114,18 +115,34 @@ describe('central compatibility authority', () => {
     for (const path of ['package.json', ...packages.map(name => `packages/${name}/package.json`)]) {
       const before = JSON.parse(readFileSync(resolve(root, path), 'utf8'))
       const after = JSON.parse(readFileSync(resolve(source.plugin, path), 'utf8'))
+      const limited = path === 'package.json' || ['agent-team-monitor', 'model-router'].some(feature => path === `packages/${feature}/package.json`)
       for (const name of Object.keys(before.peerDependencies ?? {})) {
-        if (name.startsWith('@deepseek-ai/dsh-')) before.peerDependencies[name] = range
+        if (name.startsWith('@deepseek-ai/dsh-')) before.peerDependencies[name] = limited ? baseline.version : range
       }
       expect(after).toEqual(before)
     }
     const lock = JSON.parse(readFileSync(resolve(source.plugin, 'package-lock.json'), 'utf8'))
     expect(lock.packages[''].peerDependencies).toEqual(JSON.parse(readFileSync(resolve(source.plugin, 'package.json'), 'utf8')).peerDependencies)
     // Installation can use a fresh remote selection even when bundled data is old.
-    expect(synchronize(source, '0.3.0-alpha.1').status).toBe(0)
-    expect(JSON.parse(readFileSync(resolve(source.plugin, 'package.json'), 'utf8')).peerDependencies['@deepseek-ai/dsh-agent']).toBe('0.3.0-alpha.1')
+    expect(synchronize(source, `${baseline.version},0.3.0-alpha.1`).status).toBe(0)
+    expect(JSON.parse(readFileSync(resolve(source.plugin, 'package.json'), 'utf8')).peerDependencies['@deepseek-ai/dsh-agent']).toBe(baseline.version)
+    expect(JSON.parse(readFileSync(resolve(source.plugin, 'packages/edit-last-message/package.json'), 'utf8')).peerDependencies['@deepseek-ai/dsh-agent']).toBe(`${baseline.version} || 0.3.0-alpha.1`)
     expect(synchronize(source, '*').status).not.toBe(0)
   })
+
+  it.runIf(process.platform === 'win32')('accepts selected non-Beta features on rc.1 and rejects both Beta features', async () => {
+    const source = fixture(current.version)
+    const legacyPreflight = await check(source)
+    expect(legacyPreflight.status, legacyPreflight.output).toBe(0)
+    expect(legacyPreflight.output).toContain('No feature selection supplied')
+    const selected = await check(source, ['-Features', 'edit-last-message,mcp-server-manager,notification,plugin-market,sub-agent', '-CheckCompatibility'])
+    expect(selected.status, selected.output).toBe(0)
+    for (const feature of ['agent-team-monitor', 'model-router']) {
+      const blocked = await check(source, ['-Features', feature, '-CheckCompatibility'])
+      expect(blocked.status).not.toBe(0)
+      expect(blocked.output).toContain(`Incompatible DSH feature '${feature}'`)
+    }
+  }, 20_000)
 
   it.runIf(process.platform === 'win32')('rejects the reserved Desktop profile before any installation', async () => {
     const source = fixture()
@@ -155,10 +172,11 @@ describe('central compatibility authority', () => {
       requests++
       response.end(JSON.stringify(requests === 1 ? table() : table('0.3.0-alpha.1')))
     })
-    const accepted = await check(source, undefined, url)
+    const selected = ['-Features', 'edit-last-message', '-CheckCompatibility']
+    const accepted = await check(source, selected, url)
     expect(accepted.status, accepted.output).toBe(0)
     expect(accepted.output).toContain('Compatibility source: remote')
-    const refused = await check(source, undefined, url)
+    const refused = await check(source, selected, url)
     expect(refused.status).not.toBe(0)
     expect(refused.output).toContain('Compatibility source: bundled')
     expect(refused.output).toContain('Incompatible DSH')

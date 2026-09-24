@@ -18,7 +18,8 @@ const reuse = process.env.DSH_VERIFY_MARKET_HOME
 const home = reuse ? resolve(reuse) : mkdtempSync(resolve(scratch, 'market-native-'))
 assert.ok(home.startsWith(`${scratch}${sep}`), 'Verification must use a scratch profile inside this repository')
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1',
-  DEEPSEEK_API_KEY: 'local-fixture', DEEPSEEK_BASE_URL: 'http://127.0.0.1:1' }
+  DEEPSEEK_API_KEY: 'local-fixture', DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
+  DEEPSEEK_HARNESS_LAUNCHER_HOME: resolve(home, 'launcher') }
 const cli = resolveProject({ sourceDirectory: dsh }).args
 const profile = 'market-check'
 const manifestPath = resolve(home, 'profiles', profile, 'package.json')
@@ -121,7 +122,7 @@ try {
   await page.getByRole('button', { name: 'Manage installed plugins', exact: true }).click()
   await page.getByRole('dialog', { name: 'Settings', exact: true }).waitFor({ state: 'hidden' })
   await page.locator('[data-plugin-panel]').waitFor()
-  await page.getByRole('button', { name: 'View market-native-fixture', exact: true }).click()
+  await page.getByRole('button', { name: 'View dsh-market-native-fixture', exact: true }).click()
   await page.screenshot({ path: resolve(home, 'native-management.png'), fullPage: true })
   assert.deepEqual(errors, [])
   writeFileSync(resolve(home, 'report.json'), JSON.stringify({ selection: reuse ? 'reused scratch profile' : 'single, combined, reselected', nativeInstall: 'passed',

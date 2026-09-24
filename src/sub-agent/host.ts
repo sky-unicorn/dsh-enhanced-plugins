@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { SETTINGS_NAMESPACE } from './settings.js'
+import { importLegacyProductToggles } from './legacy-settings.js'
 import type { ProductToggleSettings } from './shared.js'
 
 export const name = 'subagent-product-toggles'
@@ -82,5 +83,14 @@ export function apply(ctx: Context, config: ProductToggleSettings): void {
   ctx.inject(['settings'], (scope) => {
     scope.effect(() => scope.settings.configure({ auto: false }, ctx.fiber))
     new SubagentProductsRemote(scope)
+    scope.effect(() => {
+      const abort = new AbortController()
+      void importLegacyProductToggles(scope, abort.signal)
+        .then(count => { if (count > 0) scope.logger.info('subagent-product-toggles: imported %d legacy values', count) })
+        .catch(() => {
+          if (!abort.signal.aborted) scope.logger.warn('subagent-product-toggles: legacy settings could not be imported; the original document remains available')
+        })
+      return () => { abort.abort() }
+    }, 'subagent-product-toggles: legacy settings import')
   })
 }
